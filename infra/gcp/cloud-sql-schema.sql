@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS evidence (
     effective_date  DATE,                         -- When the policy/evidence took effect
     content_hash    TEXT NOT NULL UNIQUE,         -- SHA-256 hash of the content for dedup
     content         TEXT NOT NULL,                -- Full text content
-    embedding       vector(768),                  -- Gemini text-embedding-001 (768 dims)
+    embedding       vector(768),                  -- Gemini text-embedding-004 (768 dims)
     provenance_tier TEXT NOT NULL DEFAULT 'primary_source'
                     CHECK (provenance_tier IN ('primary_source', 'secondary_summary', 'tertiary_commentary')),
     status          TEXT NOT NULL DEFAULT 'active'

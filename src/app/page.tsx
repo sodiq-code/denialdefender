@@ -1,8 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { CaseDashboard } from '@/components/case-dashboard';
 import { TraceStreamTab } from '@/components/trace-stream-tab';
 import { useTraceStream } from '@/hooks/useTraceStream';
@@ -21,11 +22,92 @@ import {
   Bot,
   Users,
   FileSearch,
+  Search,
+  BookOpen,
+  PenTool,
+  Stethoscope,
+  FileText,
+  Paperclip,
+  Target,
+  Loader2,
+  XCircle,
+  Cloud,
+  Database,
+  Radio,
 } from 'lucide-react';
+
+interface AgentFleetHealth {
+  status: string;
+  service: string;
+  version: string;
+  mock_mode: boolean;
+  port: number;
+  runtime: string;
+  agents: string[];
+  timestamp: string;
+}
+
+interface GcpStatusData {
+  project_id: string;
+  firestore: { available: boolean; message: string };
+  pubsub: { available: boolean; message: string; topics: string[] };
+  gemini_api_key_set: boolean;
+}
+
+const AGENT_DETAILS = [
+  { name: 'Triage Agent', icon: Search, role: 'Denial classification & strategy selection', color: 'text-teal-600 dark:text-teal-400' },
+  { name: 'Medical Coder', icon: Stethoscope, role: 'CPT/ICD-10 code validation & correction', color: 'text-cyan-600 dark:text-cyan-400' },
+  { name: 'Policy Analyst', icon: FileText, role: 'Payer policy contradictions & gaps', color: 'text-violet-600 dark:text-violet-400' },
+  { name: 'Evidence Agent', icon: BookOpen, role: 'Clinical evidence retrieval & ranking', color: 'text-emerald-600 dark:text-emerald-400' },
+  { name: 'Citation Agent', icon: Paperclip, role: 'Citation verification & provenance scoring', color: 'text-orange-600 dark:text-orange-400' },
+  { name: 'Draft Agent', icon: PenTool, role: 'Appeal letter generation with sections', color: 'text-blue-600 dark:text-blue-400' },
+  { name: 'Quality Reviewer', icon: CheckCircle2, role: '8-point quality check & revision loop', color: 'text-purple-600 dark:text-purple-400' },
+  { name: 'Orchestrator', icon: Target, role: 'Pipeline coordination & HITL gate management', color: 'text-rose-600 dark:text-rose-400' },
+];
 
 export default function Home() {
   const { connected, error } = useTraceStream();
   const [caseCount, setCaseCount] = useState(0);
+  const [agentFleetHealth, setAgentFleetHealth] = useState<AgentFleetHealth | null>(null);
+  const [agentFleetLoading, setAgentFleetLoading] = useState(false);
+  const [gcpStatus, setGcpStatus] = useState<GcpStatusData | null>(null);
+
+  // Fetch agent fleet health on mount
+  useEffect(() => {
+    const fetchHealth = async () => {
+      setAgentFleetLoading(true);
+      try {
+        const res = await fetch('/api/workflow');
+        if (res.ok) {
+          const data = await res.json();
+          setAgentFleetHealth(data.health);
+        }
+      } catch {
+        // Agent fleet not available
+      } finally {
+        setAgentFleetLoading(false);
+      }
+    };
+    fetchHealth();
+  }, []);
+
+  // Fetch GCP status
+  useEffect(() => {
+    const fetchGcp = async () => {
+      try {
+        const res = await fetch('/api/agents/gcp/status');
+        if (res.ok) {
+          const data = await res.json();
+          setGcpStatus(data);
+        }
+      } catch {
+        // GCP status not available
+      }
+    };
+    fetchGcp();
+  }, []);
+
+  const agentFleetOnline = agentFleetHealth?.status === 'ok';
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
@@ -66,6 +148,13 @@ export default function Home() {
                 <Activity className="h-3 w-3" />
                 {caseCount} cases
               </Badge>
+              {/* Agent fleet indicator in header */}
+              {agentFleetOnline && (
+                <Badge variant="outline" className="text-xs gap-1 border-teal-300 text-teal-600 dark:border-teal-700 dark:text-teal-400">
+                  <Bot className="h-3 w-3" />
+                  Fleet
+                </Badge>
+              )}
             </div>
           </div>
         </div>
@@ -191,6 +280,129 @@ export default function Home() {
                 </div>
               </div>
 
+              {/* Agent Fleet Service Status */}
+              <div>
+                <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                  <Bot className="h-5 w-5 text-teal-600" />
+                  Agent Fleet Service
+                </h3>
+                <Card className="border-teal-200 dark:border-teal-800">
+                  <CardHeader className="pb-3">
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-sm flex items-center gap-2">
+                        <Server className="h-4 w-4 text-teal-600" />
+                        Port 3004 — DenialDefender Agent Fleet
+                      </CardTitle>
+                      <div className="flex items-center gap-2">
+                        {agentFleetLoading ? (
+                          <Badge variant="outline" className="text-[10px] gap-1">
+                            <Loader2 className="h-2.5 w-2.5 animate-spin" />
+                            Checking
+                          </Badge>
+                        ) : agentFleetOnline ? (
+                          <Badge className="bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200 text-[10px] gap-1">
+                            <CheckCircle2 className="h-2.5 w-2.5" />
+                            Online
+                          </Badge>
+                        ) : (
+                          <Badge variant="destructive" className="text-[10px] gap-1">
+                            <XCircle className="h-2.5 w-2.5" />
+                            Offline
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    {agentFleetHealth && (
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                        <div className="bg-muted/50 rounded p-2">
+                          <span className="text-muted-foreground">Version</span>
+                          <p className="font-mono font-medium">{agentFleetHealth.version}</p>
+                        </div>
+                        <div className="bg-muted/50 rounded p-2">
+                          <span className="text-muted-foreground">Runtime</span>
+                          <p className="font-mono font-medium capitalize">{agentFleetHealth.runtime}</p>
+                        </div>
+                        <div className="bg-muted/50 rounded p-2">
+                          <span className="text-muted-foreground">Mode</span>
+                          <p className={`font-medium ${agentFleetHealth.mock_mode ? 'text-amber-600' : 'text-emerald-600'}`}>
+                            {agentFleetHealth.mock_mode ? 'Mock' : 'Live'}
+                          </p>
+                        </div>
+                        <div className="bg-muted/50 rounded p-2">
+                          <span className="text-muted-foreground">Agents</span>
+                          <p className="font-mono font-medium">{agentFleetHealth.agents.length}</p>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* 8 Agents with roles */}
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground mb-2">Agents:</p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                        {AGENT_DETAILS.map((agent) => {
+                          const Icon = agent.icon;
+                          return (
+                            <div key={agent.name} className="flex items-center gap-2 rounded-lg border bg-card p-2 hover:bg-accent/50 transition-colors">
+                              <Icon className={`h-3.5 w-3.5 shrink-0 ${agent.color}`} />
+                              <div className="min-w-0">
+                                <p className="text-xs font-medium truncate">{agent.name}</p>
+                                <p className="text-[10px] text-muted-foreground truncate">{agent.role}</p>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* GCP Services Status */}
+              <div>
+                <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                  <Cloud className="h-5 w-5 text-blue-600" />
+                  GCP Services
+                </h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="flex items-center gap-3 rounded-lg border p-3">
+                    <Database className="h-4 w-4 text-muted-foreground" />
+                    <div className="flex-1">
+                      <p className="text-sm font-medium">Firestore</p>
+                      <p className="text-xs text-muted-foreground">
+                        {gcpStatus ? gcpStatus.firestore.message : 'Checking...'}
+                      </p>
+                    </div>
+                    {gcpStatus ? (
+                      <Badge className={`text-[10px] ${gcpStatus.firestore.available ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200' : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'}`}>
+                        {gcpStatus.firestore.available ? 'Reachable' : 'Unavailable'}
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline" className="text-[10px]">Unknown</Badge>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-3 rounded-lg border p-3">
+                    <Radio className="h-4 w-4 text-muted-foreground" />
+                    <div className="flex-1">
+                      <p className="text-sm font-medium">Pub/Sub</p>
+                      <p className="text-xs text-muted-foreground">
+                        {gcpStatus
+                          ? `${gcpStatus.pubsub.topics.length} topics — ${gcpStatus.pubsub.message}`
+                          : 'Checking...'}
+                      </p>
+                    </div>
+                    {gcpStatus ? (
+                      <Badge className={`text-[10px] ${gcpStatus.pubsub.available ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200' : 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200'}`}>
+                        {gcpStatus.pubsub.available ? 'Reachable' : 'Auth Required'}
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline" className="text-[10px]">Unknown</Badge>
+                    )}
+                  </div>
+                </div>
+              </div>
+
               {/* System Status */}
               <div>
                 <h3 className="text-lg font-semibold mb-4">System Status</h3>
@@ -202,6 +414,18 @@ export default function Home() {
                       <p className="text-xs text-muted-foreground">WebSocket real-time events</p>
                     </div>
                     {connected ? (
+                      <Badge className="bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200 text-[10px]">Online</Badge>
+                    ) : (
+                      <Badge variant="destructive" className="text-[10px]">Offline</Badge>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-3 rounded-lg border p-3">
+                    <Bot className="h-4 w-4 text-muted-foreground" />
+                    <div className="flex-1">
+                      <p className="text-sm font-medium">Agent Fleet (port 3004)</p>
+                      <p className="text-xs text-muted-foreground">8-agent workflow pipeline</p>
+                    </div>
+                    {agentFleetOnline ? (
                       <Badge className="bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200 text-[10px]">Online</Badge>
                     ) : (
                       <Badge variant="destructive" className="text-[10px]">Offline</Badge>
@@ -239,14 +463,6 @@ export default function Home() {
                     </div>
                     <Badge className="bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200 text-[10px]">Connected</Badge>
                   </div>
-                  <div className="flex items-center gap-3 rounded-lg border p-3">
-                    <AlertTriangle className="h-4 w-4 text-muted-foreground" />
-                    <div className="flex-1">
-                      <p className="text-sm font-medium">Provenance Cards</p>
-                      <p className="text-xs text-muted-foreground">Per-claim evidence display</p>
-                    </div>
-                    <Badge variant="secondary" className="text-[10px]">Coming Soon</Badge>
-                  </div>
                 </div>
               </div>
             </div>
@@ -264,6 +480,12 @@ export default function Home() {
                 <Wifi className="h-2.5 w-2.5" />
                 GCP us-central1
               </Badge>
+              {agentFleetHealth && (
+                <Badge variant="outline" className={`text-[10px] gap-1 ${agentFleetHealth.mock_mode ? 'border-amber-300 text-amber-600' : 'border-emerald-300 text-emerald-600'}`}>
+                  <Bot className="h-2.5 w-2.5" />
+                  {agentFleetHealth.mock_mode ? 'Mock Mode' : 'Live Mode'}
+                </Badge>
+              )}
             </div>
           </div>
         </div>

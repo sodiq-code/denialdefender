@@ -1,0 +1,8 @@
+{
+  "name": "agent-fleet",
+  "version": "1.0.0",
+  "description": "DenialDefender 8-Agent Fleet Service (TypeScript/Bun wrapper around Python agents)",
+  "scripts": {
+    "dev": "bun --hot index.ts"
+  }
+}

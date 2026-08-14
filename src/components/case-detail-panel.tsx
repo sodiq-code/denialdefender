@@ -14,6 +14,7 @@ import { Badge } from '@/components/ui/badge';
 import { CaseStateBadge, getStateIndex, CASE_STATE_ORDER } from '@/components/case-state-badge';
 import { HitlGateCard, type HitlGate } from '@/components/hitl-gate-card';
 import { DecisionTraceFeed, type DecisionTraceEvent } from '@/components/decision-trace-feed';
+import { AppealWorkflowPanel } from '@/components/appeal-workflow-panel';
 import { useTraceStream } from '@/hooks/useTraceStream';
 import { toast } from 'sonner';
 import {
@@ -26,6 +27,7 @@ import {
   XCircle,
   AlertTriangle,
   ChevronRight,
+  Play,
 } from 'lucide-react';
 
 interface Denial {
@@ -203,12 +205,25 @@ export function CaseDetailPanel({ caseId, open, onOpenChange, onCaseUpdated }: C
               </SheetDescription>
             </SheetHeader>
 
-            {/* State Badge */}
-            <div className="flex items-center gap-2">
+            {/* State Badge & Run Appeal Button */}
+            <div className="flex items-center gap-2 flex-wrap">
               <CaseStateBadge state={caseData.state} />
               <span className="text-xs text-muted-foreground">
                 Updated: {new Date(caseData.updated_at).toLocaleString()}
               </span>
+              {caseData.denial && (
+                <Button
+                  size="sm"
+                  className="ml-auto gap-1.5 bg-teal-600 hover:bg-teal-700 text-white text-xs"
+                  onClick={() => {
+                    const panel = document.getElementById('appeal-workflow-section');
+                    panel?.scrollIntoView({ behavior: 'smooth' });
+                  }}
+                >
+                  <Play className="h-3 w-3" />
+                  Run Appeal
+                </Button>
+              )}
             </div>
 
             {/* State Machine Timeline */}
@@ -312,6 +327,36 @@ export function CaseDetailPanel({ caseId, open, onOpenChange, onCaseUpdated }: C
                 </div>
               )}
             </div>
+
+            <Separator />
+
+            {/* Appeal Workflow Panel */}
+            {caseData.denial && (
+              <div id="appeal-workflow-section" className="space-y-2">
+                <AppealWorkflowPanel
+                  caseId={caseData.id}
+                  caseState={caseData.state}
+                  denial={{
+                    payer: caseData.denial.payer,
+                    reason_code: caseData.denial.reason_code,
+                    category: caseData.denial.category,
+                    denial_letter_text: caseData.denial.denial_letter_text,
+                  }}
+                  onWorkflowComplete={(newState) => {
+                    // Refresh case data after workflow
+                    if (caseId) {
+                      fetch(`/api/cases/${caseId}`)
+                        .then((res) => res.ok ? res.json() : null)
+                        .then((data) => {
+                          if (data?.case) setCaseData(data.case);
+                        })
+                        .catch(console.error);
+                    }
+                    onCaseUpdated?.();
+                  }}
+                />
+              </div>
+            )}
 
             <Separator />
 

@@ -1,0 +1,93 @@
+# DenialDefender Web — Cloud Run Service (Next.js)
+# Deploy: gcloud run services replace nextjs-service.yaml
+#
+# This service serves the DenialDefender web UI and API routes.
+# It connects to Firestore for case data, Pub/Sub for agent task dispatch,
+# and Cloud SQL pgvector for evidence similarity search.
+#
+# Project: project-8a09278a-5593-4289-b2e
+# Region:  europe-west1
+# Firestore: eur3 (multi-region)
+
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: denialdefender-web
+  namespace: project-8a09278a-5593-4289-b2e
+  labels:
+    app: denialdefender
+    component: web
+    tier: frontend
+  annotations:
+    run.googleapis.com/ingress: all
+    run.googleapis.com/ingress-status: all
+spec:
+  template:
+    metadata:
+      annotations:
+        # Resource allocation — 2 vCPU, 1 GiB RAM for SSR + API workloads
+        run.googleapis.com/cpu: "2"
+        run.googleapis.com/memory: "1Gi"
+        # Auto-scale: 0→4 instances (cost-controlled for hackathon)
+        autoscaling.knative.dev/minScale: "0"
+        autoscaling.knative.dev/maxScale: "4"
+        # Connection pooling via VPC connector for Cloud SQL
+        run.googleapis.com/vpc-access-connector: projects/project-8a09278a-5593-4289-b2e/locations/europe-west1/connectors/dd-vpc-connector
+        run.googleapis.com/vpc-access-egress: private-ranges-only
+    spec:
+      containerConcurrency: 80
+      timeoutSeconds: 300
+      serviceAccountName: denialdefender@project-8a09278a-5593-4289-b2e.iam.gserviceaccount.com
+      containers:
+      - name: web
+        image: gcr.io/project-8a09278a-5593-4289-b2e/denialdefender-web:latest
+        ports:
+        - name: http1
+          containerPort: 3000
+        env:
+        - name: NODE_ENV
+          value: production
+        - name: PORT
+          value: "3000"
+        - name: GCP_PROJECT_ID
+          value: project-8a09278a-5593-4289-b2e
+        - name: GCP_REGION
+          value: europe-west1
+        - name: FIRESTORE_LOCATION
+          value: eur3
+        - name: NEXT_PUBLIC_GCP_PROJECT_ID
+          value: project-8a09278a-5593-4289-b2e
+        - name: NEXT_PUBLIC_APP_NAME
+          value: DenialDefender
+        - name: GEMINI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: gemini-api-key
+              key: latest
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: cloud-sql-connection-string
+              key: latest
+        resources:
+          limits:
+            cpu: "2"
+            memory: 1Gi
+        # Liveness probe — Next.js health endpoint
+        livenessProbe:
+          httpGet:
+            path: /api/health
+            port: 3000
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 3
+        # Readiness probe — wait for Firestore + Cloud SQL connections
+        readinessProbe:
+          httpGet:
+            path: /api/health
+            port: 3000
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 3
+          failureThreshold: 3
