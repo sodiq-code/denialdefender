@@ -550,3 +550,198 @@ Stage Summary:
 - Synthetic Cases: 28 total (20 new SynPUF-based + 8 pre-existing)
 - All evidence records have SHA-256 content hashes
 - Semantic search working (text-based for zero-cost; upgradeable to pgvector)
+
+---
+Task ID: 2b
+Agent: implementation-agent
+Task: Implement smart dual-backend LLM system
+
+Work Log:
+- Created llm_backend.py with DualBackendLLM class
+- Updated config.py with gemini-3.5-flash model and dual-backend env vars
+- Created TypeScript version (llm_backend.ts) with Bun subprocess support
+
+Stage Summary:
+- Dual-backend LLM system implemented in both Python and TypeScript
+- Gemini 3.5+ as primary, z-ai SDK as fallback
+- Auto-detection of geo-blocking, leaked keys, permission denied
+- Configurable via FORCE_LLM_BACKEND, GEMINI_CHECK_TIMEOUT, LLM_GENERATION_TIMEOUT, ZAI_SDK_CLI_PATH
+- Singleton pattern for efficient reuse across all 8 agents
+
+---
+Task ID: 5c
+Agent: corpus-builder
+Task: Create curated 3-payer × 5-denial-type payer policy corpus + test letters + validation script
+
+Work Log:
+- Read previous work records from /home/z/my-project/worklog.md (Tasks 1, 1b, 1c, 2, 2b)
+- Reviewed existing data/corpus/raw/ structure (28 JSON files from CMS/payer sources)
+- Reviewed existing evidence-ingest.ts, evidence-embed.ts, workflow-engine.ts, agent-fleet.ts for architecture understanding
+- Created /home/z/my-project/data/corpus/payer_policies.json with 15 entries (3 payers × 5 denial types):
+  - Medicare: MED-MN-001 (Medical Necessity), MED-PA-002 (Prior Authorization), MED-CB-003 (Coding/Billing), MED-EI-004 (Experimental/Investigational), MED-ON-005 (Out-of-Network)
+  - UnitedHealthcare: UHC-MN-006, UHC-PA-007, UHC-CB-008, UHC-EI-009, UHC-ON-010
+  - Aetna: AET-MN-011, AET-PA-012, AET-CB-013, AET-EI-014, AET-ON-015
+- Each entry has realistic, detailed clause_text with real CFR references (42 CFR § 410.32, § 422.112, § 422.568, etc.), Social Security Act citations, NCD/LCD references, CARC codes, and payer-specific policy language
+- retrieval_weight range: 0.86–0.95, effective_date: 2025-01-01/2025-01-15/2025-02-01, version: 2025.1
+- Created /home/z/my-project/data/corpus/test_letters.json with 5 realistic denial letters:
+  - TL-001: Medicare/Medical Necessity (CO50, Infliximab for osteoporosis — off-label denial)
+  - TL-002: UnitedHealthcare/Prior Authorization (CO15, MRI Brain — no auth obtained)
+  - TL-003: Aetna/Coding/Billing (CO16, TKA — missing modifier -25 + dx conflict)
+  - TL-004: Medicare/Experimental/Investigational (CO42, NGS molecular profiling — Category III CPT)
+  - TL-005: Aetna/Out-of-Network (PR96, ED visit at OON facility — prudent layperson challenge)
+- Each letter has expected_clause_ids for retrieval validation
+- Created /home/z/my-project/src/lib/test-letters.ts with:
+  - loadPayerPolicyCorpus() — load corpus from JSON
+  - loadTestLetters() — load test letters from JSON
+  - policyResearchAgent() — text-based retrieval with multi-factor scoring (term overlap, payer match, denial type match, retrieval weight, reason code match)
+  - validateLetter() — single letter validation (≥1 expected clause in top-3)
+  - runValidationSuite() — full 5-letter validation suite
+  - formatReport() — human-readable report formatting
+- Created /home/z/my-project/src/app/api/test-letters/route.ts (GET for loading, POST for validation)
+- Ran retrieval accuracy validation: 5/5 PASSED
+  - TL-001: 2/2 matched (MED-MN-001, MED-PA-002 in top-3)
+  - TL-002: 2/2 matched (UHC-PA-007, UHC-MN-006 in top-3)
+  - TL-003: 1/2 matched (AET-CB-013 in top-3; AET-PA-012 not in top-3 — still passes with ≥1)
+  - TL-004: 2/2 matched (MED-EI-004, MED-MN-001 in top-3)
+  - TL-005: 1/2 matched (AET-ON-015 in top-3; AET-MN-011 not in top-3 — still passes with ≥1)
+- API endpoint tested: GET /api/test-letters returns corpus + letters; POST /api/test-letters runs validation
+- ESLint passes clean
+
+Stage Summary:
+- Payer Policy Corpus: 15 entries (3 payers × 5 denial types), realistic CFR/policy language
+- Test Letters: 5 denial letters covering all 5 denial types, real CARC codes and clinical scenarios
+- Retrieval Accuracy Gate: ✅ PASSED (5/5)
+- Validation Script: Complete with text-based Policy Research Agent and multi-factor scoring
+- Files created:
+  - /home/z/my-project/data/corpus/payer_policies.json (15 entries)
+  - /home/z/my-project/data/corpus/test_letters.json (5 letters)
+  - /home/z/my-project/src/lib/test-letters.ts (retrieval + validation)
+  - /home/z/my-project/src/app/api/test-letters/route.ts (API endpoint)
+
+---
+Task ID: 5b
+Agent: Policy Research Agent Builder
+Task: Day 2 — Policy Research Agent with Evidence Corpus Retrieval
+
+Work Log:
+- Read existing codebase: worklog.md, prisma/schema.prisma, evidence-ingest.ts, evidence-embed.ts, agents/policy.py, agents/base.py, llm_backend.py, llm_backend.ts
+- Evidence corpus has 185 records in SQLite via Prisma
+- Dual-backend LLM system exists (Gemini direct + z-ai SDK fallback)
+
+1. Updated Prisma Schema (Evidence model):
+   - Added `payer_name` (optional String) — payer-specific policy (e.g., "UnitedHealthcare")
+   - Added `denial_type` (optional String) — denial classification (e.g., "medical_necessity")
+   - Added `retrieval_weight` (Float, default 1.0) — re-ranking weight for policy retrieval
+   - Added `clause_id` (optional String) — payer policy clause ID (e.g., "UHC-MP-001.4.B")
+   - Added indexes on payer_name, denial_type, clause_id
+   - Ran `bun run db:push` successfully — database in sync, Prisma Client regenerated
+
+2. Created TypeScript Policy Research Service (/src/lib/policy-research.ts):
+   - PolicyQuery type: denialReason, payer, denialType, cptCodes, icdCodes, mode, topK
+   - ProvenanceCard type: full provenance metadata for each result
+   - PolicyResult type: evidence + scores + provenance card
+   - PolicyRetrievalResponse type: results + latency + SLA status
+   - `retrievePolicyClauses()`: Full pipeline:
+     a. Query expansion (rule-based, <200ms target)
+     b. Semantic search via evidence-embed.semanticSearch for each expanded term
+     c. Structured filtering by payer, denial_type, CPT/ICD codes via Prisma
+     d. Re-ranking: semantic_score × provenance_boost × retrieval_weight
+     e. Top-K selection (K=5 for policy, K=3 for outcomes per blueprint)
+     f. Provenance card generation for each result
+   - `searchPayerPolicyClauses()`: Specialized payer policy clause search
+   - `expandQueryTerms()`: Fast rule-based query expansion for API route
+   - Provenance boost multipliers: primary_source=1.5, secondary_summary=1.2, tertiary=1.0
+
+3. Created API Route (/src/app/api/evidence/retrieve/route.ts):
+   - POST endpoint: accepts denialReason, payer, denialType, cptCodes, icdCodes, mode, topK
+   - GET endpoint: simplified interface via query params (denialReason/q, payer, denialType, mode)
+   - Returns top-K relevant evidence with provenance cards
+   - Includes retrieval latency measurement (withinSla = latencyMs < 200)
+   - Returns expanded query terms for transparency
+   - Full input validation and error handling
+
+4. Enhanced Policy Research Python Agent (/mini-services/agent-fleet/agents/policy.py):
+   - Added `retrieve_evidence()`: Calls /api/evidence/retrieve endpoint for corpus retrieval
+   - Added `expand_query_with_llm()`: Dual-backend LLM query expansion (Gemini/z-ai SDK)
+   - Added `_rule_based_expansion()`: Fallback expansion when LLM unavailable
+   - Added `build_provenance_card()`: Static provenance card builder
+   - Added `_map_denial_type()`: Maps denial codes + triage classification to denial types
+   - Overrode `run()` method with full pipeline:
+     a. Extract denial context from input
+     b. Expand query terms using LLM (or rule-based fallback)
+     c. Retrieve policy evidence (K=5) from evidence corpus
+     d. Retrieve outcomes evidence (K=3) from evidence corpus
+     e. Build enriched input with evidence results for LLM analysis
+     f. Run LLM or mock analysis with evidence context
+     g. Attach retrieval metadata + provenance cards to result
+   - Updated system prompt to include evidence_results in input schema
+   - Updated mock_run to include retrieved_evidence from corpus
+   - Python syntax validated: OK
+
+5. Verification:
+   - ESLint passes clean (no errors)
+   - Python syntax check passes (policy.py: OK)
+   - No type errors in new TypeScript files
+   - Prisma schema in sync with database
+
+Stage Summary:
+- Prisma Schema: Evidence model extended with 4 policy retrieval fields + 3 indexes
+- TypeScript Service: Full policy research pipeline (expand → search → filter → re-rank → top-K → provenance)
+- API Route: POST/GET /api/evidence/retrieve with SLA tracking (<200ms target)
+- Python Agent: Enhanced with evidence corpus retrieval, dual-backend LLM query expansion, provenance cards
+- Blueprint Compliance: K=5 policy / K=3 outcomes, provenance boosting, retrieval_weight re-ranking
+- Files created/modified:
+  - /home/z/my-project/prisma/schema.prisma (modified — 4 new fields + 3 indexes)
+  - /home/z/my-project/src/lib/policy-research.ts (new — 280+ lines)
+  - /home/z/my-project/src/app/api/evidence/retrieve/route.ts (new — 130+ lines)
+  - /home/z/my-project/mini-services/agent-fleet/agents/policy.py (modified — 350+ lines, was 153)
+
+---
+Task ID: 5d
+Agent: Day 2 Task Handler
+Task: Day 2 — Ingest Payer Policies + Wire Two-Agent Pipeline (Triage → Policy Research)
+
+Work Log:
+- Task A: Ingest Payer Policies into Database
+  - Read payer_policies.json (15 entries: 5 Medicare, 5 UnitedHealthcare, 5 Aetna × 5 denial types)
+  - Added `ingestPayerPolicies()` function to /home/z/my-project/src/lib/evidence-ingest.ts
+    - Reads payer_policies.json from data/corpus/
+    - For each entry: creates Evidence record with source=payer_name, document_name="Payer Policy {clause_id}", section=denial_type, content=clause_text, content_hash=SHA-256, payer_name, denial_type (lowercase underscored), clause_id, retrieval_weight, effective_date, provenance_tier=primary_source, embedding=source_url (temp), status=active
+    - Deduplication by content_hash + clause_id
+    - Returns PayerPolicyIngestResult with count, errors, duration
+  - Added `ingest-policies` action to POST /api/evidence route
+  - Called API: `curl -X POST /api/evidence -d '{"action":"ingest-policies"}'`
+  - Result: 15/15 ingested, 0 skipped, 0 errors, 54ms duration
+
+- Task B: Wire Two-Agent Pipeline (Triage → Policy Research)
+  - Created /home/z/my-project/src/lib/two-agent-pipeline.ts
+    - `triageDenial()`: Uses z-ai SDK CLI (`z-ai chat`) for LLM-based denial classification with fallback to rule-based extraction
+    - `researchPolicy()`: Uses existing `retrievePolicyClauses()` from policy-research.ts to find top-K relevant evidence
+    - `runTwoAgentPipeline()`: Combined pipeline with latency measurements
+    - Triage extracts: denial_type, payer, reason_codes, cpt_codes, icd_codes, category, confidence, summary, appeal_strategy
+    - Rule-based fallback classifies by keyword patterns and extracts CARC/RARC codes, CPT codes, ICD-10 codes
+  - Created /home/z/my-project/src/app/api/pipeline/route.ts
+    - GET: Pipeline health/status check
+    - POST: Full pipeline (default), individual steps (triage, research)
+    - Returns: triage results + evidence results + latency measurements + provenance cards
+  - Tested pipeline with sample denial letter:
+    - Input: "Your claim for CPT 43239 has been denied as not medically necessary. Reason Code CO16. Diagnosis K21.0. Per UnitedHealthcare..."
+    - Triage: classified as medical_necessity, extracted CO16, CPT 43239, ICD K21.0
+    - Evidence: retrieved 5 relevant policy clauses (including UHC-MN-006) with provenance cards
+    - Latency: triage=1584ms, research=113ms (within 200ms SLA), total=1697ms
+    - Success: true, 0 errors
+
+- ESLint: passes clean
+- All existing API routes preserved and working
+
+Stage Summary:
+- Payer Policies: 15 entries ingested into Evidence table (3 payers × 5 denial types)
+- Two-Agent Pipeline: Triage → Policy Research fully wired and tested
+- Triage: LLM-based (z-ai SDK) with rule-based fallback
+- Policy Research: Uses existing retrieval engine with provenance boosting + retrieval_weight re-ranking
+- Pipeline API: POST /api/pipeline with step-by-step or full pipeline execution
+- Files created/modified:
+  - /home/z/my-project/src/lib/evidence-ingest.ts (modified — added ingestPayerPolicies + types)
+  - /home/z/my-project/src/app/api/evidence/route.ts (modified — added ingest-policies action)
+  - /home/z/my-project/src/lib/two-agent-pipeline.ts (new — 270+ lines)
+  - /home/z/my-project/src/app/api/pipeline/route.ts (new — 110+ lines)
