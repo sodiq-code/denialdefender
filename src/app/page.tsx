@@ -41,6 +41,7 @@ interface AgentFleetHealth {
   service: string;
   version: string;
   mock_mode: boolean;
+  model: string;
   port: number;
   runtime: string;
   agents: string[];
@@ -315,10 +316,14 @@ export default function Home() {
                   </CardHeader>
                   <CardContent className="space-y-3">
                     {agentFleetHealth && (
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs">
                         <div className="bg-muted/50 rounded p-2">
                           <span className="text-muted-foreground">Version</span>
                           <p className="font-mono font-medium">{agentFleetHealth.version}</p>
+                        </div>
+                        <div className="bg-muted/50 rounded p-2">
+                          <span className="text-muted-foreground">Model</span>
+                          <p className="font-mono font-medium text-teal-700">{agentFleetHealth.model || 'gemini-3.5-flash'}</p>
                         </div>
                         <div className="bg-muted/50 rounded p-2">
                           <span className="text-muted-foreground">Runtime</span>

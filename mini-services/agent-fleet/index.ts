@@ -30,6 +30,7 @@ const PORT = 3004;
 const SERVICE_NAME = "denialdefender-agent-fleet";
 const SERVICE_VERSION = "1.0.0";
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY ?? "";
+const GEMINI_MODEL = process.env.GEMINI_MODEL ?? "gemini-3.5-flash";
 const MOCK_MODE = GEMINI_API_KEY === "";
 const GCP_PROJECT_ID = process.env.GCP_PROJECT_ID ?? "project-8a09278a-5593-4289-b2e";
 const MAX_REVISION_LOOPS = 3;
@@ -874,6 +875,7 @@ async function handleRequest(req: Request): Promise<Response> {
         service: SERVICE_NAME,
         version: SERVICE_VERSION,
         mock_mode: MOCK_MODE,
+        model: GEMINI_MODEL,
         port: PORT,
         runtime: "bun",
         agents: ["triage", "evidence", "drafter", "reviewer", "coder", "policy", "citation", "orchestrator"],

@@ -194,7 +194,7 @@ if [[ "${DEPLOY_AGENTS}" == true ]]; then
     --set-env-vars "FIRESTORE_LOCATION=${FIRESTORE_LOCATION}" \
     --set-env-vars "AGENT_PORT=3004" \
     --set-env-vars "LOG_LEVEL=info" \
-    --set-env-vars "GEMINI_MODEL=gemini-2.0-flash" \
+    --set-env-vars "GEMINI_MODEL=gemini-3.5-flash" \
     --set-env-vars "EMBEDDING_MODEL=text-embedding-004" \
     --set-env-vars "EMBEDDING_DIMENSIONS=768" \
     --set-secrets "GEMINI_API_KEY=gemini-api-key:latest" \

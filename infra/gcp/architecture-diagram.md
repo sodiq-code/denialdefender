@@ -34,7 +34,7 @@ graph TB
     end
 
     subgraph "Google Cloud — AI/ML"
-        GEMINI["💎 Gemini 2.0 Flash<br/>(Free Tier)<br/>Text Generation<br/>Reasoning"]
+        GEMINI["💎 Gemini 3.5 Flash<br/>(Gemini API Free Tier)<br/>Multimodal + 1M Context<br/>Text Generation + Reasoning"]
         EMBED["📐 text-embedding-004<br/>768 Dimensions<br/>Cosine Similarity"]
     end
 
@@ -115,11 +115,11 @@ graph TB
 
 | Agent | Role | Gemini Model | HITL Gate |
 |-------|------|--------------|-----------|
-| **Orchestrator** | Routes tasks, manages workflow state | gemini-2.0-flash | N/A |
-| **Researcher** | Evidence retrieval, citation verification | gemini-2.0-flash + text-embedding-004 | Before evidence use |
-| **Drafter** | Appeal letter generation with provenance cards | gemini-2.0-flash | Before letter finalization |
-| **Reviewer** | Quality scoring, compliance checks | gemini-2.0-flash | Before case submission |
-| **PHI Guard** | PII/PHI detection and SHA-256 hashing | gemini-2.0-flash + Presidio | Before any data storage |
+| **Orchestrator** | Routes tasks, manages workflow state | gemini-3.5-flash | N/A |
+| **Researcher** | Evidence retrieval, citation verification | gemini-3.5-flash + text-embedding-004 | Before evidence use |
+| **Drafter** | Appeal letter generation with provenance cards | gemini-3.5-flash | Before letter finalization |
+| **Reviewer** | Quality scoring, compliance checks | gemini-3.5-flash | Before case submission |
+| **PHI Guard** | PII/PHI detection and SHA-256 hashing | gemini-3.5-flash + Presidio | Before any data storage |
 
 ### Data Stores
 
@@ -241,6 +241,6 @@ gcloud run services replace infra/gcp/cloudrun/agent-fleet-service.yaml --region
 | Firestore | eur3, <1GB reads/writes | ~$0 (free tier) |
 | Cloud SQL | db-f1-micro, 10GB SSD | ~$7-15/mo (smallest tier) |
 | Pub/Sub | 4 topics, low volume | ~$0 (free tier: 10GB/month) |
-| Gemini 2.0 Flash | Free tier API | $0 (rate-limited) |
+| Gemini 3.5 Flash | Gemini API Free Tier | $0 (rate-limited) — $1.50/$9 per 1M tokens (paid) |
 | Secret Manager | 3 secrets | ~$0 (free tier: 6 versions) |
 | **Total** | | **~$7-15/mo** |
