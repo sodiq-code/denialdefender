@@ -60,3 +60,37 @@ Stage Summary:
 - Real GCP Firestore gate: PASSED
 - SA key stored at: /home/z/my-project/upload/denialdefender-3b32a161dcae.json (gitignored)
 - Repo: https://github.com/sodiq-code/denialdefender (commit f875cf5)
+
+---
+Task ID: 1c
+Agent: Main Coordinator
+Task: Switch to new GCP project (project-8a09278a-5593-4289-b2e) and verify billing + provision infrastructure
+
+Work Log:
+- User provided new GCP project: project-8a09278a-5593-4289-b2e (Project #231194480057)
+- SA key uploaded: /home/z/my-project/upload/project-8a09278a-5593-4289-b2e-e6148fd9ae69.json
+- SA email: denialdefender@project-8a09278a-5593-4289-b2e.iam.gserviceaccount.com
+- Authenticated gcloud with new SA key: SUCCESS
+- Enabled Cloud Resource Manager API: SUCCESS
+- Enabled Cloud Billing API: SUCCESS
+- Checked billing: Account 0179D6-CD0B89-9848B3 is LINKED but billingEnabled=false
+- SA has Owner role on the project (confirmed via IAM policy check)
+- Enabled core APIs (firestore, aiplatform, pubsub, sqladmin): SUCCESS
+- Attempted to enable paid APIs (cloudbuild, run, secretmanager): FAILED (billing required)
+- Created Firestore database at eur3 (multi-region): SUCCESS
+- Created 4 Pub/Sub topics (decision_trace, agent_tasks, case_events, gate_events): SUCCESS
+- Tested Firestore write/read: WORKS
+- Tested Pub/Sub publish: WORKS
+- Attempted Cloud SQL creation: FAILED (billing not in good standing)
+- Attempted Vertex AI Gemini inference: FAILED (BILLING_DISABLED)
+- Updated .env.gcp with new project details
+- Updated bootstrap.sh with new project ID and SA email
+- Cleaned up test Firestore document
+
+Stage Summary:
+- NEW PROJECT: project-8a09278a-5593-4289-b2e (Owner role confirmed)
+- BILLING: Linked to 0179D6-CD0B89-9848B3 but NOT ENABLED (account not in good standing)
+- WORKING: Firestore (eur3), Pub/Sub (4 topics), AI Platform API, SQL Admin API
+- BLOCKED (needs billing): Cloud SQL, Vertex AI inference, Cloud Run, Secret Manager, Cloud Build
+- NEXT: User needs to fix billing (reopen/create active billing account) to unlock Cloud SQL + Vertex AI
+- Can proceed with Firestore + Pub/Sub + local SQLite stand-in for evidence store

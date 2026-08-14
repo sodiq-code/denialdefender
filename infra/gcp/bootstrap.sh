@@ -6,17 +6,17 @@
 # Prerequisites:
 #   1. gcloud CLI authenticated
 #   2. Service account key file at $GOOGLE_APPLICATION_CREDENTIALS
-#   3. Project ID set (denialdefender)
+#   3. Project ID set (project-8a09278a-5593-4289-b2e)
 #
 # Usage: bash infra/gcp/bootstrap.sh
 
 set -euo pipefail
 
 # ── Configuration ──────────────────────────────────────────────────────────────
-PROJECT_ID="${GCP_PROJECT_ID:-denialdefender}"
+PROJECT_ID="${GCP_PROJECT_ID:-project-8a09278a-5593-4289-b2e}"
 REGION="${GCP_REGION:-europe-west1}"
 FIRESTORE_LOCATION="${FIRESTORE_LOCATION:-eur3}"
-SA_EMAIL="json-775@denialdefender.iam.gserviceaccount.com"
+SA_EMAIL="denialdefender@project-8a09278a-5593-4289-b2e.iam.gserviceaccount.com"
 
 # Colors for output
 RED='\033[0;31m'
@@ -82,11 +82,12 @@ echo "  Instance: denialdefender-pg  Region: ${REGION}"
 gcloud sql instances create denialdefender-pg \
   --database-version=POSTGRES_16 \
   --tier=db-f1-micro \
+  --edition=ENTERPRISE \
   --region="${REGION}" \
   --storage-type=SSD \
   --storage-size=10GB \
   --project="${PROJECT_ID}" \
-  --database-flags=max_connections=200 2>/dev/null || warn "Cloud SQL instance may already exist"
+  --database-flags=max_connections=200 2>/dev/null || warn "Cloud SQL instance may already exist (requires billing)"
 
 # Create the evidence database
 gcloud sql databases create evidence \
