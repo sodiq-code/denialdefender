@@ -102,9 +102,9 @@ export function useTraceStream(): TraceStreamState {
     const socket: Socket = io(SOCKET_URL, {
       transports: ["websocket", "polling"],
       reconnection: true,
-      reconnectionAttempts: Infinity,
-      reconnectionDelay: 1000,
-      reconnectionDelayMax: 10000,
+      reconnectionAttempts: 20, // Limit attempts to avoid console spam
+      reconnectionDelay: 2000,
+      reconnectionDelayMax: 30000,
       timeout: 20000,
       autoConnect: true,
     });
@@ -128,9 +128,16 @@ export function useTraceStream(): TraceStreamState {
       console.log("[TraceStream] Disconnected:", reason);
     });
 
+    // Throttle connection error logs to avoid console spam
+    let lastErrorLog = 0;
     socket.on("connect_error", (err) => {
       setError(err.message);
-      console.error("[TraceStream] Connection error:", err.message);
+      const now = Date.now();
+      // Only log3log once every 30 seconds to avoid console spam
+      if (now - lastErrorLog > 30000) {
+        lastErrorLog = now;
+        console.warn("[TraceStream] Connection error (suppressed further logs for 30s):", err.message);
+      }
     });
 
     // ── Trace events ──────────────────────────────────────

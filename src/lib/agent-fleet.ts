@@ -3,9 +3,16 @@
  *
  * Server-side client for calling the agent fleet service (port 3004).
  * Used by Next.js API routes to proxy requests to the agent fleet.
+ *
+ * FALLBACK: When the external agent fleet service is unavailable
+ * (connection refused, timeout, etc.), all functions fall back to
+ * the inline workflow engine that runs inside Next.js itself.
  */
 
+import { runInlineWorkflow } from "./workflow-engine";
+
 const AGENT_FLEET_URL = 'http://localhost:3004';
+const AGENT_FLEET_TIMEOUT_MS = 5_000;
 
 // ─── Types ────────────────────────────────────────────────────────
 
@@ -226,75 +233,169 @@ export interface GcpStatus {
   timestamp: string;
 }
 
+// ─── Helper: Check if external service is reachable ────────────────
+
+/**
+ * Returns true if the external agent fleet service on port 3004
+ * is reachable within the timeout window.
+ */
+async function isServiceReachable(): Promise<boolean> {
+  try {
+    const res = await fetch(`${AGENT_FLEET_URL}/health`, {
+      signal: AbortSignal.timeout(AGENT_FLEET_TIMEOUT_MS),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 // ─── API Functions ────────────────────────────────────────────────
 
 /**
- * Run the full appeal workflow for a case
+ * Run the full appeal workflow for a case.
+ *
+ * First tries the external agent fleet service on port 3004.
+ * If that fails (connection refused, timeout, etc.), falls back
+ * to the inline workflow engine that runs inside Next.js.
  */
 export async function runWorkflow(request: WorkflowRequest): Promise<WorkflowResult> {
-  const res = await fetch(`${AGENT_FLEET_URL}/workflow/run`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(request),
-  });
+  try {
+    const res = await fetch(`${AGENT_FLEET_URL}/workflow/run`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(request),
+      signal: AbortSignal.timeout(30_000),
+    });
 
-  if (!res.ok) {
+    if (res.ok) {
+      return res.json();
+    }
+
+    // External service returned an error — fall back to inline
     const errorText = await res.text().catch(() => 'Unknown error');
-    throw new Error(`Agent fleet workflow failed (${res.status}): ${errorText}`);
+    console.warn(
+      `[agent-fleet] External service returned ${res.status}: ${errorText}. Falling back to inline workflow engine.`
+    );
+  } catch (err) {
+    // Connection refused, timeout, DNS error, etc. — fall back to inline
+    console.warn(
+      `[agent-fleet] External service unreachable: ${err instanceof Error ? err.message : String(err)}. Falling back to inline workflow engine.`
+    );
   }
 
-  return res.json();
+  // ── Fallback: run inline workflow ────────────────────────────────
+  return runInlineWorkflow(request);
 }
 
 /**
- * Get agent fleet health status
+ * Get agent fleet health status.
+ *
+ * If the external service is down, returns a synthetic health
+ * response indicating the inline engine is available as fallback.
  */
 export async function getAgentFleetHealth(): Promise<AgentFleetHealth> {
-  const res = await fetch(`${AGENT_FLEET_URL}/health`, {
-    signal: AbortSignal.timeout(5000),
-  });
+  try {
+    const res = await fetch(`${AGENT_FLEET_URL}/health`, {
+      signal: AbortSignal.timeout(AGENT_FLEET_TIMEOUT_MS),
+    });
 
-  if (!res.ok) {
-    throw new Error(`Agent fleet health check failed (${res.status})`);
+    if (res.ok) {
+      return res.json();
+    }
+  } catch {
+    // Service unreachable — return inline fallback health
   }
 
-  return res.json();
+  return {
+    status: "degraded",
+    service: "denialdefender-agent-fleet",
+    version: "1.0.0-inline",
+    mock_mode: true,
+    port: 0,
+    runtime: "inline",
+    agents: [
+      "triage",
+      "coder",
+      "policy",
+      "evidence",
+      "citation",
+      "drafter",
+      "reviewer",
+      "orchestrator",
+    ],
+    timestamp: new Date().toISOString(),
+  };
 }
 
 /**
- * Run triage agent only
+ * Run triage agent only.
+ *
+ * Falls back to inline workflow engine (triage step) if the
+ * external service is unavailable.
  */
 export async function runTriage(denial: DenialInput): Promise<{ agent: string; status: string; data: TriageResult }> {
-  const res = await fetch(`${AGENT_FLEET_URL}/agents/triage`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(denial),
-  });
+  try {
+    const res = await fetch(`${AGENT_FLEET_URL}/agents/triage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(denial),
+      signal: AbortSignal.timeout(AGENT_FLEET_TIMEOUT_MS),
+    });
 
-  if (!res.ok) {
-    throw new Error(`Triage agent failed (${res.status})`);
+    if (res.ok) {
+      return res.json();
+    }
+  } catch {
+    // Service unreachable — fall back to inline
   }
 
-  return res.json();
+  // Inline fallback: run the full inline workflow but only return triage
+  const request: WorkflowRequest = {
+    case_id: `inline-triage-${Date.now()}`,
+    denial,
+  };
+  const result = await runInlineWorkflow(request);
+  return {
+    agent: "triage",
+    status: "success",
+    data: result.triage,
+  };
 }
 
 /**
- * Get GCP status (Firestore + Pub/Sub)
+ * Get GCP status (Firestore + Pub/Sub).
+ *
+ * Returns a synthetic "not configured" response when the
+ * external service is unavailable.
  */
 export async function getGcpStatus(): Promise<GcpStatus> {
-  const res = await fetch(`${AGENT_FLEET_URL}/gcp/status`, {
-    signal: AbortSignal.timeout(10000),
-  });
+  try {
+    const res = await fetch(`${AGENT_FLEET_URL}/gcp/status`, {
+      signal: AbortSignal.timeout(10_000),
+    });
 
-  if (!res.ok) {
-    throw new Error(`GCP status check failed (${res.status})`);
+    if (res.ok) {
+      return res.json();
+    }
+  } catch {
+    // Service unreachable
   }
 
-  return res.json();
+  return {
+    project_id: "N/A",
+    firestore: { available: false, message: "External service unavailable; inline engine does not use Firestore" },
+    pubsub: { available: false, message: "External service unavailable; inline engine does not use Pub/Sub", topics: [] },
+    gemini_api_key_set: false,
+    timestamp: new Date().toISOString(),
+  };
 }
 
 /**
- * Get workflow status for a case
+ * Get workflow status for a case.
+ *
+ * Returns null when the external service is unavailable
+ * (the inline engine doesn't maintain a workflow status store).
  */
 export async function getWorkflowStatus(caseId: string): Promise<{
   case_id: string;
@@ -305,14 +406,14 @@ export async function getWorkflowStatus(caseId: string): Promise<{
 } | null> {
   try {
     const res = await fetch(`${AGENT_FLEET_URL}/workflow/status/${caseId}`, {
-      signal: AbortSignal.timeout(5000),
+      signal: AbortSignal.timeout(AGENT_FLEET_TIMEOUT_MS),
     });
 
-    if (!res.ok) {
-      return null;
+    if (res.ok) {
+      return res.json();
     }
 
-    return res.json();
+    return null;
   } catch {
     return null;
   }
