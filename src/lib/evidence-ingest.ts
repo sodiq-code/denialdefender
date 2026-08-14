@@ -375,6 +375,104 @@ export async function searchEvidence(query: string, limit = 20) {
   return results;
 }
 
+// ─── Payer Policy Ingest (Day 2) ───────────────────────────────────────────
+
+export interface PayerPolicyEntry {
+  clause_id: string;
+  payer_name: string;
+  denial_type: string;
+  clause_text: string;
+  source_url: string;
+  effective_date: string;
+  retrieval_weight: number;
+  version: string;
+}
+
+export interface PayerPolicyIngestResult {
+  totalEntries: number;
+  ingested: number;
+  skipped: number;
+  errors: string[];
+  durationMs: number;
+}
+
+/**
+ * Ingest payer policies from payer_policies.json into the Evidence table.
+ * Each entry is mapped to an Evidence record with payer-specific fields.
+ */
+export async function ingestPayerPolicies(): Promise<PayerPolicyIngestResult> {
+  const startTime = Date.now();
+  const result: PayerPolicyIngestResult = {
+    totalEntries: 0,
+    ingested: 0,
+    skipped: 0,
+    errors: [],
+    durationMs: 0,
+  };
+
+  try {
+    const policiesPath = '/home/z/my-project/data/corpus/payer_policies.json';
+    const raw = JSON.parse(readFileSync(policiesPath, 'utf-8'));
+    const entries: PayerPolicyEntry[] = raw.entries || [];
+
+    result.totalEntries = entries.length;
+
+    for (const entry of entries) {
+      try {
+        // Normalize denial_type to lowercase underscored format
+        const denialType = entry.denial_type
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '_')
+          .replace(/^_+|_+$/g, '');
+
+        // Compute SHA-256 content hash
+        const hash = contentHash(entry.clause_text);
+
+        // Check for duplicate by content_hash + clause_id
+        const existing = await db.evidence.findFirst({
+          where: {
+            content_hash: hash,
+            clause_id: entry.clause_id,
+          },
+        });
+
+        if (existing) {
+          result.skipped++;
+          continue;
+        }
+
+        // Create Evidence record
+        await db.evidence.create({
+          data: {
+            source: entry.payer_name,
+            document_name: `Payer Policy ${entry.clause_id}`,
+            section: entry.denial_type,
+            content: entry.clause_text,
+            content_hash: hash,
+            payer_name: entry.payer_name,
+            denial_type: denialType,
+            clause_id: entry.clause_id,
+            retrieval_weight: entry.retrieval_weight,
+            effective_date: new Date(entry.effective_date),
+            provenance_tier: 'primary_source',
+            embedding: entry.source_url, // Store URL temporarily
+            status: 'active',
+          },
+        });
+
+        result.ingested++;
+      } catch (entryError: any) {
+        result.errors.push(`${entry.clause_id}: ${entryError.message}`);
+      }
+    }
+  } catch (error: any) {
+    result.errors.push(`Fatal: ${error.message}`);
+  }
+
+  result.durationMs = Date.now() - startTime;
+  return result;
+}
+
 // ─── Citation Resolution ──────────────────────────────────────────────────
 
 export async function resolveCitation(evidenceId: string) {

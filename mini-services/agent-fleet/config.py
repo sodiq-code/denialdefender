@@ -12,6 +12,17 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash")
 GCP_PROJECT_ID = os.getenv("GCP_PROJECT_ID", "project-8a09278a-5593-4289-b2e")
 
+# ─── Dual-Backend LLM Configuration ────────────────────────────────
+# Force a specific backend: "gemini" (direct API) or "zai" (z-ai-web-dev-sdk)
+# Leave empty for auto-detection (try Gemini first, fall back to z-ai)
+FORCE_LLM_BACKEND = os.getenv("FORCE_LLM_BACKEND", "")
+# Timeout in seconds for Gemini API health check
+GEMINI_CHECK_TIMEOUT = int(os.getenv("GEMINI_CHECK_TIMEOUT", "5"))
+# Timeout in seconds for LLM generation calls
+LLM_GENERATION_TIMEOUT = int(os.getenv("LLM_GENERATION_TIMEOUT", "60"))
+# z-ai SDK CLI path (default: "z-ai")
+ZAI_SDK_CLI_PATH = os.getenv("ZAI_SDK_CLI_PATH", "z-ai")
+
 # ─── Service Configuration ─────────────────────────────────────────
 AGENT_FLEET_PORT = int(os.getenv("AGENT_FLEET_PORT", "3004"))
 SERVICE_NAME = "denialdefender-agent-fleet"

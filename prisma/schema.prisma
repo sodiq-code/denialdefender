@@ -135,6 +135,12 @@ model Evidence {
   content         String
   created_at      DateTime       @default(now())
 
+  // Policy Research fields (Day 2 — Policy Research Agent)
+  payer_name      String?        // Payer-specific policy (e.g., "UnitedHealthcare", "Aetna")
+  denial_type     String?        // Denial classification (e.g., "medical_necessity", "prior_auth", "coding")
+  retrieval_weight Float         @default(1.0) // Re-ranking weight for policy retrieval (higher = more relevant)
+  clause_id       String?        // Payer policy clause ID (e.g., "UHC-MP-001.4.B")
+
   // Relations
   citations Citation[]
 
@@ -143,6 +149,9 @@ model Evidence {
   @@index([source])
   @@index([provenance_tier])
   @@index([status])
+  @@index([payer_name])
+  @@index([denial_type])
+  @@index([clause_id])
 }
 
 model Citation {

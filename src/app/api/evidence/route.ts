@@ -4,7 +4,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { resolveCitation, ingestRawEvidence, getCorpusStats } from '@/lib/evidence-ingest';
+import { resolveCitation, ingestRawEvidence, getCorpusStats, ingestPayerPolicies } from '@/lib/evidence-ingest';
 import { db } from '@/lib/db';
 
 const RAW_DIR = '/home/z/my-project/data/corpus/raw';
@@ -96,6 +96,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ status: 'ok', ingest: result, corpus: stats });
     }
 
+    // Ingest payer policies
+    if (body.action === 'ingest-policies') {
+      const result = await ingestPayerPolicies();
+      return NextResponse.json({ status: 'ok', policies: result });
+    }
+
     // Generate synthetic cases
     if (body.action === 'synthetic') {
       const { storeSyntheticCases } = await import('@/lib/synthetic-cases');
@@ -105,7 +111,7 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json(
-      { status: 'error', message: 'Unknown action. Use "ingest" or "synthetic"' },
+      { status: 'error', message: 'Unknown action. Use "ingest", "ingest-policies", or "synthetic"' },
       { status: 400 }
     );
   } catch (error: any) {
