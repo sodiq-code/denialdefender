@@ -30,3 +30,33 @@ Stage Summary:
 - UI: Full case management dashboard with HITL gates and architecture view
 - GCP: Infrastructure scripts ready (require service account key to provision real resources)
 - Repo: https://github.com/sodiq-code/denialdefender (commit 49c7345)
+
+---
+Task ID: 1b
+Agent: Main Coordinator
+Task: Day 1 — GCP Infrastructure Provisioning with Real Service Account
+
+Work Log:
+- Installed gcloud CLI (v580.0.0) to /home/z/google-cloud-sdk/
+- Authenticated with SA key: json-775@denialdefender.iam.gserviceaccount.com
+- Enabled GCP APIs: firestore, sqladmin, pubsub, aiplatform, iamcredentials, cloudtrace, errorreporting, identitytoolkit
+- Some APIs failed (Cloud Run, Secret Manager, Cloud Build, Compute) — requires billing account
+- Created Firestore database: projects/denialdefender/databases/(default) at location eur3
+- Created 4 Pub/Sub topics: decision_trace, agent_tasks, case_events, gate_events
+- Cloud SQL pgvector creation FAILED — billing account not in good standing
+- Installed firebase-admin SDK and wrote Firestore round-trip test
+- Firestore round-trip test PASSED: create case → read back → add trace → verify → create HITL gate → cleanup
+- SA key file added to .gitignore (upload/*.json) to prevent secret leaking
+- Pushed to GitHub: commit f875cf5
+
+Stage Summary:
+- Firestore (eur3): PROVISIONED + VERIFIED (round-trip works)
+- Pub/Sub topics (4): PROVISIONED
+- APIs enabled: firestore, sqladmin, pubsub, aiplatform, iamcredentials, cloudtrace, errorreporting, identitytoolkit
+- Cloud SQL pgvector: BLOCKED (needs billing account linked)
+- Cloud Run: BLOCKED (needs billing account linked)
+- Secret Manager: BLOCKED (needs billing account linked)
+- Local gate (Prisma SQLite): PASSED
+- Real GCP Firestore gate: PASSED
+- SA key stored at: /home/z/my-project/upload/denialdefender-3b32a161dcae.json (gitignored)
+- Repo: https://github.com/sodiq-code/denialdefender (commit f875cf5)
