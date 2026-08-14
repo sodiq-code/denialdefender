@@ -1,0 +1,11 @@
+{
+  "name": "denialdefender-trace-stream",
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "bun --hot index.ts"
+  },
+  "dependencies": {
+    "socket.io": "^4.8.1",
+    "cors": "^2.8.5"
+  }
+}
