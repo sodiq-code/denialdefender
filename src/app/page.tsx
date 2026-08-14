@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { CaseDashboard } from '@/components/case-dashboard';
 import { TraceStreamTab } from '@/components/trace-stream-tab';
+import { EvidenceCorpusTab } from '@/components/evidence-corpus-tab';
 import { useTraceStream } from '@/hooks/useTraceStream';
 import {
   Shield,
@@ -173,6 +174,10 @@ export default function Home() {
               <Activity className="h-4 w-4" />
               Trace Stream
             </TabsTrigger>
+            <TabsTrigger value="evidence" className="gap-1.5">
+              <FileSearch className="h-4 w-4" />
+              Evidence
+            </TabsTrigger>
             <TabsTrigger value="architecture" className="gap-1.5">
               <Cpu className="h-4 w-4" />
               Architecture
@@ -187,6 +192,11 @@ export default function Home() {
           {/* ── Trace Stream Tab ───────────────────────────────── */}
           <TabsContent value="trace">
             <TraceStreamTab />
+          </TabsContent>
+
+          {/* ── Evidence Corpus Tab ──────────────────────────── */}
+          <TabsContent value="evidence">
+            <EvidenceCorpusTab />
           </TabsContent>
 
           {/* ── Architecture Tab ───────────────────────────────── */}

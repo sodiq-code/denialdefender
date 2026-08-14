@@ -127,8 +127,8 @@ model Evidence {
   document_name   String
   section         String?
   effective_date  DateTime?
-  content_hash    String?
-  embedding       String?        // text for now, pgvector later
+  content_hash    String         // SHA-256 hash of content — required for provenance tracking
+  embedding       String?        // URL stored temporarily; will be replaced with vector embedding
   provenance_tier ProvenanceTier @default(primary_source)
   status          EvidenceStatus @default(active)
   retrieved_date  DateTime       @default(now())
@@ -137,6 +137,12 @@ model Evidence {
 
   // Relations
   citations Citation[]
+
+  // Index for deduplication and search
+  @@index([content_hash])
+  @@index([source])
+  @@index([provenance_tier])
+  @@index([status])
 }
 
 model Citation {
