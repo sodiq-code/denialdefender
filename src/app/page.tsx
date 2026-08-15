@@ -17,6 +17,7 @@ import Day9TwoCasePanel from '@/components/day9-two-case-panel';
 import Day10PhiGuardPanel from '@/components/day10-phi-guard-panel';
 import Day11GovernancePanel from '@/components/day11-governance-panel';
 import { Day12PolishPanel } from '@/components/day12-polish-panel';
+import { Day13DemoLockPanel } from '@/components/day13-demo-lock-panel';
 import { useTraceStream } from '@/hooks/useTraceStream';
 import {
   Shield,
@@ -55,6 +56,7 @@ import {
   Lock,
   Fingerprint,
   Globe,
+  ClipboardCheck,
 } from 'lucide-react';
 
 interface AgentFleetHealth {
@@ -240,6 +242,10 @@ export default function Home() {
               <Globe className="h-4 w-4" />
               Day 12: NPI + Polish
             </TabsTrigger>
+            <TabsTrigger value="day13-demo-lock" className="gap-1.5">
+              <ClipboardCheck className="h-4 w-4" />
+              Day 13: Demo Lock
+            </TabsTrigger>
             <TabsTrigger value="architecture" className="gap-1.5">
               <Cpu className="h-4 w-4" />
               Architecture
@@ -309,6 +315,11 @@ export default function Home() {
           {/* ── Day 12: NPI + Polish Tab ─────────────────────────── */}
           <TabsContent value="day12-polish">
             <Day12PolishPanel />
+          </TabsContent>
+
+          {/* ── Day 13: Demo Lock + Domain Validation Tab ──────────── */}
+          <TabsContent value="day13-demo-lock">
+            <Day13DemoLockPanel />
           </TabsContent>
 
           {/* ── Architecture Tab ───────────────────────────────── */}
