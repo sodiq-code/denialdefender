@@ -13,6 +13,7 @@ import { SixAgentPipelinePanel } from '@/components/six-agent-pipeline-panel';
 import { Day6PipelinePanel } from '@/components/day6-pipeline-panel';
 import Day7EvalPanel from '@/components/day7-eval-panel';
 import Day8ExperimentPanel from '@/components/day8-experiment-panel';
+import Day9TwoCasePanel from '@/components/day9-two-case-panel';
 import { useTraceStream } from '@/hooks/useTraceStream';
 import {
   Shield,
@@ -46,6 +47,7 @@ import {
   ShieldCheck,
   FlaskConical,
   TrendingUp,
+  Brain,
 } from 'lucide-react';
 
 interface AgentFleetHealth {
@@ -215,6 +217,10 @@ export default function Home() {
               <TrendingUp className="h-4 w-4" />
               Day 8: Before/After + Ablation
             </TabsTrigger>
+            <TabsTrigger value="day9-demo" className="gap-1.5">
+              <Brain className="h-4 w-4" />
+              Day 9: Two-Case Demo
+            </TabsTrigger>
             <TabsTrigger value="architecture" className="gap-1.5">
               <Cpu className="h-4 w-4" />
               Architecture
@@ -264,6 +270,11 @@ export default function Home() {
           {/* ── Day 8: Before/After + Ablation Tab ──────────────── */}
           <TabsContent value="day8-experiment">
             <Day8ExperimentPanel />
+          </TabsContent>
+
+          {/* ── Day 9: Two-Case Behavioral Demo Tab ─────────────── */}
+          <TabsContent value="day9-demo">
+            <Day9TwoCasePanel />
           </TabsContent>
 
           {/* ── Architecture Tab ───────────────────────────────── */}
