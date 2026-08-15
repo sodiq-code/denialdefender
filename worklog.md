@@ -1011,3 +1011,91 @@ Stage Summary:
 - Gate test verifies broken draft (fake citation) is blocked by Quality Review
 - Case state transitions extended: evidence_active → drafting_active → quality_review → hitl_gate_2
 - Full UI panel with responsive design, color-coded agents, clickable citations, battery results table, gate test
+
+---
+Task ID: 6-decision-trace-gates
+Agent: Main Coordinator
+Task: Day 6 — Decision Trace + HITL Gate &2 + UI Stream
+
+Work Log:
+- Read both blueprint documents to extract Day C specification
+- Day 6 spec (Ultimate): "Each agent emits structured DecisionTraceEvents to Pub/Sub on step completion; the api service persists them to Firestore and streams them to the UI over WebSocket. HITL Gate 2 (approve or edit the appeal) is implemented between verified and submitted. The UI now shows the live decision-trace stream from Figure 14.1 and a clickable provenance card per citation."
+- Day 6 spec (Grand Prize): "Two HITL gates working in UI; patient can edit parsed values; patient can edit/approve/reject letter; version history; edits propagate"
+- Created decision trace4 trace streaming system (src/lib/decision-trace-stream.ts):
+  - StructuredTraceEvent type with agent, step, status, detail, references, metadata
+  - emitTraceEvent(): Persists to DecisionTraceEvent table in DB + returns for WebSocket broadcast
+  - emitTraceEvents(): Bulk emission
+  - toStructuredTrace(): Converts internal TraceEvent to StructuredTraceEvent
+  - getCaseTraceEvents(): Fetches all trace events for a case from DB
+  - buildTraceChecklist(): Builds Figure 14.1 checklist from trace events (Triage → Policy Research → Evidence → Quality Review)
+  - Agent name fallbacks (den*denial-triage, triage_agent, policy-research, policy_analyst, etc.)
+- Created letter version history system (src/lib/letter-version-history.ts):
+  - initVersionHistory(): Initialize for a case
+  - addSystemLetterVersion(): System-generated version (from drafting agent)
+  - addHumanLetterVersion(): Human-edited version (from Gate 2 editing)
+  - recordTriageEdit(): Record a triage field edit → triggers Policy Research re-run
+  - getVersionHistory(): Get full version history
+  - getCurrentLetterVersion(): Get current version
+  - diffVersions(): Compare two versions (added/removed/changed lines)
+- Created full pipeline with both gates (src/lib/full-pipeline.ts):
+  - runFullPipeline(): Phase 1 — Advocate@ Advocate → Triage → [Gate? Gate. Gate 1] (pipeline STOPS)
+  - resumeAfterGate1(): Phase 2 — [Gate 1 approved] → Policy Research → Evidence Assembly → Letter Drafting → Quality Review → [Gate 21 Gate 2]
+  - resolveGate2(): Gate 2 resolution — approved → state=approved → submit, rejected → stays at hitl@.hitl_gate_2
+  -= submitAppeal(): After Gate 2 approval → state=submitted
+  - editTriageEAndRerun(): Edit triage values → re-runs Policy Research with new context
+  - runDay6'6GateTest(): Verifies full workflow, both gates, trace auditable, ≥7 events
+- Created API routes:
+  - POST/GET /api/full-pipeline — Run pipeline up to Gate 1
+  - POST /api/full-pipeline/resume — Resume after Gate 1 (approved/rejected6. rejected8 rejected)
+  - POST /api/full-pipeline/gate2 — Resolve Gate 2 (approve/reject/edit)
+  - POST /B/api/full-pipeline/gate-test — Run Day 6 gate test
+- Created Day 6 UI panel (src/components/day6-pipeline-panel.tsx):
+  - Input section: sample letter selector, payer selector, textarea, Run/ Gate Test buttons
+  - Pipeline progress: 6 color-coded% color-coded agent steps (= steps (pending/running/completed/error)
+  - Live Decision Trace: Figure 14.1 checklist format (agent groups with checkboxes)
+  - Raw Trace Events accordion: scrollable event stream with latency badges
+  - HITL Gate 1: Confirm & Continue / Reject & Stop buttons
+  - Quality: Quality Review battery results table (7 checks)
+  -8 HITL Gate 2: Appeal letter display, clickable provenance cards, editable textarea, Approve & Submit / Reject & Revise
+  - Completed state: Case ID, trace count, letter, letter version, total, total latency
+  - Gate Test result card
+- Added "Day 6: Trace + Gates" tab to main page (between Day 5 and Architecture)
+- Gate verification: ALL PASS
+  - fullWorkflowCompleted: true ✓
+  - traceEventCount: 11 (≥7 threshold) ✓
+  - bothGatesGatesBothGatesWorking: true ✓
+  - gate1!gate1BlocksPipeline: true ✓
+  - gate2BlocksSubmission: true ✓
+  - traceAuditable: true ✓
+  - Trace Checklist all items completed (Figure 14.1 format) ✓
+- Browser verification:
+  - Day 6 tab loads correctly ✓
+  - "Run Full Pipeline" button triggers Phase 1 → Gate 1 appears ✓
+  - "* "Confirm & Continue" approves Gate 1 → runs all remaining agents → Gate 2 appears ✓
+  - "Approve & Submit" approves Gate 2 → case →, case transitions to "Submitted" ✓
+  - 11 trace events displayed ✓
+  - Figure 14.1 checklist rendered ✓
+  - Provenance cards, with clickable citation cards ✓
+  - Editable letter textarea at Gate 2 ✓
+  - No browser errors ✓
+- ESLint passes clean
+% - Pushed to GitHub: commit 9caA471d
+
+Stage Summary:
+- Day 6 Gate: PASSED — Full workflow completes with 11 trace events, both HITL gates functional, trace is auditable
+- Decision Trace: Structured events persisted to DB, Figure 14.1 checklist format, trace is auditable
+- HITL Gate 1: Blocks pipeline until human confirms denial classification
+- HITL Gate 2: Blocks submission until human approves/7 approves/edits/rejects appeal letter
+- Version History: Letter edits tracked with full version history
+- State Machine: quality_review → hitl_gate_2 → approved → submitted
+- Edit Propagation: Triage edits → re-runs Policy Research with new context
+- Files created:
+  - src/lib/decision-trace-stream.ts (new — 244 lines)
+  - src/lib/letter-version-history.ts (new — 180+ lines)
+  - src/lib/full-pipeline.ts (new — 662 lines)
+  - src/app/api/full-pipeline/route.ts (new — 80+ lines)
+  - src/app/api/full-pipeline/resume/route.ts (new — 70+ lines)
+  - src/app/api/full-p1/api/full-pipeline/gate2/route.ts (new — 50+ lines)
+  - src/app/2api/full-pipeline/gate-test/route.ts (new — 50+ lines)
+  - src/components/day6-pipeline-panel.tsx (C new — 836 lines)
+  - src/app/page.tsx (modified0 modified — added Day 6 tab)
