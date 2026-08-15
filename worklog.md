@@ -846,3 +846,34 @@ Stage Summary:
 - 3 Sample Denial Letters: Medicare CO-50 TKA, UnitedHealthcare CO-197 MRI, Aetna CO-4 E/M
 - Gate: 3+ citations per run, 5 consecutive runs via /api/vertical-slice/gate
 - All types defined: ParsedDenial, VerticalSliceCitation, AppealDraft, VerticalSliceResult
+---
+Task ID: 4-agents-1-3
+Agent: full-stack-developer
+Task: Day 4 — Agents 1–3: Advocate, Triage, Policy Research
+
+Work Log:
+- Read worklog.md and understood Day 3 deliverables (vertical-slice-agent, two-agent-pipeline, policy-research, existing Prisma schema with Case/Denial/HitlGate/DecisionTraceEvent models)
+- Created ADK-style base agent class (src/lib/agents/base-agent.ts) with typed generics, latency measurement, trace emission, mock fallback, and error handling
+- Created Patient Advocate Agent (src/lib/agents/patient-advocate.ts) with deadline extraction, urgency assessment (CPT-based), empathetic framing, recommended actions
+- Created Denial Triage Agent (src/lib/agents/denial-triage.ts) with rule-based denial parsing (reusing vertical-slice patterns), structured denial JSON, classification, and humanConfirmPrompt generation
+- Created Policy Research Agent (src/lib/agents/policy-research-agent.ts) wrapping retrievePolicyClauses with topK:3, provenance cards, and SLA tracking
+- Created three-agent pipeline (src/lib/three-agent-pipeline.ts) with runThreeAgentPipeline (stops at Gate 1) and resumeAfterGate1 (approved → Policy Research, rejected → stops)
+- Pipeline creates Case in DB, runs Advocate → Triage, creates HitlGate (gate_number=1, status=pending), emits decision traces, then STOPS awaiting human confirmation
+- Created API endpoints: POST/GET /api/three-agent-pipeline and POST /api/three-agent-pipeline/resume
+- Created ThreeAgentPipelinePanel UI component with input section, sample selectors, 3-step pipeline display, HITL Gate 1 card with Confirm/Reject buttons, Policy Research clause display with provenance cards, decision trace accordion
+- Updated page.tsx with "Day 4: Agents 1-3" tab using UsersRound icon
+- Fixed import path (db import in three-agent-pipeline.ts)
+- Verified with curl: pipeline runs Advocate+Triage→Gate1→stops; resume with approved→Policy Research with 3 real clauses; resume with rejected→pipeline stops
+- All lint checks pass
+
+Stage Summary:
+- 3 formal ADK-style agent classes: BaseAgent<TInput,TOutput>, PatientAdvocateAgent, DenialTriageAgent, PolicyResearchAgent
+- Three-agent pipeline: Advocate → Triage → [HITL Gate 1] → Policy Research
+- Pipeline stops at Gate 1 and blocks until human confirms/rejects
+- Triage produces denial JSON with humanConfirmPrompt for Gate 1
+- Policy Research returns 3 clause-cited candidates with real provenance cards from evidence corpus
+- Gate 1 confirmed: Policy Research runs, 3 real clauses with provenance cards returned
+- Gate 1 rejected: Pipeline stops, no Policy Research
+- Case state transitions work: created → triage_active → hitl_gate_1 → (approved) → evidence_active → triage_complete
+- Decision trace events written to DB at each step
+- Full UI panel with responsive design, color-coded agents, accordion traces
