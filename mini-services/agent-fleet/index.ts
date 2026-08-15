@@ -26,7 +26,7 @@ import { randomUUID } from "crypto";
 
 // ─── Configuration ──────────────────────────────────────────────────────
 
-const PORT = 3004;
+const PORT = parseInt(process.env.PORT || "3004", 10);
 const SERVICE_NAME = "denialdefender-agent-fleet";
 const SERVICE_VERSION = "1.0.0";
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY ?? "";

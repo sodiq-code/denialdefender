@@ -1,7 +1,7 @@
 import { createServer } from "http";
 import { Server, Socket } from "socket.io";
 
-const PORT = 3003;
+const PORT = parseInt(process.env.PORT || "3003", 10);
 
 // ─── HTTP Server ───────────────────────────────────────────────
 const httpServer = createServer((req, res) => {
