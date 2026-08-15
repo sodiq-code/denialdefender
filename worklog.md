@@ -1,6 +1,72 @@
 # DenialDefender Worklog
 
 ---
+Task ID: 4-agents-1-3
+Agent: Main Coordinator
+Task: Day 4 — Agents 1–3: Advocate, Triage, Policy Research under ADK
+
+Work Log:
+- Read both blueprint documents to extract Day 4 specification
+- Day 4 spec: "Split the monolith into the first three agents under ADK. Patient Advocate owns empathetic intake and case framing. Denial Triage owns the multimodal parse and the structured denial JSON. Policy Research owns retrieval over the corpus and clause selection. Gate: HITL Gate 1 (confirm denial) works and blocks the pipeline until confirmed."
+- Created BaseAgent<TInput,TOutput> abstract class (src/lib/agents/base-agent.ts) with latency measurement, trace emission, and mock fallback
+- Created PatientAdvocateAgent (src/lib/agents/patient-advocate.ts):
+  - Empathetic intake: patient summary, denial impact, urgency assessment
+  - Deadline extraction from denial letter text
+  - Recommended actions based on urgency level
+  - Empathetic note for case file
+- Created DenialTriageAgent (src/lib/agents/denial-triage.ts):
+  - Structured denial JSON: payer, reason code, denial type, CPT/ICD, amount, confidence
+  - Classification: isAppealable, appealStrategy, estimatedSuccessRate, keyFactors
+  - humanConfirmPrompt: formatted summary for Gate 1 human review
+- Created PolicyResearchAgent (src/lib/agents/policy-research-agent.ts):
+  - Real corpus retrieval via retrievePolicyClauses (topK: 3)
+  - Provenance cards from real evidence (not placeholders)
+  - SLA tracking (<200ms target)
+- Created three-agent pipeline (src/lib/three-agent-pipeline.ts):
+  - Flow: Advocate → Triage → [HITL Gate 1] → Policy Research
+  - Pipeline STOPS at Gate 1 — Policy Research BLOCKED until human confirms
+  - Gate 1 approved → Policy Research runs, returns 3 clause-cited candidates
+  - Gate 1 rejected → Pipeline stops (gate1_rejected)
+  - Case state transitions: created → triage_active → hitl_gate_1 → evidence_active → triage_complete
+- Created API endpoints:
+  - POST /api/three-agent-pipeline: Runs Advocate + Triage, creates Gate 1
+  - POST /api/three-agent-pipeline/resume: Resolves Gate 1 (approved/rejected)
+  - GET /api/three-agent-pipeline: Pipeline info + sample data
+- Created UI component (src/components/three-agent-pipeline-panel.tsx):
+  - Color-coded agents: rose (Advocate), teal (Triage), emerald (Policy Research)
+  - HITL Gate 1 card with Confirm (green) and Reject (red) buttons
+  - Provenance cards after Gate 1 approval
+  - Decision trace accordion
+- Added "Day 4: Agents 1-3" tab to main page
+- Gate verification: ALL PASS
+  - Pipeline stops at Gate 1 (awaiting_gate1) ✓
+  - Policy Research BLOCKED until Gate 1 ✓
+  - Triage produces humanConfirmPrompt ✓
+  - Advocate produces empathetic intake ✓
+  - Gate 1 APPROVED → Policy Research runs (3 clauses) ✓
+  - Gate 1 REJECTED → Pipeline stops ✓
+  - Provenance cards from real retrievals ✓
+- Browser verification: All 6 criteria PASS
+- ESLint passes clean
+- Pushed to GitHub: commit aed31c0
+
+Stage Summary:
+- Day 4 Gate: PASSED — HITL Gate 1 blocks pipeline until human confirms
+- 3 ADK-style agents: PatientAdvocate, DenialTriage, PolicyResearch
+- Three-agent pipeline: Advocate → Triage → [Gate 1] → Policy Research
+- Gate 1 blocking works: approved → Policy Research runs, rejected → pipeline stops
+- Provenance cards render from real retrievals (3 clauses per run)
+- Files created:
+  - src/lib/agents/base-agent.ts (new — 90 lines)
+  - src/lib/agents/patient-advocate.ts (new — 200+ lines)
+  - src/lib/agents/denial-triage.ts (new — 300+ lines)
+  - src/lib/agents/policy-research-agent.ts (new — 180+ lines)
+  - src/lib/three-agent-pipeline.ts (new — 280+ lines)
+  - src/app/api/three-agent-pipeline/route.ts (new — 80+ lines)
+  - src/app/api/three-agent-pipeline/resume/route.ts (new — 100+ lines)
+  - src/components/three-agent-pipeline-panel.tsx (new — 600+ lines)
+
+---
 Task ID: 3-vertical-slice
 Agent: Main Coordinator
 Task: Day 3 — Vertical Slice (Single-Agent)
