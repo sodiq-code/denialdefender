@@ -1,0 +1,744 @@
+     1→'use client';
+     2→
+     3→/**
+     4→ * DenialDefender — Day 11: Governance Panel
+     5→ *
+     6→ * Visualizes the complete governance vertex of the triad:
+     7→ *   PHI Guard → Model Armor → Agent Identity → Agent Observability
+     8→ *
+     9→ * Demo moment:
+    10→ *   1. Model Armor: clean → ALLOW, adversarial → BLOCK
+    11→ *   2. Agent Identity: violations → DENY, allowances → ALLOW
+    12→ *   3. Agent Observability: case reconstruction from trace events
+    13→ *   4. Gate: audit query reconstructs full case
+    14→ */
+    15→
+    16→import { useState } from 'react';
+    17→import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+    18→import { Badge } from '@/components/ui/badge';
+    19→import { Button } from '@/components/ui/button';
+    20→import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+    21→import {
+    22→  ShieldAlert,
+    23→  ShieldCheck,
+    24→  Lock,
+    25→  Eye,
+    26→  AlertTriangle,
+    27→  CheckCircle2,
+    28→  XCircle,
+    29→  Loader2,
+    30→  Fingerprint,
+    31→  Activity,
+    32→  ChevronDown,
+    33→  ChevronUp,
+    34→  FileSearch,
+    35→  Scale,
+    36→} from 'lucide-react';
+    37→
+    38→// ─── Types ────────────────────────────────────────────────────────────────
+    39→
+    40→interface ArmorResult {
+    41→  verdict: string;
+    42→  riskScore: number;
+    43→  threatCount: number;
+    44→}
+    45→
+    46→interface PermissionResult {
+    47→  agent: string;
+    48→  resource: string;
+    49→  capability: string;
+    50→  allowed: boolean;
+    51→}
+    52→
+    53→interface DemoResult {
+    54→  modelArmor: {
+    55→    cleanResult: ArmorResult;
+    56→    adversarialResult: ArmorResult;
+    57→  };
+    58→  agentIdentity: {
+    59→    violations: PermissionResult[];
+    60→    allowances: PermissionResult[];
+    61→    allPassed: boolean;
+    62→  };
+    63→  observability: {
+    64→    stats: {
+    65→      totalCases: number;
+    66→      totalTraceEvents: number;
+    67→      avgEventsPerCase: number;
+    68→      governanceCoverage: Record<string, number>;
+    69→      agentDistribution: Record<string, number>;
+    70→    };
+    71→    gateResult: {
+    72→      passed: boolean;
+    73→      checks: { check: string; result: boolean; detail: string }[];
+    74→    };
+    75→  };
+    76→}
+    77→
+    78→// ─── Component ────────────────────────────────────────────────────────────
+    79→
+    80→export default function Day11GovernancePanel() {
+    81→  const [activeTab, setActiveTab] = useState('overview');
+    82→  const [demoResult, setDemoResult] = useState<DemoResult | null>(null);
+    83→  const [loading, setLoading] = useState(false);
+    84→  const [expandedSection, setExpandedSection] = useState<string | null>(null);
+    85→  const [armorAudit, setArmorAudit] = useState<unknown[]>([]);
+    86→  const [identityAudit, setIdentityAudit] = useState<unknown[]>([]);
+    87→  const [observabilityStats, setObservabilityStats] = useState<unknown>(null);
+    88→  const [gateResult, setGateResult] = useState<{ passed: boolean; checks: { check: string; result: boolean; detail: string }[] } | null>(null);
+    89→
+    90→  // Run full governance demo
+    91→  const runDemo = async () => {
+    92→    setLoading(true);
+    93→    try {
+    94→      const res = await fetch('/api/governance/demo');
+    95→      if (res.ok) {
+    96→        const data = await res.json();
+    97→        setDemoResult(data);
+    98→      }
+    99→    } catch (error) {
+   100→      console.error('Governance demo failed:', error);
+   101→    } finally {
+   102→      setLoading(false);
+   103→    }
+   104→  };
+   105→
+   106→  // Load audit logs
+   107→  const loadArmorAudit = async () => {
+   108→    try {
+   109→      const res = await fetch('/api/governance/armor');
+   110→      if (res.ok) {
+   111→        const data = await res.json();
+   112→        setArmorAudit(data.entries || []);
+   113→      }
+   114→    } catch { /* ignore */ }
+   115→  };
+   116→
+   117→  const loadIdentityAudit = async () => {
+   118→    try {
+   119→      const res = await fetch('/api/governance/identity?audit=true');
+   120→      if (res.ok) {
+   121→        const data = await res.json();
+   122→        setIdentityAudit(data.entries || []);
+   123→      }
+   124→    } catch { /* ignore */ }
+   125→  };
+   126→
+   127→  const loadObservabilityStats = async () => {
+   128→    try {
+   129→      const res = await fetch('/api/governance/observability?action=stats');
+   130→      if (res.ok) {
+   131→        const data = await res.json();
+   132→        setObservabilityStats(data);
+   133→      }
+   134→    } catch { /* ignore */ }
+   135→  };
+   136→
+   137→  // Verify governance gate
+   138→  const verifyGate = async () => {
+   139→    setLoading(true);
+   140→    try {
+   141→      const res = await fetch('/api/governance/verify');
+   142→      if (res.ok) {
+   143→        const data = await res.json();
+   144→        setGateResult(data);
+   145→      }
+   146→    } catch { /* ignore */ }
+   147→    finally {
+   148→      setLoading(false);
+   149→    }
+   150→  };
+   151→
+   152→  const toggleSection = (section: string) => {
+   153→    setExpandedSection(expandedSection === section ? null : section);
+   154→  };
+   155→
+   156→  return (
+   157→    <div className="space-y-6">
+   158→      {/* ── Governance Triad Header ── */}
+   159→      <Card>
+   160→        <CardHeader>
+   161→          <div className="flex items-center justify-between">
+   162→            <div>
+   163→              <CardTitle className="flex items-center gap-2">
+   164→                <Scale className="h-5 w-5 text-emerald-600" />
+   165→                Day 11: Governance Vertex Complete
+   166→              </CardTitle>
+   167→              <CardDescription className="mt-1">
+   168→                The third pillar of the triad — PHI Guard · Model Armor · Agent Identity · Agent Observability
+   169→              </CardDescription>
+   170→            </div>
+   171→            <div className="flex items-center gap-2">
+   172→              {demoResult && (
+   173→                <Badge variant={demoResult.observability.gateResult.passed ? 'default' : 'destructive'} className="gap-1">
+   174→                  {demoResult.observability.gateResult.passed ? (
+   175→                    <><CheckCircle2 className="h-3 w-3" /> Gate PASS</>
+   176→                  ) : (
+   177→                    <><XCircle className="h-3 w-3" /> Gate FAIL</>
+   178→                  )}
+   179→                </Badge>
+   180→              )}
+   181→              <Button onClick={runDemo} disabled={loading} size="sm" className="gap-1.5">
+   182→                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Activity className="h-4 w-4" />}
+   183→                Run Demo
+   184→              </Button>
+   185→            </div>
+   186→          </div>
+   187→        </CardHeader>
+   188→      </Card>
+   189→
+   190→      {/* ── Governance Vertex Flow Diagram ── */}
+   191→      <Card>
+   192→        <CardHeader className="pb-3">
+   193→          <CardTitle className="text-sm font-medium">Figure 5.1 — Governance Vertex (Complete)</CardTitle>
+   194→        </CardHeader>
+   195→        <CardContent>
+   196→          <div className="flex items-center justify-center gap-2 flex-wrap py-3">
+   197→            <div className="flex flex-col items-center p-3 rounded-lg border-2 border-rose-200 bg-rose-50 dark:border-rose-800 dark:bg-rose-950 min-w-[100px]">
+   198→              <ShieldAlert className="h-5 w-5 text-rose-600 mb-1" />
+   199→              <span className="text-xs font-medium">PHI Guard</span>
+   200→              <Badge variant="outline" className="text-[10px] mt-1">Day 10</Badge>
+   201→            </div>
+   202→            <span className="text-muted-foreground">→</span>
+   203→            <div className="flex flex-col items-center p-3 rounded-lg border-2 border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950 min-w-[100px]">
+   204→              <ShieldCheck className="h-5 w-5 text-amber-600 mb-1" />
+   205→              <span className="text-xs font-medium">Model Armor</span>
+   206→              <Badge variant="outline" className="text-[10px] mt-1">Day 11</Badge>
+   207→            </div>
+   208→            <span className="text-muted-foreground">→</span>
+   209→            <div className="flex flex-col items-center p-3 rounded-lg border-2 border-violet-200 bg-violet-50 dark:border-violet-800 dark:bg-violet-950 min-w-[100px]">
+   210→              <Fingerprint className="h-5 w-5 text-violet-600 mb-1" />
+   211→              <span className="text-xs font-medium">Agent Identity</span>
+   212→              <Badge variant="outline" className="text-[10px] mt-1">Day 11</Badge>
+   213→            </div>
+   214→            <span className="text-muted-foreground">→</span>
+   215→            <div className="flex flex-col items-center p-3 rounded-lg border-2 border-emerald-200 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-950 min-w-[100px]">
+   216→              <Eye className="h-5 w-5 text-emerald-600 mb-1" />
+   217→              <span className="text-xs font-medium">Observability</span>
+   218→              <Badge variant="outline" className="text-[10px] mt-1">Day 11</Badge>
+   219→            </div>
+   220→          </div>
+   221→          <p className="text-xs text-muted-foreground text-center mt-2">
+   222→            Governance is co-equal with Evidence and Agents — not a security afterthought tacked onto a working pipeline.
+   223→          </p>
+   224→        </CardContent>
+   225→      </Card>
+   226→
+   227→      {/* ── Sub-Tabs ── */}
+   228→      <Tabs value={activeTab} onValueChange={setActiveTab}>
+   229→        <TabsList className="w-full sm:w-auto">
+   230→          <TabsTrigger value="overview">Demo Moment</TabsTrigger>
+   231→          <TabsTrigger value="armor">Model Armor</TabsTrigger>
+   232→          <TabsTrigger value="identity">Agent Identity</TabsTrigger>
+   233→          <TabsTrigger value="observability">Observability</TabsTrigger>
+   234→          <TabsTrigger value="gate">Gate Verify</TabsTrigger>
+   235→        </TabsList>
+   236→
+   237→        {/* ── Demo Moment Tab ── */}
+   238→        <TabsContent value="overview" className="space-y-4">
+   239→          {demoResult ? (
+   240→            <>
+   241→              {/* Model Armor Results */}
+   242→              <Card>
+   243→                <CardHeader className="pb-2">
+   244→                  <CardTitle className="text-sm flex items-center gap-2">
+   245→                    <ShieldCheck className="h-4 w-4 text-amber-600" />
+   246→                    Model Armor Scan Results
+   247→                  </CardTitle>
+   248→                </CardHeader>
+   249→                <CardContent className="space-y-3">
+   250→                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+   251→                    {/* Clean content */}
+   252→                    <div className={`p-3 rounded-lg border-2 ${demoResult.modelArmor.cleanResult.verdict === 'ALLOW' ? 'border-emerald-200 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-950' : 'border-red-200 bg-red-50'}`}>
+   253→                      <div className="flex items-center justify-between mb-1">
+   254→                        <span className="text-xs font-medium">✅ Clean Policy Content</span>
+   255→                        <Badge variant={demoResult.modelArmor.cleanResult.verdict === 'ALLOW' ? 'default' : 'destructive'}>
+   256→                          {demoResult.modelArmor.cleanResult.verdict}
+   257→                        </Badge>
+   258→                      </div>
+   259→                      <div className="text-xs text-muted-foreground space-y-0.5">
+   260→                        <p>Risk Score: {demoResult.modelArmor.cleanResult.riskScore}/100</p>
+   261→                        <p>Threats: {demoResult.modelArmor.cleanResult.threatCount}</p>
+   262→                      </div>
+   263→                    </div>
+   264→
+   265→                    {/* Adversarial content */}
+   266→                    <div className={`p-3 rounded-lg border-2 ${demoResult.modelArmor.adversarialResult.verdict === 'BLOCK' ? 'border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-950' : 'border-amber-200 bg-amber-50'}`}>
+   267→                      <div className="flex items-center justify-between mb-1">
+   268→                        <span className="text-xs font-medium">⚠️ Adversarial Content</span>
+   269→                        <Badge variant={demoResult.modelArmor.adversarialResult.verdict === 'BLOCK' ? 'destructive' : 'default'}>
+   270→                          {demoResult.modelArmor.adversarialResult.verdict}
+   271→                        </Badge>
+   272→                      </div>
+   273→                      <div className="text-xs text-muted-foreground space-y-0.5">
+   274→                        <p>Risk Score: {demoResult.modelArmor.adversarialResult.riskScore}/100</p>
+   275→                        <p>Threats: {demoResult.modelArmor.adversarialResult.threatCount}</p>
+   276→                      </div>
+   277→                    </div>
+   278→                  </div>
+   279→                </CardContent>
+   280→              </Card>
+   281→
+   282→              {/* Agent Identity Results */}
+   283→              <Card>
+   284→                <CardHeader className="pb-2">
+   285→                  <CardTitle className="text-sm flex items-center gap-2">
+   286→                    <Fingerprint className="h-4 w-4 text-violet-600" />
+   287→                    Agent Identity Permission Results
+   288→                  </CardTitle>
+   289→                </CardHeader>
+   290→                <CardContent className="space-y-3">
+   291→                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+   292→                    {/* Violations */}
+   293→                    <div className="p-3 rounded-lg border border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-950">
+   294→                      <h4 className="text-xs font-semibold mb-2 text-red-700 dark:text-red-400">
+   295→                        DENIED (Expected)
+   296→                      </h4>
+   297→                      <div className="space-y-1.5">
+   298→                        {demoResult.agentIdentity.violations.map((v, i) => (
+   299→                          <div key={i} className="flex items-start gap-1.5">
+   300→                            <XCircle className="h-3.5 w-3.5 text-red-500 shrink-0 mt-0.5" />
+   301→                            <span className="text-[11px]">
+   302→                              <strong>{v.agent}</strong> → {v.capability} {v.resource}
+   303→                            </span>
+   304→                          </div>
+   305→                        ))}
+   306→                      </div>
+   307→                    </div>
+   308→
+   309→                    {/* Allowances */}
+   310→                    <div className="p-3 rounded-lg border border-emerald-200 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-950">
+   311→                      <h4 className="text-xs font-semibold mb-2 text-emerald-700 dark:text-emerald-400">
+   312→                        ALLOWED (Expected)
+   313→                      </h4>
+   314→                      <div className="space-y-1.5">
+   315→                        {demoResult.agentIdentity.allowances.map((a, i) => (
+   316→                          <div key={i} className="flex items-start gap-1.5">
+   317→                            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0 mt-0.5" />
+   318→                            <span className="text-[11px]">
+   319→                              <strong>{a.agent}</strong> → {a.capability} {a.resource}
+   320→                            </span>
+   321→                          </div>
+   322→                        ))}
+   323→                      </div>
+   324→                    </div>
+   325→                  </div>
+   326→
+   327→                  <div className="flex items-center gap-2">
+   328→                    <Badge variant={demoResult.agentIdentity.allPassed ? 'default' : 'destructive'} className="gap-1">
+   329→                      {demoResult.agentIdentity.allPassed ? (
+   330→                        <><CheckCircle2 className="h-3 w-3" /> All permission checks correct</>
+   331→                      ) : (
+   332→                        <><XCircle className="h-3 w-3" /> Permission check failures</>
+   333→                      )}
+   334→                    </Badge>
+   335→                  </div>
+   336→                </CardContent>
+   337→              </Card>
+   338→
+   339→              {/* Observability Summary */}
+   340→              <Card>
+   341→                <CardHeader className="pb-2">
+   342→                  <CardTitle className="text-sm flex items-center gap-2">
+   343→                    <Eye className="h-4 w-4 text-emerald-600" />
+   344→                    Agent Observability Summary
+   345→                  </CardTitle>
+   346→                </CardHeader>
+   347→                <CardContent>
+   348→                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+   349→                    <div className="text-center">
+   350→                      <p className="text-lg font-bold">{demoResult.observability.stats.totalCases}</p>
+   351→                      <p className="text-[10px] text-muted-foreground">Total Cases</p>
+   352→                    </div>
+   353→                    <div className="text-center">
+   354→                      <p className="text-lg font-bold">{demoResult.observability.stats.totalTraceEvents}</p>
+   355→                      <p className="text-[10px] text-muted-foreground">Trace Events</p>
+   356→                    </div>
+   357→                    <div className="text-center">
+   358→                      <p className="text-lg font-bold">{demoResult.observability.stats.avgEventsPerCase}</p>
+   359→                      <p className="text-[10px] text-muted-foreground">Avg/Case</p>
+   360→                    </div>
+   361→                    <div className="text-center">
+   362→                      <p className="text-lg font-bold">
+   363→                        {Object.values(demoResult.observability.stats.governanceCoverage).reduce((a: number, b: unknown) => a + (b as number), 0)}
+   364→                      </p>
+   365→                      <p className="text-[10px] text-muted-foreground">Governance Events</p>
+   366→                    </div>
+   367→                  </div>
+   368→                </CardContent>
+   369→              </Card>
+   370→            </>
+   371→          ) : (
+   372→            <Card>
+   373→              <CardContent className="py-12 text-center">
+   374→                <Scale className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+   375→                <p className="text-sm text-muted-foreground mb-4">
+   376→                  Click &quot;Run Demo&quot; to demonstrate the governance vertex
+   377→                </p>
+   378→                <p className="text-xs text-muted-foreground max-w-md mx-auto">
+   379→                  The demo will scan clean/adversarial content (Model Armor),
+   380→                  test permission violations (Agent Identity),
+   381→                  and verify audit reconstruction (Observability).
+   382→                </p>
+   383→              </CardContent>
+   384→            </Card>
+   385→          )}
+   386→        </TabsContent>
+   387→
+   388→        {/* ── Model Armor Tab ── */}
+   389→        <TabsContent value="armor" className="space-y-4">
+   390→          <Card>
+   391→            <CardHeader className="pb-2">
+   392→              <div className="flex items-center justify-between">
+   393→                <CardTitle className="text-sm flex items-center gap-2">
+   394→                  <ShieldCheck className="h-4 w-4 text-amber-600" />
+   395→                  Model Armor — Prompt Injection &amp; Jailbreak Defense
+   396→                </CardTitle>
+   397→                <Button variant="outline" size="sm" onClick={loadArmorAudit} className="gap-1">
+   398→                  <FileSearch className="h-3 w-3" /> Load Audit
+   399→                </Button>
+   400→              </div>
+   401→              <CardDescription>
+   402→                Second layer inside the agent fleet. Scans retrieved content before agent processing.
+   403→              </CardDescription>
+   404→            </CardHeader>
+   405→            <CardContent className="space-y-4">
+   406→              {/* Threat Categories */}
+   407→              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+   408→                <div className="p-2 rounded border bg-red-50 dark:bg-red-950">
+   409→                  <h5 className="text-[10px] font-semibold text-red-700 dark:text-red-400 mb-1">CRITICAL — Block</h5>
+   410→                  <ul className="text-[10px] text-muted-foreground space-y-0.5">
+   411→                    <li>• Instruction Override</li>
+   412→                    <li>• New Instruction Injection</li>
+   413→                    <li>• Role Switching Attack</li>
+   414→                  </ul>
+   415→                </div>
+   416→                <div className="p-2 rounded border bg-amber-50 dark:bg-amber-950">
+   417→                  <h5 className="text-[10px] font-semibold text-amber-700 dark:text-amber-400 mb-1">HIGH — Block</h5>
+   418→                  <ul className="text-[10px] text-muted-foreground space-y-0.5">
+   419→                    <li>• Data Exfiltration Attempt</li>
+   420→                    <li>• Boundary Crossing</li>
+   421→                    <li>• Tool/Function Poisoning</li>
+   422→                  </ul>
+   423→                </div>
+   424→                <div className="p-2 rounded border bg-yellow-50 dark:bg-yellow-950">
+   425→                  <h5 className="text-[10px] font-semibold text-yellow-700 dark:text-yellow-400 mb-1">MEDIUM — Sanitize</h5>
+   426→                  <ul className="text-[10px] text-muted-foreground space-y-0.5">
+   427→                    <li>• Indirect Manipulation</li>
+   428→                    <li>• Output Format Manipulation</li>
+   429→                    <li>• Emotional/Social Engineering</li>
+   430→                  </ul>
+   431→                </div>
+   432→                <div className="p-2 rounded border bg-slate-50 dark:bg-slate-950">
+   433→                  <h5 className="text-[10px] font-semibold text-slate-700 dark:text-slate-400 mb-1">LOW — Log</h5>
+   434→                  <ul className="text-[10px] text-muted-foreground space-y-0.5">
+   435→                    <li>• Suspicious Escape Sequences</li>
+   436→                    <li>• Repetition Attack</li>
+   437→                  </ul>
+   438→                </div>
+   439→              </div>
+   440→
+   441→              {/* Verdict Flow */}
+   442→              <div className="flex items-center justify-center gap-2 text-xs py-2">
+   443→                <span className="px-2 py-1 rounded bg-slate-100 dark:bg-slate-800">Retrieved Content</span>
+   444→                <span className="text-muted-foreground">→</span>
+   445→                <span className="px-2 py-1 rounded bg-amber-100 dark:bg-amber-900 font-medium">Model Armor</span>
+   446→                <span className="text-muted-foreground">→</span>
+   447→                <span className="px-2 py-1 rounded bg-emerald-100 dark:bg-emerald-900">ALLOW</span>
+   448→                <span className="text-muted-foreground">|</span>
+   449→                <span className="px-2 py-1 rounded bg-yellow-100 dark:bg-yellow-900">SANITIZE</span>
+   450→                <span className="text-muted-foreground">|</span>
+   451→                <span className="px-2 py-1 rounded bg-red-100 dark:bg-red-900">BLOCK</span>
+   452→              </div>
+   453→
+   454→              {/* Audit Log */}
+   455→              {armorAudit.length > 0 && (
+   456→                <div className="space-y-1">
+   457→                  <h5 className="text-xs font-medium">Audit Log ({armorAudit.length} entries)</h5>
+   458→                  <div className="max-h-40 overflow-y-auto text-[10px] font-mono bg-muted/50 p-2 rounded">
+   459→                    {JSON.stringify(armorAudit, null, 1)}
+   460→                  </div>
+   461→                </div>
+   462→              )}
+   463→            </CardContent>
+   464→          </Card>
+   465→        </TabsContent>
+   466→
+   467→        {/* ── Agent Identity Tab ── */}
+   468→        <TabsContent value="identity" className="space-y-4">
+   469→          <Card>
+   470→            <CardHeader className="pb-2">
+   471→              <div className="flex items-center justify-between">
+   472→                <CardTitle className="text-sm flex items-center gap-2">
+   473→                  <Fingerprint className="h-4 w-4 text-violet-600" />
+   474→                  Agent Identity — Scoped Permissions
+   475→                </CardTitle>
+   476→                <Button variant="outline" size="sm" onClick={loadIdentityAudit} className="gap-1">
+   477→                  <FileSearch className="h-3 w-3" /> Load Audit
+   478→                </Button>
+   479→              </div>
+   480→              <CardDescription>
+   481→                Each agent has scoped permissions. Quality Review cannot write appeals. Letter Drafting cannot ingest outcomes.
+   482→              </CardDescription>
+   483→            </CardHeader>
+   484→            <CardContent className="space-y-4">
+   485→              {/* Agent Permission Matrix */}
+   486→              <div className="overflow-x-auto">
+   487→                <table className="w-full text-[10px]">
+   488→                  <thead>
+   489→                    <tr className="border-b">
+   490→                      <th className="text-left py-1 px-2 font-medium">Agent</th>
+   491→                      <th className="text-left py-1 px-2 font-medium">Key Resources</th>
+   492→                      <th className="text-left py-1 px-2 font-medium">Notable Restriction</th>
+   493→                    </tr>
+   494→                  </thead>
+   495→                  <tbody>
+   496→                    <tr className="border-b">
+   497→                      <td className="py-1 px-2"><span className="text-rose-600 font-medium">Patient Advocate</span></td>
+   498→                      <td className="py-1 px-2">case (R/W), denial (R)</td>
+   499→                      <td className="py-1 px-2 text-amber-600">No appeal write</td>
+   500→                    </tr>
+   501→                    <tr className="border-b">
+   502→                      <td className="py-1 px-2"><span className="text-teal-600 font-medium">Denial Triage</span></td>
+   503→                      <td className="py-1 px-2">denial (R/W), hitl_gate (R/W)</td>
+   504→                      <td className="py-1 px-2">—</td>
+   505→                    </tr>
+   506→                    <tr className="border-b">
+   507→                      <td className="py-1 px-2"><span className="text-violet-600 font-medium">Policy Research</span></td>
+   508→                      <td className="py-1 px-2">policy (R/X), evidence (R/W)</td>
+   509→                      <td className="py-1 px-2">—</td>
+   510→                    </tr>
+   511→                    <tr className="border-b">
+   512→                      <td className="py-1 px-2"><span className="text-emerald-600 font-medium">Evidence Assembly</span></td>
+   513→                      <td className="py-1 px-2">evidence (R/W), citation (R/W)</td>
+   514→                      <td className="py-1 px-2">—</td>
+   515→                    </tr>
+   516→                    <tr className="border-b bg-blue-50/50 dark:bg-blue-950/30">
+   517→                      <td className="py-1 px-2"><span className="text-blue-600 font-medium">Letter Drafting</span></td>
+   518→                      <td className="py-1 px-2">appeal (R/W), evidence (R)</td>
+   519→                      <td className="py-1 px-2 text-red-600 font-medium">⛔ Cannot read outcomes</td>
+   520→                    </tr>
+   521→                    <tr className="border-b bg-purple-50/50 dark:bg-purple-950/30">
+   522→                      <td className="py-1 px-2"><span className="text-purple-600 font-medium">Quality Review</span></td>
+   523→                      <td className="py-1 px-2">citation (R/W), appeal (R only)</td>
+   524→                      <td className="py-1 px-2 text-red-600 font-medium">⛔ Cannot write appeals</td>
+   525→                    </tr>
+   526→                    <tr className="border-b">
+   527→                      <td className="py-1 px-2"><span className="text-amber-600 font-medium">Outcome Learning</span></td>
+   528→                      <td className="py-1 px-2">outcome (R/W), policy (R/W)</td>
+   529→                      <td className="py-1 px-2 text-amber-600">No appeal/evidence write</td>
+   530→                    </tr>
+   531→                    <tr>
+   532→                      <td className="py-1 px-2"><span className="text-orange-600 font-medium">Deadline Tracker</span></td>
+   533→                      <td className="py-1 px-2">deadline (R/W/X)</td>
+   534→                      <td className="py-1 px-2 text-amber-600">Temporal-only authority</td>
+   535→                    </tr>
+   536→                  </tbody>
+   537→                </table>
+   538→              </div>
+   539→
+   540→              {/* Blueprint-mandated examples */}
+   541→              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+   542→                <div className="p-2 rounded border bg-red-50 dark:bg-red-950">
+   543→                  <h5 className="text-[10px] font-semibold text-red-700 dark:text-red-400 mb-1">
+   544→                    Blueprint Mandate: Prevention
+   545→                  </h5>
+   546→                  <ul className="text-[10px] space-y-0.5">
+   547→                    <li>• Quality Review → write appeal: <strong>DENIED</strong> (prevents self-approval)</li>
+   548→                    <li>• Letter Drafting → read outcome: <strong>DENIED</strong> (prevents bias)</li>
+   549→                  </ul>
+   550→                </div>
+   551→                <div className="p-2 rounded border bg-emerald-50 dark:bg-emerald-950">
+   552→                  <h5 className="text-[10px] font-semibold text-emerald-700 dark:text-emerald-400 mb-1">
+   553→                    Blueprint Mandate: Capability
+   554→                  </h5>
+   555→                  <ul className="text-[10px] space-y-0.5">
+   556→                    <li>• Letter Drafting → write appeal: <strong>ALLOWED</strong> (its core job)</li>
+   557→                    <li>• Quality Review → write citation: <strong>ALLOWED</strong> (verification)</li>
+   558→                  </ul>
+   559→                </div>
+   560→              </div>
+   561→
+   562→              {/* Audit Log */}
+   563→              {identityAudit.length > 0 && (
+   564→                <div className="space-y-1">
+   565→                  <h5 className="text-xs font-medium">Audit Log ({identityAudit.length} entries)</h5>
+   566→                  <div className="max-h-40 overflow-y-auto text-[10px] font-mono bg-muted/50 p-2 rounded">
+   567→                    {JSON.stringify(identityAudit, null, 1)}
+   568→                  </div>
+   569→                </div>
+   570→              )}
+   571→            </CardContent>
+   572→          </Card>
+   573→        </TabsContent>
+   574→
+   575→        {/* ── Observability Tab ── */}
+   576→        <TabsContent value="observability" className="space-y-4">
+   577→          <Card>
+   578→            <CardHeader className="pb-2">
+   579→              <div className="flex items-center justify-between">
+   580→                <CardTitle className="text-sm flex items-center gap-2">
+   581→                  <Eye className="h-4 w-4 text-emerald-600" />
+   582→                  Agent Observability — Audit Trail
+   583→                </CardTitle>
+   584→                <Button variant="outline" size="sm" onClick={loadObservabilityStats} className="gap-1">
+   585→                  <Activity className="h-3 w-3" /> Load Stats
+   586→                </Button>
+   587→              </div>
+   588→              <CardDescription>
+   589→                Every case is queryable end-to-end through the decision trace stream.
+   590→              </CardDescription>
+   591→            </CardHeader>
+   592→            <CardContent className="space-y-4">
+   593→              {/* Stats Display */}
+   594→              {observabilityStats ? (
+   595→                <div className="space-y-3">
+   596→                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+   597→                    <div className="text-center p-2 rounded bg-muted/50">
+   598→                      <p className="text-lg font-bold">{(observabilityStats as Record<string, unknown>).totalCases as number}</p>
+   599→                      <p className="text-[10px] text-muted-foreground">Cases</p>
+   600→                    </div>
+   601→                    <div className="text-center p-2 rounded bg-muted/50">
+   602→                      <p className="text-lg font-bold">{(observabilityStats as Record<string, unknown>).totalTraceEvents as number}</p>
+   603→                      <p className="text-[10px] text-muted-foreground">Trace Events</p>
+   604→                    </div>
+   605→                    <div className="text-center p-2 rounded bg-muted/50">
+   606→                      <p className="text-lg font-bold">{(observabilityStats as Record<string, unknown>).avgEventsPerCase as number}</p>
+   607→                      <p className="text-[10px] text-muted-foreground">Avg/Case</p>
+   608→                    </div>
+   609→                    <div className="text-center p-2 rounded bg-muted/50">
+   610→                      <p className="text-lg font-bold">
+   611→                        {Object.values((observabilityStats as Record<string, unknown>).governanceCoverage as Record<string, number>).reduce((a, b) => a + b, 0)}
+   612→                      </p>
+   613→                      <p className="text-[10px] text-muted-foreground">Governance Events</p>
+   614→                    </div>
+   615→                  </div>
+   616→
+   617→                  {/* Agent Distribution */}
+   618→                  <div className="space-y-1">
+   619→                    <h5 className="text-xs font-medium">Agent Distribution</h5>
+   620→                    {Object.entries((observabilityStats as Record<string, unknown>).agentDistribution as Record<string, number>)
+   621→                      .sort(([, a], [, b]) => b - a)
+   622→                      .slice(0, 8)
+   623→                      .map(([agent, count]) => (
+   624→                        <div key={agent} className="flex items-center gap-2">
+   625→                          <span className="text-[10px] w-28 truncate">{agent}</span>
+   626→                          <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
+   627→                            <div
+   628→                              className="h-full bg-emerald-500 rounded-full"
+   629→                              style={{ width: `${Math.min((count / ((observabilityStats as Record<string, unknown>).totalTraceEvents as number || 1)) * 100, 100)}%` }}
+   630→                            />
+   631→                          </div>
+   632→                          <span className="text-[10px] w-8 text-right">{count as number}</span>
+   633→                        </div>
+   634→                      ))}
+   635→                  </div>
+   636→                </div>
+   637→              ) : (
+   638→                <p className="text-xs text-muted-foreground text-center py-4">
+   639→                  Click &quot;Load Stats&quot; to view observability data
+   640→                </p>
+   641→              )}
+   642→
+   643→              {/* Recent Activity */}
+   644→              {observabilityStats && ((observabilityStats as Record<string, unknown>).recentActivity as unknown[]).length > 0 && (
+   645→                <div className="space-y-1">
+   646→                  <div className="flex items-center justify-between">
+   647→                    <h5 className="text-xs font-medium">Recent Activity</h5>
+   648→                    <Button variant="ghost" size="sm" onClick={() => toggleSection('recent')} className="h-5 p-0">
+   649→                      {expandedSection === 'recent' ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+   650→                    </Button>
+   651→                  </div>
+   652→                  {expandedSection === 'recent' && (
+   653→                    <div className="max-h-48 overflow-y-auto space-y-1">
+   654→                      {((observabilityStats as Record<string, unknown>).recentActivity as Array<{ timestamp: string; agent: string; step: string; status: string; detail: string }>).slice(0, 15).map((event, i) => (
+   655→                        <div key={i} className="flex items-start gap-2 text-[10px] p-1 rounded bg-muted/30">
+   656→                          <Badge variant="outline" className="text-[8px] h-4 px-1 shrink-0">
+   657→                            {event.agent.slice(0, 10)}
+   658→                          </Badge>
+   659→                          <span className="truncate">{event.step}: {event.detail.slice(0, 60)}</span>
+   660→                        </div>
+   661→                      ))}
+   662→                    </div>
+   663→                  )}
+   664→                </div>
+   665→              )}
+   666→            </CardContent>
+   667→          </Card>
+   668→        </TabsContent>
+   669→
+   670→        {/* ── Gate Verification Tab ── */}
+   671→        <TabsContent value="gate" className="space-y-4">
+   672→          <Card>
+   673→            <CardHeader className="pb-2">
+   674→              <div className="flex items-center justify-between">
+   675→                <CardTitle className="text-sm flex items-center gap-2">
+   676→                  <Lock className="h-4 w-4" />
+   677→                  Day 11 Gate Verification
+   678→                </CardTitle>
+   679→                <Button onClick={verifyGate} disabled={loading} size="sm" className="gap-1">
+   680→                  {loading ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />}
+   681→                  Verify Gate
+   682→                </Button>
+   683→              </div>
+   684→              <CardDescription>
+   685→                Gate: an audit query can reconstruct a full case from trace events alone.
+   686→              </CardDescription>
+   687→            </CardHeader>
+   688→            <CardContent className="space-y-4">
+   689→              {gateResult ? (
+   690→                <div className="space-y-3">
+   691→                  {/* Gate Status */}
+   692→                  <div className={`p-4 rounded-lg border-2 ${gateResult.passed ? 'border-emerald-200 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-950' : 'border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-950'}`}>
+   693→                    <div className="flex items-center gap-2">
+   694→                      {gateResult.passed ? (
+   695→                        <CheckCircle2 className="h-6 w-6 text-emerald-600" />
+   696→                      ) : (
+   697→                        <XCircle className="h-6 w-6 text-red-600" />
+   698→                      )}
+   699→                      <div>
+   700→                        <p className="font-semibold">
+   701→                          Gate {gateResult.passed ? 'PASSED' : 'FAILED'}
+   702→                        </p>
+   703→                        <p className="text-xs text-muted-foreground">
+   704→                          {gateResult.passed
+   705→                            ? 'An audit query can reconstruct a full case from trace events alone.'
+   706→                            : 'Case reconstruction from trace events is incomplete.'}
+   707→                        </p>
+   708→                      </div>
+   709→                    </div>
+   710→                  </div>
+   711→
+   712→                  {/* Individual Checks */}
+   713→                  <div className="space-y-2">
+   714→                    {gateResult.checks.map((check, i) => (
+   715→                      <div key={i} className="flex items-start gap-2 p-2 rounded border">
+   716→                        {check.result ? (
+   717→                          <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0 mt-0.5" />
+   718→                        ) : (
+   719→                          <XCircle className="h-4 w-4 text-red-500 shrink-0 mt-0.5" />
+   720→                        )}
+   721→                        <div>
+   722→                          <p className="text-xs font-medium">{check.check}</p>
+   723→                          <p className="text-[10px] text-muted-foreground">{check.detail}</p>
+   724→                        </div>
+   725→                      </div>
+   726→                    ))}
+   727→                  </div>
+   728→                </div>
+   729→              ) : (
+   730→                <div className="text-center py-8">
+   731→                  <Lock className="h-10 w-10 mx-auto text-muted-foreground mb-3" />
+   732→                  <p className="text-sm text-muted-foreground">
+   733→                    Click &quot;Verify Gate&quot; to check if audit queries can reconstruct cases
+   734→                  </p>
+   735→                </div>
+   736→              )}
+   737→            </CardContent>
+   738→          </Card>
+   739→        </TabsContent>
+   740→      </Tabs>
+   741→    </div>
+   742→  );
+   743→}
+   744→

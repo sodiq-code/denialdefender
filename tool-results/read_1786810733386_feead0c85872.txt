@@ -1,0 +1,402 @@
+   700→   700→  - Aetna: AET-MN-011, AET-PA-012, AET-CB-013, AET-EI-014, AET-ON-015
+   701→   701→- Each entry has realistic, detailed clause_text with real CFR references (42 CFR § 410.32, § 422.112, § 422.568, etc.), Social Security Act citations, NCD/LCD references, CARC codes, and payer-specific policy language
+   702→   702→- retrieval_weight range: 0.86–0.95, effective_date: 2025-01-01/2025-01-15/2025-02-01, version: 2025.1
+   703→   703→- Created /home/z/my-project/data/corpus/test_letters.json with 5 realistic denial letters:
+   704→   704→  - TL-001: Medicare/Medical Necessity (CO50, Infliximab for osteoporosis — off-label denial)
+   705→   705→  - TL-002: UnitedHealthcare/Prior Authorization (CO15, MRI Brain — no auth obtained)
+   706→   706→  - TL-003: Aetna/Coding/Billing (CO16, TKA — missing modifier -25 + dx conflict)
+   707→   707→  - TL-004: Medicare/Experimental/Investigational (CO42, NGS molecular profiling — Category III CPT)
+   708→   708→  - TL-005: Aetna/Out-of-Network (PR96, ED visit at OON facility — prudent layperson challenge)
+   709→   709→- Each letter has expected_clause_ids for retrieval validation
+   710→   710→- Created /home/z/my-project/src/lib/test-letters.ts with:
+   711→   711→  - loadPayerPolicyCorpus() — load corpus from JSON
+   712→   712→  - loadTestLetters() — load test letters from JSON
+   713→   713→  - policyResearchAgent() — text-based retrieval with multi-factor scoring (term overlap, payer match, denial type match, retrieval weight, reason code match)
+   714→   714→  - validateLetter() — single letter validation (≥1 expected clause in top-3)
+   715→   715→  - runValidationSuite() — full 5-letter validation suite
+   716→   716→  - formatReport() — human-readable report formatting
+   717→   717→- Created /home/z/my-project/src/app/api/test-letters/route.ts (GET for loading, POST for validation)
+   718→   718→- Ran retrieval accuracy validation: 5/5 PASSED
+   719→   719→  - TL-001: 2/2 matched (MED-MN-001, MED-PA-002 in top-3)
+   720→   720→  - TL-002: 2/2 matched (UHC-PA-007, UHC-MN-006 in top-3)
+   721→   721→  - TL-003: 1/2 matched (AET-CB-013 in top-3; AET-PA-012 not in top-3 — still passes with ≥1)
+   722→   722→  - TL-004: 2/2 matched (MED-EI-004, MED-MN-001 in top-3)
+   723→   723→  - TL-005: 1/2 matched (AET-ON-015 in top-3; AET-MN-011 not in top-3 — still passes with ≥1)
+   724→   724→- API endpoint tested: GET /api/test-letters returns corpus + letters; POST /api/test-letters runs validation
+   725→   725→- ESLint passes clean
+   726→   726→
+   727→   727→Stage Summary:
+   728→   728→- Payer Policy Corpus: 15 entries (3 payers × 5 denial types), realistic CFR/policy language
+   729→   729→- Test Letters: 5 denial letters covering all 5 denial types, real CARC codes and clinical scenarios
+   730→   730→- Retrieval Accuracy Gate: ✅ PASSED (5/5)
+   731→   731→- Validation Script: Complete with text-based Policy Research Agent and multi-factor scoring
+   732→   732→- Files created:
+   733→   733→  - /home/z/my-project/data/corpus/payer_policies.json (15 entries)
+   734→   734→  - /home/z/my-project/data/corpus/test_letters.json (5 letters)
+   735→   735→  - /home/z/my-project/src/lib/test-letters.ts (retrieval + validation)
+   736→   736→  - /home/z/my-project/src/app/api/test-letters/route.ts (API endpoint)
+   737→   737→
+   738→   738→---
+   739→   739→Task ID: 5b
+   740→   740→Agent: Policy Research Agent Builder
+   741→   741→Task: Day 2 — Policy Research Agent with Evidence Corpus Retrieval
+   742→   742→
+   743→   743→Work Log:
+   744→   744→- Read existing codebase: worklog.md, prisma/schema.prisma, evidence-ingest.ts, evidence-embed.ts, agents/policy.py, agents/base.py, llm_backend.py, llm_backend.ts
+   745→   745→- Evidence corpus has 185 records in SQLite via Prisma
+   746→   746→- Dual-backend LLM system exists (Gemini direct + z-ai SDK fallback)
+   747→   747→
+   748→   748→1. Updated Prisma Schema (Evidence model):
+   749→   749→   - Added `payer_name` (optional String) — payer-specific policy (e.g., "UnitedHealthcare")
+   750→   750→   - Added `denial_type` (optional String) — denial classification (e.g., "medical_necessity")
+   751→   751→   - Added `retrieval_weight` (Float, default 1.0) — re-ranking weight for policy retrieval
+   752→   752→   - Added `clause_id` (optional String) — payer policy clause ID (e.g., "UHC-MP-001.4.B")
+   753→   753→   - Added indexes on payer_name, denial_type, clause_id
+   754→   754→   - Ran `bun run db:push` successfully — database in sync, Prisma Client regenerated
+   755→   755→
+   756→   756→2. Created TypeScript Policy Research Service (/src/lib/policy-research.ts):
+   757→   757→   - PolicyQuery type: denialReason, payer, denialType, cptCodes, icdCodes, mode, topK
+   758→   758→   - ProvenanceCard type: full provenance metadata for each result
+   759→   759→   - PolicyResult type: evidence + scores + provenance card
+   760→   760→   - PolicyRetrievalResponse type: results + latency + SLA status
+   761→   761→   - `retrievePolicyClauses()`: Full pipeline:
+   762→   762→     a. Query expansion (rule-based, <200ms target)
+   763→   763→     b. Semantic search via evidence-embed.semanticSearch for each expanded term
+   764→   764→     c. Structured filtering by payer, denial_type, CPT/ICD codes via Prisma
+   765→   765→     d. Re-ranking: semantic_score × provenance_boost × retrieval_weight
+   766→   766→     e. Top-K selection (K=5 for policy, K=3 for outcomes per blueprint)
+   767→   767→     f. Provenance card generation for each result
+   768→   768→   - `searchPayerPolicyClauses()`: Specialized payer policy clause search
+   769→   769→   - `expandQueryTerms()`: Fast rule-based query expansion for API route
+   770→   770→   - Provenance boost multipliers: primary_source=1.5, secondary_summary=1.2, tertiary=1.0
+   771→   771→
+   772→   772→3. Created API Route (/src/app/api/evidence/retrieve/route.ts):
+   773→   773→   - POST endpoint: accepts denialReason, payer, denialType, cptCodes, icdCodes, mode, topK
+   774→   774→   - GET endpoint: simplified interface via query params (denialReason/q, payer, denialType, mode)
+   775→   775→   - Returns top-K relevant evidence with provenance cards
+   776→   776→   - Includes retrieval latency measurement (withinSla = latencyMs < 200)
+   777→   777→   - Returns expanded query terms for transparency
+   778→   778→   - Full input validation and error handling
+   779→   779→
+   780→   780→4. Enhanced Policy Research Python Agent (/mini-services/agent-fleet/agents/policy.py):
+   781→   781→   - Added `retrieve_evidence()`: Calls /api/evidence/retrieve endpoint for corpus retrieval
+   782→   782→   - Added `expand_query_with_llm()`: Dual-backend LLM query expansion (Gemini/z-ai SDK)
+   783→   783→   - Added `_rule_based_expansion()`: Fallback expansion when LLM unavailable
+   784→   784→   - Added `build_provenance_card()`: Static provenance card builder
+   785→   785→   - Added `_map_denial_type()`: Maps denial codes + triage classification to denial types
+   786→   786→   - Overrode `run()` method with full pipeline:
+   787→   787→     a. Extract denial context from input
+   788→   788→     b. Expand query terms using LLM (or rule-based fallback)
+   789→   789→     c. Retrieve policy evidence (K=5) from evidence corpus
+   790→   790→     d. Retrieve outcomes evidence (K=3) from evidence corpus
+   791→   791→     e. Build enriched input with evidence results for LLM analysis
+   792→   792→     f. Run LLM or mock analysis with evidence context
+   793→   793→     g. Attach retrieval metadata + provenance cards to result
+   794→   794→   - Updated system prompt to include evidence_results in input schema
+   795→   795→   - Updated mock_run to include retrieved_evidence from corpus
+   796→   796→   - Python syntax validated: OK
+   797→   797→
+   798→   798→5. Verification:
+   799→   799→   - ESLint passes clean (no errors)
+   800→   800→   - Python syntax check passes (policy.py: OK)
+   801→   801→   - No type errors in new TypeScript files
+   802→   802→   - Prisma schema in sync with database
+   803→   803→
+   804→   804→Stage Summary:
+   805→   805→- Prisma Schema: Evidence model extended with 4 policy retrieval fields + 3 indexes
+   806→   806→- TypeScript Service: Full policy research pipeline (expand → search → filter → re-rank → top-K → provenance)
+   807→   807→- API Route: POST/GET /api/evidence/retrieve with SLA tracking (<200ms target)
+   808→   808→- Python Agent: Enhanced with evidence corpus retrieval, dual-backend LLM query expansion, provenance cards
+   809→   809→- Blueprint Compliance: K=5 policy / K=3 outcomes, provenance boosting, retrieval_weight re-ranking
+   810→   810→- Files created/modified:
+   811→   811→  - /home/z/my-project/prisma/schema.prisma (modified — 4 new fields + 3 indexes)
+   812→   812→  - /home/z/my-project/src/lib/policy-research.ts (new — 280+ lines)
+   813→   813→  - /home/z/my-project/src/app/api/evidence/retrieve/route.ts (new — 130+ lines)
+   814→   814→  - /home/z/my-project/mini-services/agent-fleet/agents/policy.py (modified — 350+ lines, was 153)
+   815→   815→
+   816→   816→---
+   817→   817→Task ID: 5d
+   818→   818→Agent: Day 2 Task Handler
+   819→   819→Task: Day 2 — Ingest Payer Policies + Wire Two-Agent Pipeline (Triage → Policy Research)
+   820→   820→
+   821→   821→Work Log:
+   822→   822→- Task A: Ingest Payer Policies into Database
+   823→   823→  - Read payer_policies.json (15 entries: 5 Medicare, 5 UnitedHealthcare, 5 Aetna × 5 denial types)
+   824→   824→  - Added `ingestPayerPolicies()` function to /home/z/my-project/src/lib/evidence-ingest.ts
+   825→   825→    - Reads payer_policies.json from data/corpus/
+   826→   826→    - For each entry: creates Evidence record with source=payer_name, document_name="Payer Policy {clause_id}", section=denial_type, content=clause_text, content_hash=SHA-256, payer_name, denial_type (lowercase underscored), clause_id, retrieval_weight, effective_date, provenance_tier=primary_source, embedding=source_url (temp), status=active
+   827→   827→    - Deduplication by content_hash + clause_id
+   828→   828→    - Returns PayerPolicyIngestResult with count, errors, duration
+   829→   829→  - Added `ingest-policies` action to POST /api/evidence route
+   830→   830→  - Called API: `curl -X POST /api/evidence -d '{"action":"ingest-policies"}'`
+   831→   831→  - Result: 15/15 ingested, 0 skipped, 0 errors, 54ms duration
+   832→   832→
+   833→   833→- Task B: Wire Two-Agent Pipeline (Triage → Policy Research)
+   834→   834→  - Created /home/z/my-project/src/lib/two-agent-pipeline.ts
+   835→   835→    - `triageDenial()`: Uses z-ai SDK CLI (`z-ai chat`) for LLM-based denial classification with fallback to rule-based extraction
+   836→   836→    - `researchPolicy()`: Uses existing `retrievePolicyClauses()` from policy-research.ts to find top-K relevant evidence
+   837→   837→    - `runTwoAgentPipeline()`: Combined pipeline with latency measurements
+   838→   838→    - Triage extracts: denial_type, payer, reason_codes, cpt_codes, icd_codes, category, confidence, summary, appeal_strategy
+   839→   839→    - Rule-based fallback classifies by keyword patterns and extracts CARC/RARC codes, CPT codes, ICD-10 codes
+   840→   840→  - Created /home/z/my-project/src/app/api/pipeline/route.ts
+   841→   841→    - GET: Pipeline health/status check
+   842→   842→    - POST: Full pipeline (default), individual steps (triage, research)
+   843→   843→    - Returns: triage results + evidence results + latency measurements + provenance cards
+   844→   844→  - Tested pipeline with sample denial letter:
+   845→   845→    - Input: "Your claim for CPT 43239 has been denied as not medically necessary. Reason Code CO16. Diagnosis K21.0. Per UnitedHealthcare..."
+   846→   846→    - Triage: classified as medical_necessity, extracted CO16, CPT 43239, ICD K21.0
+   847→   847→    - Evidence: retrieved 5 relevant policy clauses (including UHC-MN-006) with provenance cards
+   848→   848→    - Latency: triage=1584ms, research=113ms (within 200ms SLA), total=1697ms
+   849→   849→    - Success: true, 0 errors
+   850→   850→
+   851→   851→- ESLint: passes clean
+   852→   852→- All existing API routes preserved and working
+   853→   853→
+   854→   854→Stage Summary:
+   855→   855→- Payer Policies: 15 entries ingested into Evidence table (3 payers × 5 denial types)
+   856→   856→- Two-Agent Pipeline: Triage → Policy Research fully wired and tested
+   857→   857→- Triage: LLM-based (z-ai SDK) with rule-based fallback
+   858→   858→- Policy Research: Uses existing retrieval engine with provenance boosting + retrieval_weight re-ranking
+   859→   859→- Pipeline API: POST /api/pipeline with step-by-step or full pipeline execution
+   860→   860→- Files created/modified:
+   861→   861→  - /home/z/my-project/src/lib/evidence-ingest.ts (modified — added ingestPayerPolicies + types)
+   862→   862→  - /home/z/my-project/src/app/api/evidence/route.ts (modified — added ingest-policies action)
+   863→   863→  - /home/z/my-project/src/lib/two-agent-pipeline.ts (new — 270+ lines)
+   864→   864→  - /home/z/my-project/src/app/api/pipeline/route.ts (new — 110+ lines)
+   865→   865→
+   866→   866→---
+   867→   867→Task ID: day2-complete
+   868→   868→Agent: main
+   869→   869→Task: Complete Day 2 of 14 - Evidence Corpus v1 + Two-Agent Pipeline
+   870→   870→
+   871→   871→Work Log:
+   872→   872→- Diagnosed Gemini API geo-blocking (Hong Kong IP blocked)
+   873→   873→- Enabled Gemini API in GCP project project-8a09278a-5593-4289-b2e
+   874→   874→- Deployed Cloudflare Worker proxy at gemini-proxy.cherry-beauty.workers.dev
+   875→   875→- Implemented DualBackendLLM (Gemini 3.5+ primary, z-ai SDK fallback)
+   876→   876→- Updated all Gemini model refs from gemini-2.5-flash to gemini-3.5-flash
+   877→   877→- Ran evidence ingest: 200 records created with SHA-256 hashes
+   878→   878→- Created 15 payer policy clauses (3 payers × 5 denial types)
+   879→   879→- Created 5 test denial letters for validation
+   880→   880→- Built Policy Research Agent with retrieval + provenance cards
+   881→   881→- Wired Two-Agent Pipeline: Triage → Policy Research
+   882→   882→- All Day 2 gates verified and passed
+   883→   883→
+   884→   884→Stage Summary:
+   885→   885→- Gate 1: 200+ hashed, provenance-tagged evidence records ✓
+   886→   886→- Gate 2: Citation resolves to real document ✓
+   887→   887→- Gate 3: Two-agent pipeline works end-to-end ✓
+   888→   888→- Gate 5: Provenance status in controlled set ✓
+   889→   889→- Code pushed to https://github.com/sodiq-code/DenialDefender
+   890→   890→- Gemini 3.5 Flash configured with dual-backend fallback
+   891→   891→- Zero-cost architecture maintained (SQLite + z-ai SDK)
+   892→   892→
+   893→   893→---
+   894→   894→Task ID: 3-vertical-slice
+   895→   895→Agent: full-stack-developer
+   896→   896→Task: Day 3 — Vertical Slice (Single-Agent)
+   897→   897→
+   898→   898→Work Log:
+   899→   899→- Read worklog and existing codebase (policy-research.ts, two-agent-pipeline.ts, evidence-embed.ts, provenance-card.tsx, synthetic-cases.ts, page.tsx)
+   900→   900→- Created vertical-slice-agent.ts with complete monolithic agent: parseDenialLetter (rule-based), retrieveCitations (via retrievePolicyClauses topK:3), draftAppeal (template-based), runVerticalSlice (full pipeline with trace), 3 sample denial letters
+   901→   901→- Created /api/vertical-slice/route.ts: POST runs vertical slice, GET returns status info with sample letter metadata
+   902→   902→- Created /api/vertical-slice/gate/route.ts: POST runs gate test (5 consecutive runs with different sample denials)
+   903→   903→- Created vertical-slice-panel.tsx: Full interactive UI with sample selector, textarea, payer dropdown, 3-step progress indicator, parsed denial display, 3 clickable provenance cards, appeal draft with inline citation refs, gate status, gate test (5×) button, decision trace accordion
+   904→   904→- Updated page.tsx: Added "Vertical Slice" tab between Evidence and Architecture tabs with Zap icon, imported VerticalSlicePanel component
+   905→   905→- ESLint passes clean with zero errors
+   906→   906→
+   907→   907→Stage Summary:
+   908→   908→- Vertical Slice Agent: src/lib/vertical-slice-agent.ts (parseDenialLetter, retrieveCitations, draftAppeal, runVerticalSlice, SAMPLE_DENIAL_LETTERS)
+   909→   909→- API Endpoints: /api/vertical-slice (POST + GET), /api/vertical-slice/gate (POST)
+   910→   910→- UI Component: src/components/vertical-slice-panel.tsx (VerticalSlicePanel)
+   911→   911→- Main Page: Added "Vertical Slice" tab between Evidence and Architecture
+   912→   912→- 3 Sample Denial Letters: Medicare CO-50 TKA, UnitedHealthcare CO-197 MRI, Aetna CO-4 E/M
+   913→   913→- Gate: 3+ citations per run, 5 consecutive runs via /api/vertical-slice/gate
+   914→   914→- All types defined: ParsedDenial, VerticalSliceCitation, AppealDraft, VerticalSliceResult
+   915→   915→---
+   916→   916→Task ID: 4-agents-1-3
+   917→   917→Agent: full-stack-developer
+   918→   918→Task: Day 4 — Agents 1–3: Advocate, Triage, Policy Research
+   919→   919→
+   920→   920→Work Log:
+   921→   921→- Read worklog.md and understood Day 3 deliverables (vertical-slice-agent, two-agent-pipeline, policy-research, existing Prisma schema with Case/Denial/HitlGate/DecisionTraceEvent models)
+   922→   922→- Created ADK-style base agent class (src/lib/agents/base-agent.ts) with typed generics, latency measurement, trace emission, mock fallback, and error handling
+   923→   923→- Created Patient Advocate Agent (src/lib/agents/patient-advocate.ts) with deadline extraction, urgency assessment (CPT-based), empathetic framing, recommended actions
+   924→   924→- Created Denial Triage Agent (src/lib/agents/denial-triage.ts) with rule-based denial parsing (reusing vertical-slice patterns), structured denial JSON, classification, and humanConfirmPrompt generation
+   925→   925→- Created Policy Research Agent (src/lib/agents/policy-research-agent.ts) wrapping retrievePolicyClauses with topK:3, provenance cards, and SLA tracking
+   926→   926→- Created three-agent pipeline (src/lib/three-agent-pipeline.ts) with runThreeAgentPipeline (stops at Gate 1) and resumeAfterGate1 (approved → Policy Research, rejected → stops)
+   927→   927→- Pipeline creates Case in DB, runs Advocate → Triage, creates HitlGate (gate_number=1, status=pending), emits decision traces, then STOPS awaiting human confirmation
+   928→   928→- Created API endpoints: POST/GET /api/three-agent-pipeline and POST /api/three-agent-pipeline/resume
+   929→   929→- Created ThreeAgentPipelinePanel UI component with input section, sample selectors, 3-step pipeline display, HITL Gate 1 card with Confirm/Reject buttons, Policy Research clause display with provenance cards, decision trace accordion
+   930→   930→- Updated page.tsx with "Day 4: Agents 1-3" tab using UsersRound icon
+   931→   931→- Fixed import path (db import in three-agent-pipeline.ts)
+   932→   932→- Verified with curl: pipeline runs Advocate+Triage→Gate1→stops; resume with approved→Policy Research with 3 real clauses; resume with rejected→pipeline stops
+   933→   933→- All lint checks pass
+   934→   934→
+   935→   935→Stage Summary:
+   936→   936→- 3 formal ADK-style agent classes: BaseAgent<TInput,TOutput>, PatientAdvocateAgent, DenialTriageAgent, PolicyResearchAgent
+   937→   937→- Three-agent pipeline: Advocate → Triage → [HITL Gate 1] → Policy Research
+   938→   938→- Pipeline stops at Gate 1 and blocks until human confirms/rejects
+   939→   939→- Triage produces denial JSON with humanConfirmPrompt for Gate 1
+   940→   940→- Policy Research returns 3 clause-cited candidates with real provenance cards from evidence corpus
+   941→   941→- Gate 1 confirmed: Policy Research runs, 3 real clauses with provenance cards returned
+   942→   942→- Gate 1 rejected: Pipeline stops, no Policy Research
+   943→   943→- Case state transitions work: created → triage_active → hitl_gate_1 → (approved) → evidence_active → triage_complete
+   944→   944→- Decision trace events written to DB at each step
+   945→   945→- Full UI panel with responsive design, color-coded agents, accordion traces
+   946→   946→
+   947→   947→---
+   948→   948→Task ID: 5-agents-4-6
+   949→   949→Agent: full-stack-developer
+   950→   950→Task: Day 5 — Agents 4–6: Evidence, Drafting, Quality Review
+   951→   951→
+   952→   952→Work Log:
+   953→   953→- Read worklog.md and understood existing Day 4 codebase (3 agents, three-agent pipeline, policy research)
+   954→   954→- Created Evidence Assembly Agent (Agent 4) at src/lib/agents/evidence-assembly.ts
+   955→   955→  - Extends BaseAgent pattern from Day 4
+   956→   956→  - Searches evidence corpus for clinical evidence matching denial reason
+   957→   957→  - Uses retrievePolicyClauses with mode='outcomes' for additional clinical evidence
+   958→   958→  - Searches by CPT/ICD codes in content for code-based evidence
+   959→   959→  - Deduplicates policy research clauses against clinical evidence (marks duplicates)
+   960→   960→  - Returns 5 evidence items total (3 from Policy Research + 2 additional clinical)
+   961→   961→  - Each item has contentHash for Quality Review verification
+   962→   962→  - Assesses evidence strength: strong/moderate/weak based on provenance and match count
+   963→   963→- Created Letter Drafting Agent (Agent 5) at src/lib/agents/letter-drafting.ts
+   964→   964→  - Template-based appeal letter with 7 sections: Header, Denial Restatement, Policy Basis, Clinical Evidence, Medical Necessity Argument, Request for Reconsideration, Signature
+   965→   965→  - Each citation [N] maps to InlineCitation with evidenceId and contentHash
+   966→   966→  - 5 citations total (3 policy [1][2][3] + 2 clinical [4][5])
+   967→   967→  - NO overclaiming language ("will win", "guaranteed", "certain to overturn")
+   968→   968→  - NO medical advice (no "should be treated with", "diagnosis requires")
+   969→   969→  - Payer deadline references validated against known payer windows
+   970→   970→- Created Quality Review Agent (Agent 6 — ADVERSARIAL) at src/lib/agents/quality-review.ts
+   971→   971→  - 7 adversarial checks from Table 15.1:
+   972→   972→    1. Citation Resolution: All citations must resolve with matching contentHash
+   973→   973→    2. Claim Tracing: Each [N] reference must have matching claimText
+   974→   974→    3. Policy Support: Policy citations must be from primary/secondary provenance
+   975→   975→    4. Deadline Verification: Deadline within payer's standard window
+   976→   976→    5. No Medical Advice: No diagnostic/prescriptive language patterns
+   977→   977→    6. No Overclaims: No unsupported language patterns
+   978→   978→    7. Format Compliance: 7 sections, header, word count 150-800, 5 citations
+   979→   979→  - REFUSES to pass until ALL 7 conditions hold
+   980→   980→  - Overall score weighted by severity (critical=2x, warning=1x)
+   981→   981→- Created Six-Agent Pipeline at src/lib/six-agent-pipeline.ts
+   982→   982→  - Flow: Advocate → Triage → [Gate 1] → Policy Research → Evidence Assembly → Letter Drafting → Quality Review
+   983→   983→  - After Gate 1 approval, runs all 4 remaining agents
+   984→   984→  - If Quality Review FAILS → pipeline stops with quality_review_failed
+   985→   985→  - If Quality Review PASSES → pipeline completes, creates Gate 2
+   986→   986→  - Case state transitions: hitl_gate_1 → evidence_active → drafting_active → quality_review → hitl_gate_2
+   987→   987→  - Gate test function: runs good draft (should PASS) and broken draft (fake citation, should FAIL/blocked)
+   988→   988→- Created API routes:
+   989→   989→  - POST /api/six-agent-pipeline — runs pipeline up to Gate 1
+   990→   990→  - GET /api/six-agent-pipeline — returns pipeline info and battery details
+   991→   991→  - POST /api/six-agent-pipeline/resume — resumes after Gate 1 (approved/rejected)
+   992→   992→  - POST /api/six-agent-pipeline/gate-test — runs adversarial gate test
+   993→   993→- Created UI component at src/components/six-agent-pipeline-panel.tsx
+   994→   994→  - Input section with sample letters and payer selector
+   995→   995→  - All 6 agent steps with color-coded status indicators
+   996→   996→  - HITL Gate 1 Confirm/Reject buttons
+   997→   997→  - Appeal letter display with clickable inline [1]-[5] citations showing provenance
+   998→   998→  - Quality Review battery results table (7 rows, PASS/FAIL, severity badges)
+   999→   999→  - Evidence Assembly detail panel with provenance badges and deduplication info
+  1000→  1000→  - Gate Test button and results (good draft vs broken draft, gate verdict)
+  1001→  1001→  - Decision trace feed
+  1002→  1002→- Updated page.tsx with "Day 5: Agents 4-6" tab
+  1003→  1003→- Lint passes cleanly, no TypeScript errors in new files
+  1004→  1004→
+  1005→  1005→Stage Summary:
+  1006→  1006→- 3 new ADK-style agent classes: EvidenceAssemblyAgent, LetterDraftingAgent, QualityReviewAgent
+  1007→  1007→- Six-agent pipeline: Advocate → Triage → [Gate 1] → Policy Research → Evidence Assembly → Letter Drafting → Quality Review
+  1008→  1008→- Quality Review implements 7 adversarial checks from Table 15.1 — refuses to pass until all conditions hold
+  1009→  1009→- Letter drafting produces 7-section appeal letter with 5 inline citations, no overclaims, no medical advice
+  1010→  1010→- Evidence assembly matches clinical evidence to denial reason and deduplicates against policy research
+  1011→  1011→- Gate test verifies broken draft (fake citation) is blocked by Quality Review
+  1012→  1012→- Case state transitions extended: evidence_active → drafting_active → quality_review → hitl_gate_2
+  1013→  1013→- Full UI panel with responsive design, color-coded agents, clickable citations, battery results table, gate test
+  1014→  1014→
+  1015→  1015→---
+  1016→  1016→Task ID: 6-decision-trace-gates
+  1017→  1017→Agent: Main Coordinator
+  1018→  1018→Task: Day 6 — Decision Trace + HITL Gate &2 + UI Stream
+  1019→  1019→
+  1020→  1020→Work Log:
+  1021→  1021→- Read both blueprint documents to extract Day C specification
+  1022→  1022→- Day 6 spec (Ultimate): "Each agent emits structured DecisionTraceEvents to Pub/Sub on step completion; the api service persists them to Firestore and streams them to the UI over WebSocket. HITL Gate 2 (approve or edit the appeal) is implemented between verified and submitted. The UI now shows the live decision-trace stream from Figure 14.1 and a clickable provenance card per citation."
+  1023→  1023→- Day 6 spec (Grand Prize): "Two HITL gates working in UI; patient can edit parsed values; patient can edit/approve/reject letter; version history; edits propagate"
+  1024→  1024→- Created decision trace4 trace streaming system (src/lib/decision-trace-stream.ts):
+  1025→  1025→  - StructuredTraceEvent type with agent, step, status, detail, references, metadata
+  1026→  1026→  - emitTraceEvent(): Persists to DecisionTraceEvent table in DB + returns for WebSocket broadcast
+  1027→  1027→  - emitTraceEvents(): Bulk emission
+  1028→  1028→  - toStructuredTrace(): Converts internal TraceEvent to StructuredTraceEvent
+  1029→  1029→  - getCaseTraceEvents(): Fetches all trace events for a case from DB
+  1030→  1030→  - buildTraceChecklist(): Builds Figure 14.1 checklist from trace events (Triage → Policy Research → Evidence → Quality Review)
+  1031→  1031→  - Agent name fallbacks (den*denial-triage, triage_agent, policy-research, policy_analyst, etc.)
+  1032→  1032→- Created letter version history system (src/lib/letter-version-history.ts):
+  1033→  1033→  - initVersionHistory(): Initialize for a case
+  1034→  1034→  - addSystemLetterVersion(): System-generated version (from drafting agent)
+  1035→  1035→  - addHumanLetterVersion(): Human-edited version (from Gate 2 editing)
+  1036→  1036→  - recordTriageEdit(): Record a triage field edit → triggers Policy Research re-run
+  1037→  1037→  - getVersionHistory(): Get full version history
+  1038→  1038→  - getCurrentLetterVersion(): Get current version
+  1039→  1039→  - diffVersions(): Compare two versions (added/removed/changed lines)
+  1040→  1040→- Created full pipeline with both gates (src/lib/full-pipeline.ts):
+  1041→  1041→  - runFullPipeline(): Phase 1 — Advocate@ Advocate → Triage → [Gate? Gate. Gate 1] (pipeline STOPS)
+  1042→  1042→  - resumeAfterGate1(): Phase 2 — [Gate 1 approved] → Policy Research → Evidence Assembly → Letter Drafting → Quality Review → [Gate 21 Gate 2]
+  1043→  1043→  - resolveGate2(): Gate 2 resolution — approved → state=approved → submit, rejected → stays at hitl@.hitl_gate_2
+  1044→  1044→  -= submitAppeal(): After Gate 2 approval → state=submitted
+  1045→  1045→  - editTriageEAndRerun(): Edit triage values → re-runs Policy Research with new context
+  1046→  1046→  - runDay6'6GateTest(): Verifies full workflow, both gates, trace auditable, ≥7 events
+  1047→  1047→- Created API routes:
+  1048→  1048→  - POST/GET /api/full-pipeline — Run pipeline up to Gate 1
+  1049→  1049→  - POST /api/full-pipeline/resume — Resume after Gate 1 (approved/rejected6. rejected8 rejected)
+  1050→  1050→  - POST /api/full-pipeline/gate2 — Resolve Gate 2 (approve/reject/edit)
+  1051→  1051→  - POST /B/api/full-pipeline/gate-test — Run Day 6 gate test
+  1052→  1052→- Created Day 6 UI panel (src/components/day6-pipeline-panel.tsx):
+  1053→  1053→  - Input section: sample letter selector, payer selector, textarea, Run/ Gate Test buttons
+  1054→  1054→  - Pipeline progress: 6 color-coded% color-coded agent steps (= steps (pending/running/completed/error)
+  1055→  1055→  - Live Decision Trace: Figure 14.1 checklist format (agent groups with checkboxes)
+  1056→  1056→  - Raw Trace Events accordion: scrollable event stream with latency badges
+  1057→  1057→  - HITL Gate 1: Confirm & Continue / Reject & Stop buttons
+  1058→  1058→  - Quality: Quality Review battery results table (7 checks)
+  1059→  1059→  -8 HITL Gate 2: Appeal letter display, clickable provenance cards, editable textarea, Approve & Submit / Reject & Revise
+  1060→  1060→  - Completed state: Case ID, trace count, letter, letter version, total, total latency
+  1061→  1061→  - Gate Test result card
+  1062→  1062→- Added "Day 6: Trace + Gates" tab to main page (between Day 5 and Architecture)
+  1063→  1063→- Gate verification: ALL PASS
+  1064→  1064→  - fullWorkflowCompleted: true ✓
+  1065→  1065→  - traceEventCount: 11 (≥7 threshold) ✓
+  1066→  1066→  - bothGatesGatesBothGatesWorking: true ✓
+  1067→  1067→  - gate1!gate1BlocksPipeline: true ✓
+  1068→  1068→  - gate2BlocksSubmission: true ✓
+  1069→  1069→  - traceAuditable: true ✓
+  1070→  1070→  - Trace Checklist all items completed (Figure 14.1 format) ✓
+  1071→  1071→- Browser verification:
+  1072→  1072→  - Day 6 tab loads correctly ✓
+  1073→  1073→  - "Run Full Pipeline" button triggers Phase 1 → Gate 1 appears ✓
+  1074→  1074→  - "* "Confirm & Continue" approves Gate 1 → runs all remaining agents → Gate 2 appears ✓
+  1075→  1075→  - "Approve & Submit" approves Gate 2 → case →, case transitions to "Submitted" ✓
+  1076→  1076→  - 11 trace events displayed ✓
+  1077→  1077→  - Figure 14.1 checklist rendered ✓
+  1078→  1078→  - Provenance cards, with clickable citation cards ✓
+  1079→  1079→  - Editable letter textarea at Gate 2 ✓
+  1080→  1080→  - No browser errors ✓
+  1081→  1081→- ESLint passes clean
+  1082→  1082→% - Pushed to GitHub: commit 9caA471d
+  1083→  1083→
+  1084→  1084→Stage Summary:
+  1085→  1085→- Day 6 Gate: PASSED — Full workflow completes with 11 trace events, both HITL gates functional, trace is auditable
+  1086→  1086→- Decision Trace: Structured events persisted to DB, Figure 14.1 checklist format, trace is auditable
+  1087→  1087→- HITL Gate 1: Blocks pipeline until human confirms denial classification
+  1088→  1088→- HITL Gate 2: Blocks submission until human approves/7 approves/edits/rejects appeal letter
+  1089→  1089→- Version History: Letter edits tracked with full version history
+  1090→  1090→- State Machine: quality_review → hitl_gate_2 → approved → submitted
+  1091→  1091→- Edit Propagation: Triage edits → re-runs Policy Research with new context
+  1092→  1092→- Files created:
+  1093→  1093→  - src/lib/decision-trace-stream.ts (new — 244 lines)
+  1094→  1094→  - src/lib/letter-version-history.ts (new — 180+ lines)
+  1095→  1095→  - src/lib/full-pipeline.ts (new — 662 lines)
+  1096→  1096→  - src/app/api/full-pipeline/route.ts (new — 80+ lines)
+  1097→  1097→  - src/app/api/full-pipeline/resume/route.ts (new — 70+ lines)
+  1098→  1098→  - src/app/api/full-p1/api/full-pipeline/gate2/route.ts (new — 50+ lines)
+  1099→  1099→  - src/app/2api/full-pipeline/gate-test/route.ts (new — 50+ lines)
+
+[showing lines 700-1099 of 1286; use offset=1100 with limit to continue reading]

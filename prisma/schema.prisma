@@ -225,3 +225,23 @@ model PhiGuardAudit {
   @@index([verdict])
   @@index([content_hash])
 }
+
+// Day 11 — Governance Audit Log (Model Armor, Agent Identity, Agent Observability)
+model GovernanceAudit {
+  id            String   @id @default(cuid())
+  case_id       String?
+  component     String   // "model_armor" | "agent_identity" | "agent_observability"
+  action        String   // "scan" | "block" | "allow" | "permission_check" | "permission_deny" | "audit_query" | "reconstruct"
+  agent_name    String?  // Which agent (e.g., "quality-review", "letter-drafting")
+  verdict       String   // "ALLOW" | "BLOCK" | "DENY" | "PASS" | "FAIL"
+  risk_score    Int      @default(0)  // 0-100
+  details       String?  // JSON with scan results, permission details, etc.
+  content_hash  String?  // SHA-256 of scanned content (for dedup)
+  timestamp     DateTime @default(now())
+
+  @@index([component])
+  @@index([action])
+  @@index([agent_name])
+  @@index([case_id])
+  @@index([verdict])
+}
