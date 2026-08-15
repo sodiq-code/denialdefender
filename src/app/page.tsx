@@ -10,6 +10,7 @@ import { EvidenceCorpusTab } from '@/components/evidence-corpus-tab';
 import { VerticalSlicePanel } from '@/components/vertical-slice-panel';
 import { ThreeAgentPipelinePanel } from '@/components/three-agent-pipeline-panel';
 import { SixAgentPipelinePanel } from '@/components/six-agent-pipeline-panel';
+import { Day6PipelinePanel } from '@/components/day6-pipeline-panel';
 import { useTraceStream } from '@/hooks/useTraceStream';
 import {
   Shield,
@@ -196,6 +197,10 @@ export default function Home() {
               <ShieldCheck className="h-4 w-4" />
               Day 5: Agents 4-6
             </TabsTrigger>
+            <TabsTrigger value="day6-trace" className="gap-1.5">
+              <Radio className="h-4 w-4" />
+              Day 6: Trace + Gates
+            </TabsTrigger>
             <TabsTrigger value="architecture" className="gap-1.5">
               <Cpu className="h-4 w-4" />
               Architecture
@@ -230,6 +235,11 @@ export default function Home() {
           {/* ── Day 5: Agents 4-6 Tab ──────────────────────────── */}
           <TabsContent value="day5-agents">
             <SixAgentPipelinePanel />
+          </TabsContent>
+
+          {/* ── Day 6: Trace + Gates Tab ─────────────────────────── */}
+          <TabsContent value="day6-trace">
+            <Day6PipelinePanel />
           </TabsContent>
 
           {/* ── Architecture Tab ───────────────────────────────── */}
