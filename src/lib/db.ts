@@ -3,10 +3,7 @@
  *
  * Uses Prisma with:
  * - Local SQLite for development
- * - Turso (libSQL) for production (Vercel)
- *
- * The @prisma/adapter-libsql adapter wraps the @libsql/client
- * to provide a Prisma-compatible interface for Turso's hosted SQLite.
+ * - Turso (libSQL) for production (Vercel) via @prisma/adapter-libsql
  */
 
 import { PrismaClient } from '@prisma/client'
@@ -18,18 +15,22 @@ const globalForPrisma = globalThis as unknown as {
 }
 
 function createPrismaClient(): PrismaClient {
-  // In production with Turso, use the libSQL adapter
-  if (process.env.TURSO_DATABASE_URL && process.env.NODE_ENV === 'production') {
-    const libsql = createClient({
-      url: process.env.TURSO_DATABASE_URL,
-      authToken: process.env.TURSO_AUTH_TOKEN,
-    })
+  const tursoUrl = process.env.TURSO_DATABASE_URL
+  const tursoToken = process.env.TURSO_AUTH_TOKEN
 
+  // In production with Turso credentials, use the libSQL adapter
+  if (tursoUrl && tursoToken && process.env.NODE_ENV === 'production') {
+    console.log('[db] Using Turso adapter:', tursoUrl.replace(/\/\/.*@/, '//***@'))
+    const libsql = createClient({
+      url: tursoUrl,
+      authToken: tursoToken,
+    })
     const adapter = new PrismaLibSql(libsql)
     return new PrismaClient({ adapter })
   }
 
   // In development, use local SQLite
+  console.log('[db] Using local SQLite')
   return new PrismaClient({
     log: process.env.NODE_ENV === 'development' ? ['query'] : [],
   })
