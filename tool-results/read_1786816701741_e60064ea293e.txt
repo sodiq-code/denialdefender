@@ -1,0 +1,676 @@
+     1→'use client';
+     2→
+     3→import { useState, useEffect } from 'react';
+     4→import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+     5→import { Badge } from '@/components/ui/badge';
+     6→import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+     7→import { CaseDashboard } from '@/components/case-dashboard';
+     8→import { TraceStreamTab } from '@/components/trace-stream-tab';
+     9→import { EvidenceCorpusTab } from '@/components/evidence-corpus-tab';
+    10→import { VerticalSlicePanel } from '@/components/vertical-slice-panel';
+    11→import { ThreeAgentPipelinePanel } from '@/components/three-agent-pipeline-panel';
+    12→import { SixAgentPipelinePanel } from '@/components/six-agent-pipeline-panel';
+    13→import { Day6PipelinePanel } from '@/components/day6-pipeline-panel';
+    14→import Day7EvalPanel from '@/components/day7-eval-panel';
+    15→import Day8ExperimentPanel from '@/components/day8-experiment-panel';
+    16→import Day9TwoCasePanel from '@/components/day9-two-case-panel';
+    17→import Day10PhiGuardPanel from '@/components/day10-phi-guard-panel';
+    18→import Day11GovernancePanel from '@/components/day11-governance-panel';
+    19→import { Day12PolishPanel } from '@/components/day12-polish-panel';
+    20→import { useTraceStream } from '@/hooks/useTraceStream';
+    21→import {
+    22→  Shield,
+    23→  Activity,
+    24→  Wifi,
+    25→  WifiOff,
+    26→  Cpu,
+    27→  Scale,
+    28→  Eye,
+    29→  Server,
+    30→  CheckCircle2,
+    31→  AlertTriangle,
+    32→  ArrowRight,
+    33→  Bot,
+    34→  Users,
+    35→  FileSearch,
+    36→  Search,
+    37→  BookOpen,
+    38→  PenTool,
+    39→  Stethoscope,
+    40→  FileText,
+    41→  Paperclip,
+    42→  Target,
+    43→  Loader2,
+    44→  XCircle,
+    45→  Cloud,
+    46→  Database,
+    47→  Radio,
+    48→  Zap,
+    49→  UsersRound,
+    50→  ShieldCheck,
+    51→  FlaskConical,
+    52→  TrendingUp,
+    53→  Brain,
+    54→  ShieldAlert,
+    55→  Lock,
+    56→  Fingerprint,
+    57→  Globe,
+    58→} from 'lucide-react';
+    59→
+    60→interface AgentFleetHealth {
+    61→  status: string;
+    62→  service: string;
+    63→  version: string;
+    64→  mock_mode: boolean;
+    65→  model: string;
+    66→  port: number;
+    67→  runtime: string;
+    68→  agents: string[];
+    69→  timestamp: string;
+    70→}
+    71→
+    72→interface GcpStatusData {
+    73→  project_id: string;
+    74→  firestore: { available: boolean; message: string };
+    75→  pubsub: { available: boolean; message: string; topics: string[] };
+    76→  gemini_api_key_set: boolean;
+    77→}
+    78→
+    79→const AGENT_DETAILS = [
+    80→  { name: 'Triage Agent', icon: Search, role: 'Denial classification & strategy selection', color: 'text-teal-600 dark:text-teal-400' },
+    81→  { name: 'Medical Coder', icon: Stethoscope, role: 'CPT/ICD-10 code validation & correction', color: 'text-cyan-600 dark:text-cyan-400' },
+    82→  { name: 'Policy Analyst', icon: FileText, role: 'Payer policy contradictions & gaps', color: 'text-violet-600 dark:text-violet-400' },
+    83→  { name: 'Evidence Agent', icon: BookOpen, role: 'Clinical evidence retrieval & ranking', color: 'text-emerald-600 dark:text-emerald-400' },
+    84→  { name: 'Citation Agent', icon: Paperclip, role: 'Citation verification & provenance scoring', color: 'text-orange-600 dark:text-orange-400' },
+    85→  { name: 'Draft Agent', icon: PenTool, role: 'Appeal letter generation with sections', color: 'text-blue-600 dark:text-blue-400' },
+    86→  { name: 'Quality Reviewer', icon: CheckCircle2, role: '8-point quality check & revision loop', color: 'text-purple-600 dark:text-purple-400' },
+    87→  { name: 'Orchestrator', icon: Target, role: 'Pipeline coordination & HITL gate management', color: 'text-rose-600 dark:text-rose-400' },
+    88→];
+    89→
+    90→export default function Home() {
+    91→  const { connected, error } = useTraceStream();
+    92→  const [caseCount, setCaseCount] = useState(0);
+    93→  const [agentFleetHealth, setAgentFleetHealth] = useState<AgentFleetHealth | null>(null);
+    94→  const [agentFleetLoading, setAgentFleetLoading] = useState(false);
+    95→  const [gcpStatus, setGcpStatus] = useState<GcpStatusData | null>(null);
+    96→
+    97→  // Fetch agent fleet health on mount
+    98→  useEffect(() => {
+    99→    const fetchHealth = async () => {
+   100→      setAgentFleetLoading(true);
+   101→      try {
+   102→        const res = await fetch('/api/workflow');
+   103→        if (res.ok) {
+   104→          const data = await res.json();
+   105→          setAgentFleetHealth(data.health);
+   106→        }
+   107→      } catch {
+   108→        // Agent fleet not available
+   109→      } finally {
+   110→        setAgentFleetLoading(false);
+   111→      }
+   112→    };
+   113→    fetchHealth();
+   114→  }, []);
+   115→
+   116→  // Fetch GCP status
+   117→  useEffect(() => {
+   118→    const fetchGcp = async () => {
+   119→      try {
+   120→        const res = await fetch('/api/agents/gcp/status');
+   121→        if (res.ok) {
+   122→          const data = await res.json();
+   123→          setGcpStatus(data);
+   124→        }
+   125→      } catch {
+   126→        // GCP status not available
+   127→      }
+   128→    };
+   129→    fetchGcp();
+   130→  }, []);
+   131→
+   132→  const agentFleetOnline = agentFleetHealth?.status === 'ok';
+   133→
+   134→  return (
+   135→    <div className="min-h-screen flex flex-col bg-background">
+   136→      {/* ── Header ──────────────────────────────────────────────── */}
+   137→      <header className="border-b bg-card">
+   138→        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4">
+   139→          <div className="flex items-center justify-between flex-wrap gap-3">
+   140→            <div className="flex items-center gap-3">
+   141→              <div className="flex items-center justify-center h-10 w-10 rounded-lg bg-emerald-600 text-white">
+   142→                <Shield className="h-6 w-6" />
+   143→              </div>
+   144→              <div>
+   145→                <h1 className="text-xl font-bold tracking-tight">DenialDefender</h1>
+   146→                <p className="text-xs text-muted-foreground hidden sm:block">
+   147→                  Evidence-Grounded, Human-Governed Autonomous Denial-Appeal Operations
+   148→                </p>
+   149→              </div>
+   150→            </div>
+   151→
+   152→            <div className="flex items-center gap-3">
+   153→              {connected ? (
+   154→                <div className="flex items-center gap-1.5">
+   155→                  <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+   156→                  <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">Live</span>
+   157→                </div>
+   158→              ) : (
+   159→                <div className="flex items-center gap-1.5">
+   160→                  <WifiOff className="h-3.5 w-3.5 text-red-500" />
+   161→                  <span className="text-xs text-red-600 dark:text-red-400 font-medium">Offline</span>
+   162→                </div>
+   163→              )}
+   164→              {error && (
+   165→                <Badge variant="destructive" className="text-[10px]">
+   166→                  {error.slice(0, 30)}
+   167→                </Badge>
+   168→              )}
+   169→              <Badge variant="outline" className="text-xs gap-1">
+   170→                <Activity className="h-3 w-3" />
+   171→                {caseCount} cases
+   172→              </Badge>
+   173→              {/* Agent fleet indicator in header */}
+   174→              {agentFleetOnline && (
+   175→                <Badge variant="outline" className="text-xs gap-1 border-teal-300 text-teal-600 dark:border-teal-700 dark:text-teal-400">
+   176→                  <Bot className="h-3 w-3" />
+   177→                  Fleet
+   178→                </Badge>
+   179→              )}
+   180→            </div>
+   181→          </div>
+   182→        </div>
+   183→      </header>
+   184→
+   185→      {/* ── Main Content ────────────────────────────────────────── */}
+   186→      <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 py-6">
+   187→        <Tabs defaultValue="cases" className="w-full">
+   188→          <TabsList className="w-full sm:w-auto">
+   189→            <TabsTrigger value="cases" className="gap-1.5">
+   190→              <Shield className="h-4 w-4" />
+   191→              Cases
+   192→            </TabsTrigger>
+   193→            <TabsTrigger value="trace" className="gap-1.5">
+   194→              <Activity className="h-4 w-4" />
+   195→              Trace Stream
+   196→            </TabsTrigger>
+   197→            <TabsTrigger value="evidence" className="gap-1.5">
+   198→              <FileSearch className="h-4 w-4" />
+   199→              Evidence
+   200→            </TabsTrigger>
+   201→            <TabsTrigger value="vertical-slice" className="gap-1.5">
+   202→              <Zap className="h-4 w-4" />
+   203→              Vertical Slice
+   204→            </TabsTrigger>
+   205→            <TabsTrigger value="day4-agents" className="gap-1.5">
+   206→              <UsersRound className="h-4 w-4" />
+   207→              Day 4: Agents 1-3
+   208→            </TabsTrigger>
+   209→            <TabsTrigger value="day5-agents" className="gap-1.5">
+   210→              <ShieldCheck className="h-4 w-4" />
+   211→              Day 5: Agents 4-6
+   212→            </TabsTrigger>
+   213→            <TabsTrigger value="day6-trace" className="gap-1.5">
+   214→              <Radio className="h-4 w-4" />
+   215→              Day 6: Trace + Gates
+   216→            </TabsTrigger>
+   217→            <TabsTrigger value="day7-eval" className="gap-1.5">
+   218→              <FlaskConical className="h-4 w-4" />
+   219→              Day 7: Eval + Paths
+   220→            </TabsTrigger>
+   221→            <TabsTrigger value="day8-experiment" className="gap-1.5">
+   222→              <TrendingUp className="h-4 w-4" />
+   223→              Day 8: Before/After + Ablation
+   224→            </TabsTrigger>
+   225→            <TabsTrigger value="day9-demo" className="gap-1.5">
+   226→              <Brain className="h-4 w-4" />
+   227→              Day 9: Two-Case Demo
+   228→            </TabsTrigger>
+   229→            <TabsTrigger value="day10-phi-guard" className="gap-1.5">
+   230→              <ShieldAlert className="h-4 w-4" />
+   231→              Day 10: PHI Guard
+   232→            </TabsTrigger>
+   233→            <TabsTrigger value="day11-governance" className="gap-1.5">
+   234→              <Scale className="h-4 w-4" />
+   235→              Day 11: Governance
+   236→            </TabsTrigger>
+   237→            <TabsTrigger value="day12-polish" className="gap-1.5">
+   238→              <Globe className="h-4 w-4" />
+   239→              Day 12: NPI + Polish
+   240→            </TabsTrigger>
+   241→            <TabsTrigger value="architecture" className="gap-1.5">
+   242→              <Cpu className="h-4 w-4" />
+   243→              Architecture
+   244→            </TabsTrigger>
+   245→          </TabsList>
+   246→
+   247→          {/* ── Cases Tab ──────────────────────────────────────── */}
+   248→          <TabsContent value="cases">
+   249→            <CaseDashboard onCaseCountChange={setCaseCount} />
+   250→          </TabsContent>
+   251→
+   252→          {/* ── Trace Stream Tab ───────────────────────────────── */}
+   253→          <TabsContent value="trace">
+   254→            <TraceStreamTab />
+   255→          </TabsContent>
+   256→
+   257→          {/* ── Evidence Corpus Tab ──────────────────────────── */}
+   258→          <TabsContent value="evidence">
+   259→            <EvidenceCorpusTab />
+   260→          </TabsContent>
+   261→
+   262→          {/* ── Vertical Slice Tab ───────────────────────────── */}
+   263→          <TabsContent value="vertical-slice">
+   264→            <VerticalSlicePanel />
+   265→          </TabsContent>
+   266→
+   267→          {/* ── Day 4: Agents 1-3 Tab ──────────────────────────── */}
+   268→          <TabsContent value="day4-agents">
+   269→            <ThreeAgentPipelinePanel />
+   270→          </TabsContent>
+   271→
+   272→          {/* ── Day 5: Agents 4-6 Tab ──────────────────────────── */}
+   273→          <TabsContent value="day5-agents">
+   274→            <SixAgentPipelinePanel />
+   275→          </TabsContent>
+   276→
+   277→          {/* ── Day 6: Trace + Gates Tab ─────────────────────────── */}
+   278→          <TabsContent value="day6-trace">
+   279→            <Day6PipelinePanel />
+   280→          </TabsContent>
+   281→
+   282→          {/* ── Day 7: Eval + Paths Tab ──────────────────────────── */}
+   283→          <TabsContent value="day7-eval">
+   284→            <Day7EvalPanel />
+   285→          </TabsContent>
+   286→
+   287→          {/* ── Day 8: Before/After + Ablation Tab ──────────────── */}
+   288→          <TabsContent value="day8-experiment">
+   289→            <Day8ExperimentPanel />
+   290→          </TabsContent>
+   291→
+   292→          {/* ── Day 9: Two-Case Behavioral Demo Tab ─────────────── */}
+   293→          <TabsContent value="day9-demo">
+   294→            <Day9TwoCasePanel />
+   295→          </TabsContent>
+   296→
+   297→          {/* ── Day 10: PHI Guard Tab ────────────────────────────── */}
+   298→          <TabsContent value="day10-phi-guard">
+   299→            <Day10PhiGuardPanel />
+   300→          </TabsContent>
+   301→
+   302→          {/* ── Day 11: Governance Tab ─────────────────────────── */}
+   303→          <TabsContent value="day11-governance">
+   304→            <Day11GovernancePanel />
+   305→          </TabsContent>
+   306→
+   307→          {/* ── Day 12: NPI + Polish Tab ─────────────────────────── */}
+   308→          <TabsContent value="day12-polish">
+   309→            <Day12PolishPanel />
+   310→          </TabsContent>
+   311→
+   312→          {/* ── Architecture Tab ───────────────────────────────── */}
+   313→          <TabsContent value="architecture">
+   314→            <div className="space-y-6">
+   315→              {/* Triad Architecture */}
+   316→              <div>
+   317→                <h3 className="text-lg font-semibold mb-4">Triad Architecture</h3>
+   318→                <p className="text-sm text-muted-foreground mb-6">
+   319→                  DenialDefender operates on three mutually reinforcing pillars — every action is evidence-grounded, agent-executed, and human-governed.
+   320→                </p>
+   321→                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+   322→                  {/* Evidence Pillar */}
+   323→                  <div className="rounded-xl border border-emerald-300 dark:border-emerald-700 bg-emerald-50/50 dark:bg-emerald-950/20 p-6">
+   324→                    <div className="flex items-center gap-2 mb-3">
+   325→                      <FileSearch className="h-5 w-5 text-emerald-600" />
+   326→                      <h4 className="font-semibold text-emerald-700 dark:text-emerald-300">Evidence</h4>
+   327→                    </div>
+   328→                    <p className="text-sm text-muted-foreground mb-3">
+   329→                      Every claim in the appeal letter is grounded in retrieved evidence with provenance tiers and verified citations.
+   330→                    </p>
+   331→                    <ul className="space-y-1.5 text-xs text-muted-foreground">
+   332→                      <li className="flex items-center gap-1.5"><CheckCircle2 className="h-3 w-3 text-emerald-500" /> Provenance tiers (primary/secondary/tertiary)</li>
+   333→                      <li className="flex items-center gap-1.5"><CheckCircle2 className="h-3 w-3 text-emerald-500" /> Citation verification with span tracking</li>
+   334→                      <li className="flex items-center gap-1.5"><CheckCircle2 className="h-3 w-3 text-emerald-500" /> Semantic similarity search</li>
+   335→                      <li className="flex items-center gap-1.5"><CheckCircle2 className="h-3 w-3 text-emerald-500" /> Evidence supersession tracking</li>
+   336→                    </ul>
+   337→                  </div>
+   338→
+   339→                  {/* Agents Pillar */}
+   340→                  <div className="rounded-xl border border-teal-300 dark:border-teal-700 bg-teal-50/50 dark:bg-teal-950/20 p-6">
+   341→                    <div className="flex items-center gap-2 mb-3">
+   342→                      <Bot className="h-5 w-5 text-teal-600" />
+   343→                      <h4 className="font-semibold text-teal-700 dark:text-teal-300">8-Agent Fleet</h4>
+   344→                    </div>
+   345→                    <p className="text-sm text-muted-foreground mb-3">
+   346→                      Specialized agents form an ADK fleet that orchestrates the full denial-to-appeal pipeline.
+   347→                    </p>
+   348→                    <ul className="space-y-1.5 text-xs text-muted-foreground">
+   349→                      <li className="flex items-center gap-1.5"><CheckCircle2 className="h-3 w-3 text-teal-500" /> Orchestrator — pipeline coordination</li>
+   350→                      <li className="flex items-center gap-1.5"><CheckCircle2 className="h-3 w-3 text-teal-500" /> Triage Agent — denial classification</li>
+   351→                      <li className="flex items-center gap-1.5"><CheckCircle2 className="h-3 w-3 text-teal-500" /> Evidence Agent — retrieval & ranking</li>
+   352→                      <li className="flex items-center gap-1.5"><CheckCircle2 className="h-3 w-3 text-teal-500" /> Citation Agent — span & verification</li>
+   353→                      <li className="flex items-center gap-1.5"><CheckCircle2 className="h-3 w-3 text-teal-500" /> Drafter Agent — appeal generation</li>
+   354→                      <li className="flex items-center gap-1.5"><CheckCircle2 className="h-3 w-3 text-teal-500" /> Quality Agent — review & scoring</li>
+   355→                    </ul>
+   356→                  </div>
+   357→
+   358→                  {/* Governance Pillar */}
+   359→                  <div className="rounded-xl border border-amber-300 dark:border-amber-700 bg-amber-50/50 dark:bg-amber-950/20 p-6">
+   360→                    <div className="flex items-center gap-2 mb-3">
+   361→                      <Users className="h-5 w-5 text-amber-600" />
+   362→                      <h4 className="font-semibold text-amber-700 dark:text-amber-300">Governance</h4>
+   363→                    </div>
+   364→                    <p className="text-sm text-muted-foreground mb-3">
+   365→                      Human-in-the-loop gates ensure every critical decision requires explicit human approval. The governance vertex is complete.
+   366→                    </p>
+   367→                    <ul className="space-y-1.5 text-xs text-muted-foreground">
+   368→                      <li className="flex items-center gap-1.5"><CheckCircle2 className="h-3 w-3 text-amber-500" /> <strong>PHI Guard</strong> — front gate (BLOCK = zero model calls)</li>
+   369→                      <li className="flex items-center gap-1.5"><CheckCircle2 className="h-3 w-3 text-amber-500" /> <strong>Model Armor</strong> — prompt-injection &amp; jailbreak defense</li>
+   370→                      <li className="flex items-center gap-1.5"><CheckCircle2 className="h-3 w-3 text-amber-500" /> <strong>Agent Identity</strong> — scoped permissions per agent</li>
+   371→                      <li className="flex items-center gap-1.5"><CheckCircle2 className="h-3 w-3 text-amber-500" /> <strong>Agent Observability</strong> — queryable audit trail</li>
+   372→                      <li className="flex items-center gap-1.5"><CheckCircle2 className="h-3 w-3 text-amber-500" /> Gate 1: Confirm Denial Understanding</li>
+   373→                      <li className="flex items-center gap-1.5"><CheckCircle2 className="h-3 w-3 text-amber-500" /> Gate 2: Approve Final Appeal Letter</li>
+   374→                      <li className="flex items-center gap-1.5"><CheckCircle2 className="h-3 w-3 text-amber-500" /> Full decision trace with audit trail</li>
+   375→                      <li className="flex items-center gap-1.5"><CheckCircle2 className="h-3 w-3 text-amber-500" /> Provenance cards for every claim</li>
+   376→                    </ul>
+   377→                  </div>
+   378→                </div>
+   379→              </div>
+   380→
+   381→              {/* Pipeline Flow */}
+   382→              <div>
+   383→                <h3 className="text-lg font-semibold mb-4">Pipeline Flow</h3>
+   384→                <div className="flex items-center gap-2 overflow-x-auto pb-2 text-sm">
+   385→                  {[
+   386→                    { label: 'Upload', color: 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300' },
+   387→                    { label: 'PHI Guard', color: 'bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300' },
+   388→                    { label: 'Model Armor', color: 'bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300' },
+   389→                    { label: 'Triage', color: 'bg-teal-100 dark:bg-teal-900 text-teal-700 dark:text-teal-300' },
+   390→                    { label: 'Gate 1', color: 'bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300' },
+   391→                    { label: 'Evidence', color: 'bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300' },
+   392→                    { label: 'NPI Lookup', color: 'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300' },
+   393→                    { label: 'Drafting', color: 'bg-teal-100 dark:bg-teal-900 text-teal-700 dark:text-teal-300' },
+   394→                    { label: 'QA', color: 'bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300' },
+   395→                    { label: 'Gate 2', color: 'bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300' },
+   396→                    { label: 'Approved', color: 'bg-emerald-200 dark:bg-emerald-800 text-emerald-800 dark:text-emerald-200' },
+   397→                    { label: 'Submitted', color: 'bg-emerald-200 dark:bg-emerald-800 text-emerald-800 dark:text-emerald-200' },
+   398→                  ].map((step, idx, arr) => (
+   399→                    <div key={step.label} className="flex items-center shrink-0">
+   400→                      <span className={`px-2.5 py-1 rounded-md font-medium text-xs ${step.color}`}>
+   401→                        {step.label}
+   402→                      </span>
+   403→                      {idx < arr.length - 1 && (
+   404→                        <ArrowRight className="h-3.5 w-3.5 text-muted-foreground mx-1" />
+   405→                      )}
+   406→                    </div>
+   407→                  ))}
+   408→                </div>
+   409→              </div>
+   410→
+   411→              {/* Agent Fleet Service Status */}
+   412→              <div>
+   413→                <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+   414→                  <Bot className="h-5 w-5 text-teal-600" />
+   415→                  Agent Fleet Service
+   416→                </h3>
+   417→                <Card className="border-teal-200 dark:border-teal-800">
+   418→                  <CardHeader className="pb-3">
+   419→                    <div className="flex items-center justify-between">
+   420→                      <CardTitle className="text-sm flex items-center gap-2">
+   421→                        <Server className="h-4 w-4 text-teal-600" />
+   422→                        Port 3004 — DenialDefender Agent Fleet
+   423→                      </CardTitle>
+   424→                      <div className="flex items-center gap-2">
+   425→                        {agentFleetLoading ? (
+   426→                          <Badge variant="outline" className="text-[10px] gap-1">
+   427→                            <Loader2 className="h-2.5 w-2.5 animate-spin" />
+   428→                            Checking
+   429→                          </Badge>
+   430→                        ) : agentFleetOnline ? (
+   431→                          <Badge className="bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200 text-[10px] gap-1">
+   432→                            <CheckCircle2 className="h-2.5 w-2.5" />
+   433→                            Online
+   434→                          </Badge>
+   435→                        ) : (
+   436→                          <Badge variant="destructive" className="text-[10px] gap-1">
+   437→                            <XCircle className="h-2.5 w-2.5" />
+   438→                            Offline
+   439→                          </Badge>
+   440→                        )}
+   441→                      </div>
+   442→                    </div>
+   443→                  </CardHeader>
+   444→                  <CardContent className="space-y-3">
+   445→                    {agentFleetHealth && (
+   446→                      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs">
+   447→                        <div className="bg-muted/50 rounded p-2">
+   448→                          <span className="text-muted-foreground">Version</span>
+   449→                          <p className="font-mono font-medium">{agentFleetHealth.version}</p>
+   450→                        </div>
+   451→                        <div className="bg-muted/50 rounded p-2">
+   452→                          <span className="text-muted-foreground">Model</span>
+   453→                          <p className="font-mono font-medium text-teal-700">{agentFleetHealth.model || 'gemini-3.5-flash'}</p>
+   454→                        </div>
+   455→                        <div className="bg-muted/50 rounded p-2">
+   456→                          <span className="text-muted-foreground">Runtime</span>
+   457→                          <p className="font-mono font-medium capitalize">{agentFleetHealth.runtime}</p>
+   458→                        </div>
+   459→                        <div className="bg-muted/50 rounded p-2">
+   460→                          <span className="text-muted-foreground">Mode</span>
+   461→                          <p className={`font-medium ${agentFleetHealth.mock_mode ? 'text-amber-600' : 'text-emerald-600'}`}>
+   462→                            {agentFleetHealth.mock_mode ? 'Mock' : 'Live'}
+   463→                          </p>
+   464→                        </div>
+   465→                        <div className="bg-muted/50 rounded p-2">
+   466→                          <span className="text-muted-foreground">Agents</span>
+   467→                          <p className="font-mono font-medium">{agentFleetHealth.agents.length}</p>
+   468→                        </div>
+   469→                      </div>
+   470→                    )}
+   471→
+   472→                    {/* 8 Agents with roles */}
+   473→                    <div>
+   474→                      <p className="text-xs font-medium text-muted-foreground mb-2">Agents:</p>
+   475→                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+   476→                        {AGENT_DETAILS.map((agent) => {
+   477→                          const Icon = agent.icon;
+   478→                          return (
+   479→                            <div key={agent.name} className="flex items-center gap-2 rounded-lg border bg-card p-2 hover:bg-accent/50 transition-colors">
+   480→                              <Icon className={`h-3.5 w-3.5 shrink-0 ${agent.color}`} />
+   481→                              <div className="min-w-0">
+   482→                                <p className="text-xs font-medium truncate">{agent.name}</p>
+   483→                                <p className="text-[10px] text-muted-foreground truncate">{agent.role}</p>
+   484→                              </div>
+   485→                            </div>
+   486→                          );
+   487→                        })}
+   488→                      </div>
+   489→                    </div>
+   490→                  </CardContent>
+   491→                </Card>
+   492→              </div>
+   493→
+   494→              {/* GCP Services Status */}
+   495→              <div>
+   496→                <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+   497→                  <Cloud className="h-5 w-5 text-blue-600" />
+   498→                  GCP Services
+   499→                </h3>
+   500→                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+   501→                  <div className="flex items-center gap-3 rounded-lg border p-3">
+   502→                    <Database className="h-4 w-4 text-muted-foreground" />
+   503→                    <div className="flex-1">
+   504→                      <p className="text-sm font-medium">Firestore</p>
+   505→                      <p className="text-xs text-muted-foreground">
+   506→                        {gcpStatus ? gcpStatus.firestore.message : 'Checking...'}
+   507→                      </p>
+   508→                    </div>
+   509→                    {gcpStatus ? (
+   510→                      <Badge className={`text-[10px] ${gcpStatus.firestore.available ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200' : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'}`}>
+   511→                        {gcpStatus.firestore.available ? 'Reachable' : 'Unavailable'}
+   512→                      </Badge>
+   513→                    ) : (
+   514→                      <Badge variant="outline" className="text-[10px]">Unknown</Badge>
+   515→                    )}
+   516→                  </div>
+   517→                  <div className="flex items-center gap-3 rounded-lg border p-3">
+   518→                    <Radio className="h-4 w-4 text-muted-foreground" />
+   519→                    <div className="flex-1">
+   520→                      <p className="text-sm font-medium">Pub/Sub</p>
+   521→                      <p className="text-xs text-muted-foreground">
+   522→                        {gcpStatus
+   523→                          ? `${gcpStatus.pubsub.topics.length} topics — ${gcpStatus.pubsub.message}`
+   524→                          : 'Checking...'}
+   525→                      </p>
+   526→                    </div>
+   527→                    {gcpStatus ? (
+   528→                      <Badge className={`text-[10px] ${gcpStatus.pubsub.available ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200' : 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200'}`}>
+   529→                        {gcpStatus.pubsub.available ? 'Reachable' : 'Auth Required'}
+   530→                      </Badge>
+   531→                    ) : (
+   532→                      <Badge variant="outline" className="text-[10px]">Unknown</Badge>
+   533→                    )}
+   534→                  </div>
+   535→                </div>
+   536→              </div>
+   537→
+   538→              {/* System Status */}
+   539→              <div>
+   540→                <h3 className="text-lg font-semibold mb-4">System Status</h3>
+   541→                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+   542→                  <div className="flex items-center gap-3 rounded-lg border p-3">
+   543→                    <ShieldAlert className="h-4 w-4 text-amber-600" />
+   544→                    <div className="flex-1">
+   545→                      <p className="text-sm font-medium">PHI Guard</p>
+   546→                      <p className="text-xs text-muted-foreground">Front gate — BLOCK = zero model calls</p>
+   547→                    </div>
+   548→                    <Badge className="bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200 text-[10px]">Active</Badge>
+   549→                  </div>
+   550→                  <div className="flex items-center gap-3 rounded-lg border p-3">
+   551→                    <ShieldCheck className="h-4 w-4 text-amber-600" />
+   552→                    <div className="flex-1">
+   553→                      <p className="text-sm font-medium">Model Armor</p>
+   554→                      <p className="text-xs text-muted-foreground">Prompt-injection &amp; jailbreak defense</p>
+   555→                    </div>
+   556→                    <Badge className="bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200 text-[10px]">Active</Badge>
+   557→                  </div>
+   558→                  <div className="flex items-center gap-3 rounded-lg border p-3">
+   559→                    <Fingerprint className="h-4 w-4 text-violet-600" />
+   560→                    <div className="flex-1">
+   561→                      <p className="text-sm font-medium">Agent Identity</p>
+   562→                      <p className="text-xs text-muted-foreground">Scoped permissions per agent</p>
+   563→                    </div>
+   564→                    <Badge className="bg-violet-100 text-violet-800 dark:bg-violet-900 dark:text-violet-200 text-[10px]">Active</Badge>
+   565→                  </div>
+   566→                  <div className="flex items-center gap-3 rounded-lg border p-3">
+   567→                    <Eye className="h-4 w-4 text-emerald-600" />
+   568→                    <div className="flex-1">
+   569→                      <p className="text-sm font-medium">Agent Observability</p>
+   570→                      <p className="text-xs text-muted-foreground">Queryable audit trail end-to-end</p>
+   571→                    </div>
+   572→                    <Badge className="bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200 text-[10px]">Active</Badge>
+   573→                  </div>
+   574→                  <div className="flex items-center gap-3 rounded-lg border p-3">
+   575→                    <Server className="h-4 w-4 text-muted-foreground" />
+   576→                    <div className="flex-1">
+   577→                      <p className="text-sm font-medium">Trace Stream (port 3003)</p>
+   578→                      <p className="text-xs text-muted-foreground">WebSocket real-time events</p>
+   579→                    </div>
+   580→                    {connected ? (
+   581→                      <Badge className="bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200 text-[10px]">Online</Badge>
+   582→                    ) : (
+   583→                      <Badge variant="destructive" className="text-[10px]">Offline</Badge>
+   584→                    )}
+   585→                  </div>
+   586→                  <div className="flex items-center gap-3 rounded-lg border p-3">
+   587→                    <Bot className="h-4 w-4 text-muted-foreground" />
+   588→                    <div className="flex-1">
+   589→                      <p className="text-sm font-medium">Agent Fleet (port 3004)</p>
+   590→                      <p className="text-xs text-muted-foreground">8-agent workflow pipeline</p>
+   591→                    </div>
+   592→                    {agentFleetOnline ? (
+   593→                      <Badge className="bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200 text-[10px]">Online</Badge>
+   594→                    ) : (
+   595→                      <Badge variant="destructive" className="text-[10px]">Offline</Badge>
+   596→                    )}
+   597→                  </div>
+   598→                  <div className="flex items-center gap-3 rounded-lg border p-3">
+   599→                    <Eye className="h-4 w-4 text-muted-foreground" />
+   600→                    <div className="flex-1">
+   601→                      <p className="text-sm font-medium">Decision Trace</p>
+   602→                      <p className="text-xs text-muted-foreground">Full audit trail per case</p>
+   603→                    </div>
+   604→                    <Badge variant="outline" className="text-[10px]">Active</Badge>
+   605→                  </div>
+   606→                  <div className="flex items-center gap-3 rounded-lg border p-3">
+   607→                    <Scale className="h-4 w-4 text-muted-foreground" />
+   608→                    <div className="flex-1">
+   609→                      <p className="text-sm font-medium">HITL Governance</p>
+   610→                      <p className="text-xs text-muted-foreground">2 gates per case</p>
+   611→                    </div>
+   612→                    <Badge variant="outline" className="text-[10px]">Active</Badge>
+   613→                  </div>
+   614→                  <div className="flex items-center gap-3 rounded-lg border p-3">
+   615→                    <FileSearch className="h-4 w-4 text-muted-foreground" />
+   616→                    <div className="flex-1">
+   617→                      <p className="text-sm font-medium">Evidence Store</p>
+   618→                      <p className="text-xs text-muted-foreground">Provenance-tracked citations</p>
+   619→                    </div>
+   620→                    <Badge variant="outline" className="text-[10px]">Ready</Badge>
+   621→                  </div>
+   622→                  <div className="flex items-center gap-3 rounded-lg border p-3">
+   623→                    <Shield className="h-4 w-4 text-muted-foreground" />
+   624→                    <div className="flex-1">
+   625→                      <p className="text-sm font-medium">SQLite Database</p>
+   626→                      <p className="text-xs text-muted-foreground">Prisma ORM + SQLite</p>
+   627→                    </div>
+   628→                    <Badge className="bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200 text-[10px]">Connected</Badge>
+   629→                  </div>
+   630→                  <div className="flex items-center gap-3 rounded-lg border p-3">
+   631→                    <Globe className="h-4 w-4 text-blue-600" />
+   632→                    <div className="flex-1">
+   633→                      <p className="text-sm font-medium">NPI Registry</p>
+   634→                      <p className="text-xs text-muted-foreground">Provider validation — npiregistry.cms.hhs.gov</p>
+   635→                    </div>
+   636→                    <Badge className="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 text-[10px]">Active</Badge>
+   637→                  </div>
+   638→                  <div className="flex items-center gap-3 rounded-lg border p-3">
+   639→                    <BookOpen className="h-4 w-4 text-purple-600" />
+   640→                    <div className="flex-1">
+   641→                      <p className="text-sm font-medium">Citation Classifier</p>
+   642→                      <p className="text-xs text-muted-foreground">Gemma on-device credibility scoring</p>
+   643→                    </div>
+   644→                    <Badge className="bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200 text-[10px]">Active</Badge>
+   645→                  </div>
+   646→                </div>
+   647→              </div>
+   648→            </div>
+   649→          </TabsContent>
+   650→        </Tabs>
+   651→      </main>
+   652→
+   653→      {/* ── Footer ──────────────────────────────────────────────── */}
+   654→      <footer className="border-t bg-card mt-auto">
+   655→        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3">
+   656→          <div className="flex items-center justify-between text-xs text-muted-foreground flex-wrap gap-2">
+   657→            <span>DenialDefender &bull; All Things Agentic Hackathon &bull; Fortified Enterprise Fleet</span>
+   658→            <div className="flex items-center gap-2">
+   659→              <Badge variant="outline" className="text-[10px] gap-1">
+   660→                <Wifi className="h-2.5 w-2.5" />
+   661→                GCP us-central1
+   662→              </Badge>
+   663→              {agentFleetHealth && (
+   664→                <Badge variant="outline" className={`text-[10px] gap-1 ${agentFleetHealth.mock_mode ? 'border-amber-300 text-amber-600' : 'border-emerald-300 text-emerald-600'}`}>
+   665→                  <Bot className="h-2.5 w-2.5" />
+   666→                  {agentFleetHealth.mock_mode ? 'Mock Mode' : 'Live Mode'}
+   667→                </Badge>
+   668→              )}
+   669→            </div>
+   670→          </div>
+   671→        </div>
+   672→      </footer>
+   673→    </div>
+   674→  );
+   675→}
+   676→
