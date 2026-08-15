@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { CaseDashboard } from '@/components/case-dashboard';
 import { TraceStreamTab } from '@/components/trace-stream-tab';
 import { EvidenceCorpusTab } from '@/components/evidence-corpus-tab';
+import { VerticalSlicePanel } from '@/components/vertical-slice-panel';
 import { useTraceStream } from '@/hooks/useTraceStream';
 import {
   Shield,
@@ -35,6 +36,7 @@ import {
   Cloud,
   Database,
   Radio,
+  Zap,
 } from 'lucide-react';
 
 interface AgentFleetHealth {
@@ -178,6 +180,10 @@ export default function Home() {
               <FileSearch className="h-4 w-4" />
               Evidence
             </TabsTrigger>
+            <TabsTrigger value="vertical-slice" className="gap-1.5">
+              <Zap className="h-4 w-4" />
+              Vertical Slice
+            </TabsTrigger>
             <TabsTrigger value="architecture" className="gap-1.5">
               <Cpu className="h-4 w-4" />
               Architecture
@@ -197,6 +203,11 @@ export default function Home() {
           {/* ── Evidence Corpus Tab ──────────────────────────── */}
           <TabsContent value="evidence">
             <EvidenceCorpusTab />
+          </TabsContent>
+
+          {/* ── Vertical Slice Tab ───────────────────────────── */}
+          <TabsContent value="vertical-slice">
+            <VerticalSlicePanel />
           </TabsContent>
 
           {/* ── Architecture Tab ───────────────────────────────── */}
