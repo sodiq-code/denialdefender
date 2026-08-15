@@ -943,3 +943,71 @@ Stage Summary:
 - Case state transitions work: created → triage_active → hitl_gate_1 → (approved) → evidence_active → triage_complete
 - Decision trace events written to DB at each step
 - Full UI panel with responsive design, color-coded agents, accordion traces
+
+---
+Task ID: 5-agents-4-6
+Agent: full-stack-developer
+Task: Day 5 — Agents 4–6: Evidence, Drafting, Quality Review
+
+Work Log:
+- Read worklog.md and understood existing Day 4 codebase (3 agents, three-agent pipeline, policy research)
+- Created Evidence Assembly Agent (Agent 4) at src/lib/agents/evidence-assembly.ts
+  - Extends BaseAgent pattern from Day 4
+  - Searches evidence corpus for clinical evidence matching denial reason
+  - Uses retrievePolicyClauses with mode='outcomes' for additional clinical evidence
+  - Searches by CPT/ICD codes in content for code-based evidence
+  - Deduplicates policy research clauses against clinical evidence (marks duplicates)
+  - Returns 5 evidence items total (3 from Policy Research + 2 additional clinical)
+  - Each item has contentHash for Quality Review verification
+  - Assesses evidence strength: strong/moderate/weak based on provenance and match count
+- Created Letter Drafting Agent (Agent 5) at src/lib/agents/letter-drafting.ts
+  - Template-based appeal letter with 7 sections: Header, Denial Restatement, Policy Basis, Clinical Evidence, Medical Necessity Argument, Request for Reconsideration, Signature
+  - Each citation [N] maps to InlineCitation with evidenceId and contentHash
+  - 5 citations total (3 policy [1][2][3] + 2 clinical [4][5])
+  - NO overclaiming language ("will win", "guaranteed", "certain to overturn")
+  - NO medical advice (no "should be treated with", "diagnosis requires")
+  - Payer deadline references validated against known payer windows
+- Created Quality Review Agent (Agent 6 — ADVERSARIAL) at src/lib/agents/quality-review.ts
+  - 7 adversarial checks from Table 15.1:
+    1. Citation Resolution: All citations must resolve with matching contentHash
+    2. Claim Tracing: Each [N] reference must have matching claimText
+    3. Policy Support: Policy citations must be from primary/secondary provenance
+    4. Deadline Verification: Deadline within payer's standard window
+    5. No Medical Advice: No diagnostic/prescriptive language patterns
+    6. No Overclaims: No unsupported language patterns
+    7. Format Compliance: 7 sections, header, word count 150-800, 5 citations
+  - REFUSES to pass until ALL 7 conditions hold
+  - Overall score weighted by severity (critical=2x, warning=1x)
+- Created Six-Agent Pipeline at src/lib/six-agent-pipeline.ts
+  - Flow: Advocate → Triage → [Gate 1] → Policy Research → Evidence Assembly → Letter Drafting → Quality Review
+  - After Gate 1 approval, runs all 4 remaining agents
+  - If Quality Review FAILS → pipeline stops with quality_review_failed
+  - If Quality Review PASSES → pipeline completes, creates Gate 2
+  - Case state transitions: hitl_gate_1 → evidence_active → drafting_active → quality_review → hitl_gate_2
+  - Gate test function: runs good draft (should PASS) and broken draft (fake citation, should FAIL/blocked)
+- Created API routes:
+  - POST /api/six-agent-pipeline — runs pipeline up to Gate 1
+  - GET /api/six-agent-pipeline — returns pipeline info and battery details
+  - POST /api/six-agent-pipeline/resume — resumes after Gate 1 (approved/rejected)
+  - POST /api/six-agent-pipeline/gate-test — runs adversarial gate test
+- Created UI component at src/components/six-agent-pipeline-panel.tsx
+  - Input section with sample letters and payer selector
+  - All 6 agent steps with color-coded status indicators
+  - HITL Gate 1 Confirm/Reject buttons
+  - Appeal letter display with clickable inline [1]-[5] citations showing provenance
+  - Quality Review battery results table (7 rows, PASS/FAIL, severity badges)
+  - Evidence Assembly detail panel with provenance badges and deduplication info
+  - Gate Test button and results (good draft vs broken draft, gate verdict)
+  - Decision trace feed
+- Updated page.tsx with "Day 5: Agents 4-6" tab
+- Lint passes cleanly, no TypeScript errors in new files
+
+Stage Summary:
+- 3 new ADK-style agent classes: EvidenceAssemblyAgent, LetterDraftingAgent, QualityReviewAgent
+- Six-agent pipeline: Advocate → Triage → [Gate 1] → Policy Research → Evidence Assembly → Letter Drafting → Quality Review
+- Quality Review implements 7 adversarial checks from Table 15.1 — refuses to pass until all conditions hold
+- Letter drafting produces 7-section appeal letter with 5 inline citations, no overclaims, no medical advice
+- Evidence assembly matches clinical evidence to denial reason and deduplicates against policy research
+- Gate test verifies broken draft (fake citation) is blocked by Quality Review
+- Case state transitions extended: evidence_active → drafting_active → quality_review → hitl_gate_2
+- Full UI panel with responsive design, color-coded agents, clickable citations, battery results table, gate test
