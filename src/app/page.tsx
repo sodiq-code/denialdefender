@@ -15,6 +15,7 @@ import Day7EvalPanel from '@/components/day7-eval-panel';
 import Day8ExperimentPanel from '@/components/day8-experiment-panel';
 import Day9TwoCasePanel from '@/components/day9-two-case-panel';
 import Day10PhiGuardPanel from '@/components/day10-phi-guard-panel';
+import Day11GovernancePanel from '@/components/day11-governance-panel';
 import { useTraceStream } from '@/hooks/useTraceStream';
 import {
   Shield,
@@ -51,6 +52,7 @@ import {
   Brain,
   ShieldAlert,
   Lock,
+  Fingerprint,
 } from 'lucide-react';
 
 interface AgentFleetHealth {
@@ -228,6 +230,10 @@ export default function Home() {
               <ShieldAlert className="h-4 w-4" />
               Day 10: PHI Guard
             </TabsTrigger>
+            <TabsTrigger value="day11-governance" className="gap-1.5">
+              <Scale className="h-4 w-4" />
+              Day 11: Governance
+            </TabsTrigger>
             <TabsTrigger value="architecture" className="gap-1.5">
               <Cpu className="h-4 w-4" />
               Architecture
@@ -289,6 +295,11 @@ export default function Home() {
             <Day10PhiGuardPanel />
           </TabsContent>
 
+          {/* ── Day 11: Governance Tab ─────────────────────────── */}
+          <TabsContent value="day11-governance">
+            <Day11GovernancePanel />
+          </TabsContent>
+
           {/* ── Architecture Tab ───────────────────────────────── */}
           <TabsContent value="architecture">
             <div className="space-y-6">
@@ -342,10 +353,13 @@ export default function Home() {
                       <h4 className="font-semibold text-amber-700 dark:text-amber-300">Governance</h4>
                     </div>
                     <p className="text-sm text-muted-foreground mb-3">
-                      Human-in-the-loop gates ensure every critical decision requires explicit human approval. PHI Guard is the front gate.
+                      Human-in-the-loop gates ensure every critical decision requires explicit human approval. The governance vertex is complete.
                     </p>
                     <ul className="space-y-1.5 text-xs text-muted-foreground">
                       <li className="flex items-center gap-1.5"><CheckCircle2 className="h-3 w-3 text-amber-500" /> <strong>PHI Guard</strong> — front gate (BLOCK = zero model calls)</li>
+                      <li className="flex items-center gap-1.5"><CheckCircle2 className="h-3 w-3 text-amber-500" /> <strong>Model Armor</strong> — prompt-injection &amp; jailbreak defense</li>
+                      <li className="flex items-center gap-1.5"><CheckCircle2 className="h-3 w-3 text-amber-500" /> <strong>Agent Identity</strong> — scoped permissions per agent</li>
+                      <li className="flex items-center gap-1.5"><CheckCircle2 className="h-3 w-3 text-amber-500" /> <strong>Agent Observability</strong> — queryable audit trail</li>
                       <li className="flex items-center gap-1.5"><CheckCircle2 className="h-3 w-3 text-amber-500" /> Gate 1: Confirm Denial Understanding</li>
                       <li className="flex items-center gap-1.5"><CheckCircle2 className="h-3 w-3 text-amber-500" /> Gate 2: Approve Final Appeal Letter</li>
                       <li className="flex items-center gap-1.5"><CheckCircle2 className="h-3 w-3 text-amber-500" /> Full decision trace with audit trail</li>
@@ -362,6 +376,7 @@ export default function Home() {
                   {[
                     { label: 'Upload', color: 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300' },
                     { label: 'PHI Guard', color: 'bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300' },
+                    { label: 'Model Armor', color: 'bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300' },
                     { label: 'Triage', color: 'bg-teal-100 dark:bg-teal-900 text-teal-700 dark:text-teal-300' },
                     { label: 'Gate 1', color: 'bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300' },
                     { label: 'Evidence', color: 'bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300' },
@@ -521,6 +536,30 @@ export default function Home() {
                       <p className="text-xs text-muted-foreground">Front gate — BLOCK = zero model calls</p>
                     </div>
                     <Badge className="bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200 text-[10px]">Active</Badge>
+                  </div>
+                  <div className="flex items-center gap-3 rounded-lg border p-3">
+                    <ShieldCheck className="h-4 w-4 text-amber-600" />
+                    <div className="flex-1">
+                      <p className="text-sm font-medium">Model Armor</p>
+                      <p className="text-xs text-muted-foreground">Prompt-injection &amp; jailbreak defense</p>
+                    </div>
+                    <Badge className="bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200 text-[10px]">Active</Badge>
+                  </div>
+                  <div className="flex items-center gap-3 rounded-lg border p-3">
+                    <Fingerprint className="h-4 w-4 text-violet-600" />
+                    <div className="flex-1">
+                      <p className="text-sm font-medium">Agent Identity</p>
+                      <p className="text-xs text-muted-foreground">Scoped permissions per agent</p>
+                    </div>
+                    <Badge className="bg-violet-100 text-violet-800 dark:bg-violet-900 dark:text-violet-200 text-[10px]">Active</Badge>
+                  </div>
+                  <div className="flex items-center gap-3 rounded-lg border p-3">
+                    <Eye className="h-4 w-4 text-emerald-600" />
+                    <div className="flex-1">
+                      <p className="text-sm font-medium">Agent Observability</p>
+                      <p className="text-xs text-muted-foreground">Queryable audit trail end-to-end</p>
+                    </div>
+                    <Badge className="bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200 text-[10px]">Active</Badge>
                   </div>
                   <div className="flex items-center gap-3 rounded-lg border p-3">
                     <Server className="h-4 w-4 text-muted-foreground" />
