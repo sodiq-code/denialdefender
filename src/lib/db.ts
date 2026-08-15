@@ -8,7 +8,7 @@
  */
 
 import { PrismaClient } from '@prisma/client'
-import { PrismaLibSql } from '@prisma/adapter-libsql'
+import { PrismaLibSQL } from '@prisma/adapter-libsql'
 import { createClient } from '@libsql/client'
 
 const globalForPrisma = globalThis as unknown as {
@@ -27,7 +27,7 @@ function createPrismaClient(): PrismaClient {
         url: tursoUrl,
         authToken: tursoToken,
       })
-      const adapter = new PrismaLibSql(libsql)
+      const adapter = new PrismaLibSQL(libsql)
       const client = new PrismaClient({ adapter })
       console.log('[db] Turso adapter created successfully')
       return client
