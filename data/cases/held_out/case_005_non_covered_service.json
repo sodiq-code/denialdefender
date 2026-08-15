@@ -1,0 +1,26 @@
+{
+  "id": "held-out-005",
+  "name": "Non-Covered Service — Psychotherapy 60 min",
+  "description": "Mental health parity denial. Strong parity law basis — MHPAEA protections apply.",
+  "denial": {
+    "payer": "Humana",
+    "reasonCode": "CO96",
+    "category": "other",
+    "denialLetterText": "Humana\nClaims Adjudication Department\n\nDATE: March 10, 2026\n\nRE: Denial of Claim — 90837 (Psychotherapy, 60 min)\n\nDear Provider,\n\nThis letter is to inform you that the claim submitted for the above-referenced service has been denied.\n\nDENIAL REASON: CO96 — Non-covered charge(s)\n\nPAYER STATEMENT: Service is not covered under the patient's benefit plan. The requested psychotherapy session exceeds the plan's covered visit limits.\n\nPROCEDURE: 90837 — Psychotherapy, 60 min\nDIAGNOSIS: F32.1 — Major depressive disorder, single episode, moderate\n\nAPPEAL RIGHTS: You have the right to appeal this denial within 120 days.\n\nAPPEAL DEADLINE: July 8, 2026\n\nSincerely,\nClaims Adjudication Department\nHumana",
+    "cptCode": "90837",
+    "icd10Code": "F32.1",
+    "amount": 250.00,
+    "appealDeadline": "2026-07-08"
+  },
+  "expectedOutcome": {
+    "appealStrategy": "mental_health_parity",
+    "estimatedSuccessRate": 0.80,
+    "keyFactors": ["MHPAEA parity protections", "Medical necessity documented", "Treatment plan supports ongoing therapy", "APA practice guidelines support"]
+  },
+  "groundTruth": {
+    "correctStrategy": "other",
+    "correctCitations": ["MHPAEA Final Rule", "APA Practice Guidelines for Depression", "CMS MLN Matters MM10412"],
+    "minimumQualityScore": 0.75,
+    "shouldAppeal": true
+  }
+}

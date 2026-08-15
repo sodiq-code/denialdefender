@@ -1,0 +1,26 @@
+{
+  "id": "held-out-003",
+  "name": "Coding Mismatch — Upper GI Endoscopy with Biopsy",
+  "description": "Diagnosis-procedure mismatch denial. ICD-10 code doesn't clearly support endoscopy. Requires coding correction + clinical justification.",
+  "denial": {
+    "payer": "Aetna",
+    "reasonCode": "CO11",
+    "category": "coding",
+    "denialLetterText": "Aetna\nClaims Adjudication Department\n\nDATE: February 20, 2026\n\nRE: Denial of Claim — 43239 (Upper GI endoscopy with biopsy)\n\nDear Provider,\n\nThis letter is to inform you that the claim submitted for the above-referenced service has been denied.\n\nDENIAL REASON: CO11 — The diagnosis is inconsistent with the procedure\n\nPAYER STATEMENT: Diagnosis code does not support the medical necessity of the procedure. The submitted diagnosis of GERD with esophagitis does not independently justify biopsy during endoscopy.\n\nPROCEDURE: 43239 — Upper GI endoscopy with biopsy\nDIAGNOSIS: K21.0 — Gastro-esophageal reflux disease with esophagitis\n\nAPPEAL RIGHTS: You have the right to appeal this denial within 120 days.\n\nAPPEAL DEADLINE: June 20, 2026\n\nSincerely,\nClaims Adjudication Department\nAetna",
+    "cptCode": "43239",
+    "icd10Code": "K21.0",
+    "amount": 3800.00,
+    "appealDeadline": "2026-06-20"
+  },
+  "expectedOutcome": {
+    "appealStrategy": "coding_correction_with_clinical_justification",
+    "estimatedSuccessRate": 0.78,
+    "keyFactors": ["Biopsy indicated for Barrett's screening", "GERD with esophagitis justifies endoscopy", "AGA guidelines support biopsy", "Additional diagnosis codes available"]
+  },
+  "groundTruth": {
+    "correctStrategy": "coding",
+    "correctCitations": ["AGA Clinical Practice Update", "Aetna Clinical Policy Bulletin CPB0207", "ASGE Quality Indicators"],
+    "minimumQualityScore": 0.7,
+    "shouldAppeal": true
+  }
+}

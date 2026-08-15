@@ -1,0 +1,26 @@
+{
+  "id": "held-out-001",
+  "name": "Medical Necessity — Total Knee Arthroplasty",
+  "description": "Classic medical necessity denial for TKA. Strong evidence base — CMS covers TKA for osteoarthritis when conservative treatment fails.",
+  "denial": {
+    "payer": "UnitedHealthcare",
+    "reasonCode": "CO50",
+    "category": "medical_necessity",
+    "denialLetterText": "UnitedHealthcare\nClaims Adjudication Department\n\nDATE: January 15, 2026\n\nRE: Denial of Claim — 27447 (Total knee arthroplasty)\n\nDear Provider,\n\nThis letter is to inform you that the claim submitted for the above-referenced service has been denied.\n\nDENIAL REASON: CO50 — Non-covered services because it is not deemed medically necessary\n\nPAYER STATEMENT: The requested total knee arthroplasty is not medically necessary as conservative treatment options have not been adequately documented as exhausted.\n\nPROCEDURE: 27447 — Total knee arthroplasty\nDIAGNOSIS: M17.11 — Primary osteoarthritis, right knee\n\nAPPEAL RIGHTS: You have the right to appeal this denial within 120 days of the date of this notice.\n\nAPPEAL DEADLINE: May 15, 2026\n\nSincerely,\nClaims Adjudication Department\nUnitedHealthcare",
+    "cptCode": "27447",
+    "icd10Code": "M17.11",
+    "amount": 34500.00,
+    "appealDeadline": "2026-05-15"
+  },
+  "expectedOutcome": {
+    "appealStrategy": "medical_necessity_with_guidelines",
+    "estimatedSuccessRate": 0.72,
+    "keyFactors": ["CMS covers TKA for osteoarthritis", "NCD 160.8 supports coverage", "Conservative treatment documentation critical", "Peer-reviewed evidence strong"]
+  },
+  "groundTruth": {
+    "correctStrategy": "medical_necessity",
+    "correctCitations": ["NCD 160.8", "CMS MLN Matters SE0528", "AAOS Clinical Practice Guideline"],
+    "minimumQualityScore": 0.7,
+    "shouldAppeal": true
+  }
+}

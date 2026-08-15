@@ -1,0 +1,26 @@
+{
+  "id": "held-out-002",
+  "name": "Prior Authorization — MRI Brain with Contrast",
+  "description": "Prior auth denial for MRI brain. Patient has documented neurological symptoms. Strong appeal basis.",
+  "denial": {
+    "payer": "Anthem BlueCross",
+    "reasonCode": "CO197",
+    "category": "prior_auth",
+    "denialLetterText": "Anthem BlueCross\nClaims Adjudication Department\n\nDATE: February 3, 2026\n\nRE: Denial of Claim — 70553 (MRI brain with contrast)\n\nDear Provider,\n\nThis letter is to inform you that the claim submitted for the above-referenced service has been denied.\n\nDENIAL REASON: CO197 — Precertification/authorization/notification/pre-treatment absent\n\nPAYER STATEMENT: Precertification was not obtained prior to service delivery. Retroactive authorization may be considered with supporting clinical documentation.\n\nPROCEDURE: 70553 — MRI brain with contrast\nDIAGNOSIS: G43.909 — Migraine, unspecified, not intractable\n\nAPPEAL RIGHTS: You have the right to appeal this denial within 120 days of the date of this notice.\n\nAPPEAL DEADLINE: June 3, 2026\n\nSincerely,\nClaims Adjudication Department\nAnthem BlueCross",
+    "cptCode": "70553",
+    "icd10Code": "G43.909",
+    "amount": 4200.00,
+    "appealDeadline": "2026-06-03"
+  },
+  "expectedOutcome": {
+    "appealStrategy": "retroactive_auth_with_clinical_urgency",
+    "estimatedSuccessRate": 0.65,
+    "keyFactors": ["Retroactive auth possible", "Clinical urgency documented", "ACR appropriateness criteria support", "Symptoms justify imaging"]
+  },
+  "groundTruth": {
+    "correctStrategy": "prior_authorization",
+    "correctCitations": ["ACR Appropriateness Criteria", "Anthem Medical Policy RAD001", "CMS LCD for MRI Brain"],
+    "minimumQualityScore": 0.65,
+    "shouldAppeal": true
+  }
+}

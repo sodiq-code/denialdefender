@@ -1,0 +1,26 @@
+{
+  "id": "held-out-008",
+  "name": "Timely Filing — Office Visit Level 4",
+  "description": "Time limit expired denial. Complex — requires good cause demonstration. Lower success rate.",
+  "denial": {
+    "payer": "Molina Healthcare",
+    "reasonCode": "CO29",
+    "category": "prior_auth",
+    "denialLetterText": "Molina Healthcare\nClaims Adjudication Department\n\nDATE: April 15, 2026\n\nRE: Denial of Claim — 99214 (Office visit, established patient, level 4)\n\nDear Provider,\n\nThis letter is to inform you that the claim submitted for the above-referenced service has been denied.\n\nDENIAL REASON: CO29 — The time limit for filing has expired\n\nPAYER STATEMENT: The claim was not filed within the required timely filing limit of 90 days from the date of service.\n\nPROCEDURE: 99214 — Office visit, established patient, level 4\nDIAGNOSIS: E11.9 — Type 2 diabetes mellitus without complications\n\nAPPEAL RIGHTS: You have the right to appeal this denial within 120 days.\n\nAPPEAL DEADLINE: August 13, 2026\n\nSincerely,\nClaims Adjudication Department\nMolina Healthcare",
+    "cptCode": "99214",
+    "icd10Code": "E11.9",
+    "amount": 175.00,
+    "appealDeadline": "2026-08-13"
+  },
+  "expectedOutcome": {
+    "appealStrategy": "good_cause_demonstration",
+    "estimatedSuccessRate": 0.35,
+    "keyFactors": ["Good cause documentation required", "System error or delay evidence", "Intermediary delay", "Lower overturn rate for CO29"]
+  },
+  "groundTruth": {
+    "correctStrategy": "prior_auth",
+    "correctCitations": ["CMS IOM Chapter 1 Section 50", "Molina Provider Manual Filing Requirements", "42 CFR 424.44"],
+    "minimumQualityScore": 0.5,
+    "shouldAppeal": true
+  }
+}

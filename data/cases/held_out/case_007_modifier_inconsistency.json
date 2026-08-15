@@ -1,0 +1,26 @@
+{
+  "id": "held-out-007",
+  "name": "Modifier/Procedure Inconsistency — Central Venous Catheter",
+  "description": "Procedure code inconsistent with modifier. Technical coding error — high success rate on appeal with corrected claim.",
+  "denial": {
+    "payer": "Blue Shield of CA",
+    "reasonCode": "CO4",
+    "category": "coding",
+    "denialLetterText": "Blue Shield of CA\nClaims Adjudication Department\n\nDATE: April 2, 2026\n\nRE: Denial of Claim — 36556 (Central venous catheter insertion)\n\nDear Provider,\n\nThis letter is to inform you that the claim submitted for the above-referenced service has been denied.\n\nDENIAL REASON: CO4 — The procedure code is inconsistent with the modifier used\n\nPAYER STATEMENT: Procedure code inconsistent with the modifier or does not match the diagnosis. The submitted modifier is not appropriate for the billed procedure.\n\nPROCEDURE: 36556 — Central venous catheter insertion\nDIAGNOSIS: J18.9 — Pneumonia, unspecified organism\n\nAPPEAL RIGHTS: You have the right to appeal this denial within 120 days.\n\nAPPEAL DEADLINE: July 31, 2026\n\nSincerely,\nClaims Adjudication Department\nBlue Shield of CA",
+    "cptCode": "36556",
+    "icd10Code": "J18.9",
+    "amount": 8900.00,
+    "appealDeadline": "2026-07-31"
+  },
+  "expectedOutcome": {
+    "appealStrategy": "corrected_claim_with_modifier",
+    "estimatedSuccessRate": 0.85,
+    "keyFactors": ["Modifier correction straightforward", "Clinical documentation supports procedure", "Common coding error pattern", "High overturn rate for CO4"]
+  },
+  "groundTruth": {
+    "correctStrategy": "coding",
+    "correctCitations": ["CMS MLN Matters SE1801", "CPT Assistant Guidelines", "Noridian LCD Reference"],
+    "minimumQualityScore": 0.7,
+    "shouldAppeal": true
+  }
+}

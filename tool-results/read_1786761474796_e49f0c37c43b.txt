@@ -1,0 +1,663 @@
+     1→/**
+     2→ * DenialDefender — Full Pipeline with Decision Trace + HITL Gate 2 (Day 6)
+     3→ *
+     4→ * Extends the six-agent pipeline with:
+     5→ * 1. Decision trace streaming — each agent emits structured events → persist → stream via WebSocket
+     6→ * 2. HITL Gate 2 — approve/edit/reject the appeal letter with citation cards
+     7→ * 3. Version history — edits to the letter are tracked with full version history
+     8→ * 4. Triage edit propagation — editing parsed values re-runs Policy Research
+     9→ * 5. State machine transitions: REVIEWING → AWAITING_APPROVAL_2 → APPROVED → SUBMITTED
+    10→ *
+    11→ * Gate: Full workflow completes a case reliably; the trace is auditable.
+    12→ */
+    13→
+    14→import { db } from '@/lib/db';
+    15→import { patientAdvocateAgent, type PatientAdvocateInput, type AdvocateResult } from './agents/patient-advocate';
+    16→import { denialTriageAgent, type DenialTriageInput, type TriageResult } from './agents/denial-triage';
+    17→import { policyResearchAgent, type PolicyResearchInput, type PolicyResearchResult } from './agents/policy-research-agent';
+    18→import { evidenceAssemblyAgent, type EvidenceAssemblyInput, type EvidenceAssemblyResult } from './agents/evidence-assembly';
+    19→import { letterDraftingAgent, type LetterDraftingInput, type LetterDraftingResult } from './agents/letter-drafting';
+    20→import { qualityReviewAgent, type QualityReviewInput, type QualityReviewResult } from './agents/quality-review';
+    21→import type { TraceEvent } from './agents/base-agent';
+    22→import {
+    23→  emitTraceEvent,
+    24→  emitTraceEvents,
+    25→  toStructuredTrace,
+    26→  type StructuredTraceEvent,
+    27→  type TraceChecklistItem,
+    28→  buildTraceChecklist,
+    29→} from './decision-trace-stream';
+    30→import {
+    31→  initVersionHistory,
+    32→  addSystemLetterVersion,
+    33→  addHumanLetterVersion,
+    34→  getCurrentLetterVersion,
+    35→  type InlineCitationVersion,
+    36→} from './letter-version-history';
+    37→
+    38→// ─── Types ────────────────────────────────────────────────────────────────
+    39→
+    40→export interface FullPipelineInput {
+    41→  denialText: string;
+    42→  payer: string;
+    43→  patientContext?: { diagnosis?: string; treatmentHistory?: string };
+    44→}
+    45→
+    46→export interface Gate2Info {
+    47→  status: 'pending' | 'approved' | 'rejected';
+    48→  gateId: string | null;
+    49→  reviewNote: string;
+    50→  appealLetter: string;
+    51→  citationCount: number;
+    52→  qualityScore: number;
+    53→}
+    54→
+    55→export interface FullPipelineResult {
+    56→  advocate: AdvocateResult;
+    57→  triage: TriageResult;
+    58→  gate1: {
+    59→    status: 'pending' | 'approved' | 'rejected';
+    60→    gateId: string | null;
+    61→    confirmPrompt: string;
+    62→  };
+    63→  policyResearch: PolicyResearchResult | null;
+    64→  evidenceAssembly: EvidenceAssemblyResult | null;
+    65→  letterDrafting: LetterDraftingResult | null;
+    66→  qualityReview: QualityReviewResult | null;
+    67→  gate2: Gate2Info | null;
+    68→  pipelineStatus: 'awaiting_gate1' | 'gate1_rejected' | 'quality_review_failed' | 'awaiting_gate2' | 'gate2_rejected' | 'completed';
+    69→  caseId: string | null;
+    70→  latencyMs: number;
+    71→  traces: TraceEvent[];
+    72→  structuredTraces: StructuredTraceEvent[];
+    73→  traceChecklist: TraceChecklistItem[];
+    74→  letterVersion: number;
+    75→}
+    76→
+    77→// ─── Main Pipeline (Phase 1: up to Gate 1) ─────────────────────────────────
+    78→
+    79→export async function runFullPipeline(
+    80→  input: FullPipelineInput,
+    81→): Promise<FullPipelineResult> {
+    82→  const totalStart = Date.now();
+    83→  const traces: TraceEvent[] = [];
+    84→  const structuredTraces: StructuredTraceEvent[] = [];
+    85→
+    86→  // Step 1: Create a Case in the DB
+    87→  let caseId: string | null = null;
+    88→  try {
+    89→    const caseRecord = await db.case.create({
+    90→      data: {
+    91→        patient_id: `patient-${Date.now()}`,
+    92→        state: 'created',
+    93→      },
+    94→    });
+    95→    caseId = caseRecord.id;
+    96→    const se = await emitTraceEvent({
+    97→      caseId, agent: 'pipeline', step: 'create_case',
+    98→      status: 'completed', detail: `Created case ${caseId} in state 'created'`,
+    99→      timestamp: new Date().toISOString(),
+   100→    });
+   101→    structuredTraces.push(se);
+   102→    traces.push({ agent: 'pipeline', step: 'create_case', timestamp: new Date().toISOString(), status: 'completed', detail: se.detail });
+   103→  } catch (error: unknown) {
+   104→    const msg = error instanceof Error ? error.message : String(error);
+   105→    traces.push({ agent: 'pipeline', step: 'create_case', timestamp: new Date().toISOString(), status: 'error', detail: `Failed: ${msg}` });
+   106→  }
+   107→
+   108→  // Initialize version history
+   109→  if (caseId) {
+   110→    initVersionHistory(caseId);
+   111→  }
+   112→
+   113→  // Step 2: Run Patient Advocate
+   114→  if (caseId) {
+   115→    try { await db.case.update({ where: { id: caseId }, data: { state: 'triage_active' } }); } catch { /* non-critical */ }
+   116→  }
+   117→
+   118→  const advocateResult = await patientAdvocateAgent.run({
+   119→    denialText: input.denialText,
+   120→    patientContext: input.patientContext,
+   121→  });
+   122→  traces.push(advocateResult.trace);
+   123→  const advTrace = await emitTraceEvent(toStructuredTrace(caseId || '', {
+   124→    agent: 'patient-advocate', step: 'case_framing', timestamp: new Date().toISOString(),
+   125→    status: 'completed', detail: `Urgency: ${advocateResult.data.caseFraming.urgencyLevel}, Deadline: ${advocateResult.data.caseFraming.deadline || 'unknown'}`,
+   126→    latencyMs: advocateResult.latencyMs,
+   127→  }));
+   128→  structuredTraces.push(advTrace);
+   129→
+   130→  // Step 3: Run Denial Triage
+   131→  const triageResult = await denialTriageAgent.run({
+   132→    denialText: input.denialText,
+   133→    payer: input.payer,
+   134→    advocateResult: advocateResult.data,
+   135→  });
+   136→  traces.push(triageResult.trace);
+   137→  const triTrace = await emitTraceEvent(toStructuredTrace(caseId || '', {
+   138→    agent: 'denial-triage', step: 'denial_classification', timestamp: new Date().toISOString(),
+   139→    status: 'completed', detail: `Type: ${triageResult.data.denialJson.denialType}, Code: ${triageResult.data.denialJson.reasonCode}, Confidence: ${triageResult.data.denialJson.confidence}`,
+   140→    latencyMs: triageResult.latencyMs,
+   141→  }));
+   142→  structuredTraces.push(triTrace);
+   143→
+   144→  // Step 4: Create Denial record in DB
+   145→  if (caseId) {
+   146→    try {
+   147→      await db.denial.create({
+   148→        data: {
+   149→          case_id: caseId,
+   150→          payer: triageResult.data.denialJson.payer,
+   151→          reason_code: triageResult.data.denialJson.reasonCode,
+   152→          category: triageResult.data.denialJson.denialType as any,
+   153→          denial_letter_text: input.denialText,
+   154→          deadline: triageResult.data.denialJson.deadline ? new Date(triageResult.data.denialJson.deadline) : null,
+   155→          confidence: triageResult.data.denialJson.confidence,
+   156→          structured_json: JSON.stringify(triageResult.data.denialJson),
+   157→        },
+   158→      });
+   159→    } catch (error: unknown) {
+   160→      const msg = error instanceof Error ? error.message : String(error);
+   161→      traces.push({ agent: 'pipeline', step: 'create_denial_record', timestamp: new Date().toISOString(), status: 'error', detail: `Failed: ${msg}` });
+   162→    }
+   163→  }
+   164→
+   165→  // Step 5: Create HITL Gate 1 and set case state
+   166→  let gateId: string | null = null;
+   167→  if (caseId) {
+   168→    try {
+   169→      await db.case.update({ where: { id: caseId }, data: { state: 'hitl_gate_1' } });
+   170→      const gate = await db.hitlGate.create({
+   171→        data: {
+   172→          case_id: caseId,
+   173→          gate_number: 1,
+   174→          status: 'pending',
+   175→          reviewer_note: triageResult.data.humanConfirmPrompt,
+   176→        },
+   177→      });
+   178→      gateId = gate.id;
+   179→      const g1Trace = await emitTraceEvent({
+   180→        caseId, agent: 'pipeline', step: 'create_gate1',
+   181→        status: 'completed', detail: `Created HITL Gate 1 (${gate.id}). Pipeline STOPPED — awaiting human confirmation.`,
+   182→        timestamp: new Date().toISOString(),
+   183→      });
+   184→      structuredTraces.push(g1Trace);
+   185→    } catch (error: unknown) {
+   186→      const msg = error instanceof Error ? error.message : String(error);
+   187→      traces.push({ agent: 'pipeline', step: 'create_gate1', timestamp: new Date().toISOString(), status: 'error', detail: `Failed: ${msg}` });
+   188→    }
+   189→  }
+   190→
+   191→  const traceChecklist = buildTraceChecklist(structuredTraces);
+   192→  const latencyMs = Date.now() - totalStart;
+   193→
+   194→  return {
+   195→    advocate: advocateResult.data,
+   196→    triage: triageResult.data,
+   197→    gate1: { status: 'pending', gateId, confirmPrompt: triageResult.data.humanConfirmPrompt },
+   198→    policyResearch: null,
+   199→    evidenceAssembly: null,
+   200→    letterDrafting: null,
+   201→    qualityReview: null,
+   202→    gate2: null,
+   203→    pipelineStatus: 'awaiting_gate1',
+   204→    caseId,
+   205→    latencyMs,
+   206→    traces,
+   207→    structuredTraces,
+   208→    traceChecklist,
+   209→    letterVersion: 0,
+   210→  };
+   211→}
+   212→
+   213→// ─── Resume After Gate 1 (Phase 2: runs all remaining agents) ──────────────
+   214→
+   215→export async function resumeAfterGate1(
+   216→  caseId: string,
+   217→  gateStatus: 'approved' | 'rejected',
+   218→  cachedTriageResult?: TriageResult,
+   219→  cachedAdvocateResult?: AdvocateResult,
+   220→): Promise<FullPipelineResult> {
+   221→  const totalStart = Date.now();
+   222→  const traces: TraceEvent[] = [];
+   223→  const structuredTraces: StructuredTraceEvent[] = [];
+   224→
+   225→  const caseRecord = await db.case.findUnique({ where: { id: caseId } });
+   226→  if (!caseRecord) throw new Error(`Case ${caseId} not found`);
+   227→
+   228→  const gate = await db.hitlGate.findFirst({ where: { case_id: caseId, gate_number: 1 } });
+   229→  if (!gate) throw new Error(`Gate 1 not found for case ${caseId}`);
+   230→
+   231→  await db.hitlGate.update({ where: { id: gate.id }, data: { status: gateStatus, resolved_at: new Date() } });
+   232→  const g1Trace = await emitTraceEvent({
+   233→    caseId, agent: 'pipeline', step: 'resolve_gate1',
+   234→    status: 'completed', detail: `Gate 1 resolved as ${gateStatus} for case ${caseId}`,
+   235→    timestamp: new Date().toISOString(),
+   236→  });
+   237→  structuredTraces.push(g1Trace);
+   238→
+   239→  // If rejected, pipeline stops
+   240→  if (gateStatus === 'rejected') {
+   241→    const stopTrace = await emitTraceEvent({
+   242→      caseId, agent: 'pipeline', step: 'pipeline_stopped',
+   243→      status: 'blocked', detail: `Pipeline STOPPED — Gate 1 rejected.`,
+   244→      timestamp: new Date().toISOString(),
+   245→    });
+   246→    structuredTraces.push(stopTrace);
+   247→
+   248→    const denial = await db.denial.findUnique({ where: { case_id: caseId } });
+   249→    return buildResult(caseId, cachedAdvocateResult, cachedTriageResult, denial, {
+   250→      gate1: { status: 'rejected', gateId: gate.id, confirmPrompt: gate.reviewer_note || 'Gate 1 rejected' },
+   251→      pipelineStatus: 'gate1_rejected',
+   252→      traces, structuredTraces, latencyMs: Date.now() - totalStart,
+   253→    });
+   254→  }
+   255→
+   256→  // Gate 1 approved → run remaining agents
+   257→  const approvalTrace = await emitTraceEvent({
+   258→    caseId, agent: 'pipeline', step: 'gate1_approved',
+   259→    status: 'completed', detail: `Gate 1 approved. Proceeding to Policy Research → Evidence → Draft → Quality Review.`,
+   260→    timestamp: new Date().toISOString(),
+   261→  });
+   262→  structuredTraces.push(approvalTrace);
+   263→
+   264→  const denial = await db.denial.findUnique({ where: { case_id: caseId } });
+   265→  const triageResult: TriageResult = cachedTriageResult || buildDefaultTriage(denial);
+   266→  const advocateResult: AdvocateResult = cachedAdvocateResult || buildDefaultAdvocate(denial);
+   267→
+   268→  // ─── Step A: Policy Research ──────────────────────────────────────────
+   269→  await db.case.update({ where: { id: caseId }, data: { state: 'evidence_active' } });
+   270→
+   271→  const policyResult = await policyResearchAgent.run({ triageResult });
+   272→  traces.push(policyResult.trace);
+   273→  const polTrace = await emitTraceEvent(toStructuredTrace(caseId, {
+   274→    agent: 'policy-research', step: 'clause_retrieval', timestamp: new Date().toISOString(),
+   275→    status: 'completed', detail: `Retrieved ${policyResult.data.clauses.length} clauses in ${policyResult.data.retrievalLatencyMs}ms`,
+   276→    latencyMs: policyResult.latencyMs,
+   277→    references: policyResult.data.clauses.map(c => c.clauseId),
+   278→  }));
+   279→  structuredTraces.push(polTrace);
+   280→
+   281→  // ─── Step B: Evidence Assembly ────────────────────────────────────────
+   282→  const evidenceResult = await evidenceAssemblyAgent.run({ triageResult, policyResearchResult: policyResult.data });
+   283→  traces.push(evidenceResult.trace);
+   284→  const evTrace = await emitTraceEvent(toStructuredTrace(caseId, {
+   285→    agent: 'evidence-assembly', step: 'evidence_matching', timestamp: new Date().toISOString(),
+   286→    status: 'completed', detail: `Assembled ${evidenceResult.data.totalEvidenceItems} evidence items, strength: ${evidenceResult.data.evidenceStrength}, duplicates removed: ${evidenceResult.data.duplicatesRemoved}`,
+   287→    latencyMs: evidenceResult.latencyMs,
+   288→  }));
+   289→  structuredTraces.push(evTrace);
+   290→
+   291→  // ─── Step C: Letter Drafting ──────────────────────────────────────────
+   292→  await db.case.update({ where: { id: caseId }, data: { state: 'drafting_active' } });
+   293→
+   294→  const draftingResult = await letterDraftingAgent.run({
+   295→    advocateResult, triageResult,
+   296→    policyResearchResult: policyResult.data,
+   297→    evidenceAssemblyResult: evidenceResult.data,
+   298→  });
+   299→  traces.push(draftingResult.trace);
+   300→  const drTrace = await emitTraceEvent(toStructuredTrace(caseId, {
+   301→    agent: 'letter-drafting', step: 'draft_composition', timestamp: new Date().toISOString(),
+   302→    status: 'completed', detail: `Drafted appeal letter: ${draftingResult.data.wordCount} words, ${draftingResult.data.citationCount} citations`,
+   303→    latencyMs: draftingResult.latencyMs,
+   304→  }));
+   305→  structuredTraces.push(drTrace);
+   306→
+   307→  // Record letter version
+   308→  const letterVersion = addSystemLetterVersion(
+   309→    caseId,
+   310→    draftingResult.data.appealLetter,
+   311→    draftingResult.data.inlineCitations.map(ic => ({
+   312→      number: ic.number,
+   313→      evidenceId: ic.evidenceId,
+   314→      source: ic.source,
+   315→      documentName: ic.documentName,
+   316→      contentHash: ic.contentHash,
+   317→      claimText: ic.claimText,
+   318→      provenanceTier: ic.provenanceTier,
+   319→    })),
+   320→    draftingResult.data.wordCount,
+   321→  );
+   322→
+   323→  // ─── Step D: Quality Review ───────────────────────────────────────────
+   324→  await db.case.update({ where: { id: caseId }, data: { state: 'quality_review' } });
+   325→
+   326→  const qualityResult = await qualityReviewAgent.run({
+   327→    letterDraftingResult: draftingResult.data,
+   328→    evidenceAssemblyResult: evidenceResult.data,
+   329→    triageResult,
+   330→  });
+   331→  traces.push(qualityResult.trace);
+   332→  const qrTrace = await emitTraceEvent(toStructuredTrace(caseId, {
+   333→    agent: 'quality-review', step: 'adversarial_battery', timestamp: new Date().toISOString(),
+   334→    status: qualityResult.data.overallVerdict === 'PASS' ? 'completed' : 'blocked',
+   335→    detail: `Quality Review: ${qualityResult.data.overallVerdict} (score: ${qualityResult.data.overallScore}), ${qualityResult.data.citationsVerified}/5 citations verified, ${qualityResult.data.unsupportedClaims} unsupported claims`,
+   336→    latencyMs: qualityResult.latencyMs,
+   337→  }));
+   338→  structuredTraces.push(qrTrace);
+   339→
+   340→  // If Quality Review FAILED → pipeline stops
+   341→  if (!qualityResult.data.canProceed) {
+   342→    const failTrace = await emitTraceEvent({
+   343→      caseId, agent: 'pipeline', step: 'quality_review_failed',
+   344→      status: 'blocked', detail: `Quality Review FAILED. Pipeline STOPPED. Score: ${qualityResult.data.overallScore}`,
+   345→      timestamp: new Date().toISOString(),
+   346→    });
+   347→    structuredTraces.push(failTrace);
+   348→
+   349→    return {
+   350→      advocate: advocateResult,
+   351→      triage: triageResult,
+   352→      gate1: { status: 'approved', gateId: gate.id, confirmPrompt: gate.reviewer_note || 'Gate 1 approved' },
+   353→      policyResearch: policyResult.data,
+   354→      evidenceAssembly: evidenceResult.data,
+   355→      letterDrafting: draftingResult.data,
+   356→      qualityReview: qualityResult.data,
+   357→      gate2: null,
+   358→      pipelineStatus: 'quality_review_failed',
+   359→      caseId,
+   360→      latencyMs: Date.now() - totalStart,
+   361→      traces,
+   362→      structuredTraces,
+   363→      traceChecklist: buildTraceChecklist(structuredTraces),
+   364→      letterVersion: letterVersion.version,
+   365→    };
+   366→  }
+   367→
+   368→  // ─── Quality Review PASSED → Create Gate 2 ───────────────────────────
+   369→  await db.case.update({ where: { id: caseId }, data: { state: 'hitl_gate_2' } });
+   370→
+   371→  let gate2Id: string | null = null;
+   372→  try {
+   373→    const gate2 = await db.hitlGate.create({
+   374→      data: {
+   375→        case_id: caseId,
+   376→        gate_number: 2,
+   377→        status: 'pending',
+   378→        reviewer_note: `Quality Review PASSED (score: ${qualityResult.data.overallScore}). Appeal draft ready for final review. ${qualityResult.data.citationsVerified}/5 citations verified, ${qualityResult.data.unsupportedClaims} unsupported claims.`,
+   379→      },
+   380→    });
+   381→    gate2Id = gate2.id;
+   382→    const g2Trace = await emitTraceEvent({
+   383→      caseId, agent: 'pipeline', step: 'create_gate2',
+   384→      status: 'completed', detail: `Created HITL Gate 2 (${gate2.id}). Pipeline STOPPED — awaiting human approval of appeal.`,
+   385→      timestamp: new Date().toISOString(),
+   386→    });
+   387→    structuredTraces.push(g2Trace);
+   388→  } catch {
+   389→    // Non-critical
+   390→  }
+   391→
+   392→  return {
+   393→    advocate: advocateResult,
+   394→    triage: triageResult,
+   395→    gate1: { status: 'approved', gateId: gate.id, confirmPrompt: gate.reviewer_note || 'Gate 1 approved' },
+   396→    policyResearch: policyResult.data,
+   397→    evidenceAssembly: evidenceResult.data,
+   398→    letterDrafting: draftingResult.data,
+   399→    qualityReview: qualityResult.data,
+   400→    gate2: {
+   401→      status: 'pending',
+   402→      gateId: gate2Id,
+   403→      reviewNote: `Quality Review PASSED. Appeal ready for final review. Score: ${qualityResult.data.overallScore}`,
+   404→      appealLetter: draftingResult.data.appealLetter,
+   405→      citationCount: draftingResult.data.citationCount,
+   406→      qualityScore: qualityResult.data.overallScore,
+   407→    },
+   408→    pipelineStatus: 'awaiting_gate2',
+   409→    caseId,
+   410→    latencyMs: Date.now() - totalStart,
+   411→    traces,
+   412→    structuredTraces,
+   413→    traceChecklist: buildTraceChecklist(structuredTraces),
+   414→    letterVersion: letterVersion.version,
+   415→  };
+   416→}
+   417→
+   418→// ─── Resolve Gate 2 ────────────────────────────────────────────────────────
+   419→
+   420→export async function resolveGate2(
+   421→  caseId: string,
+   422→  resolution: 'approved' | 'rejected',
+   423→  editedLetter?: string,
+   424→  editReason?: string,
+   425→): Promise<{
+   426→  success: boolean;
+   427→  newState: string;
+   428→  letterVersion: number;
+   429→  gate2Status: string;
+   430→}> {
+   431→  const gate2 = await db.hitlGate.findFirst({ where: { case_id: caseId, gate_number: 2 } });
+   432→  if (!gate2) throw new Error(`Gate 2 not found for case ${caseId}`);
+   433→
+   434→  await db.hitlGate.update({
+   435→    where: { id: gate2.id },
+   436→    data: {
+   437→      status: resolution === 'approved' ? 'approved' : 'rejected',
+   438→      resolved_at: new Date(),
+   439→      reviewer_note: editReason || (resolution === 'approved' ? 'Appeal approved by human reviewer' : 'Appeal rejected by human reviewer'),
+   440→    },
+   441→  });
+   442→
+   443→  await emitTraceEvent({
+   444→    caseId, agent: 'pipeline', step: `resolve_gate2_${resolution}`,
+   445→    status: 'completed', detail: `Gate 2 resolved as ${resolution} for case ${caseId}`,
+   446→    timestamp: new Date().toISOString(),
+   447→  });
+   448→
+   449→  // If letter was edited, record a new version
+   450→  let letterVersion = 0;
+   451→  if (editedLetter) {
+   452→    const currentVersion = getCurrentLetterVersion(caseId);
+   453→    const version = addHumanLetterVersion(
+   454→      caseId,
+   455→      editedLetter,
+   456→      currentVersion?.inlineCitations || [],
+   457→      editedLetter.split(/\s+/).filter(w => w.length > 0).length,
+   458→      editReason || 'Human edit before approval',
+   459→    );
+   460→    letterVersion = version.version;
+   461→  } else {
+   462→    const currentVersion = getCurrentLetterVersion(caseId);
+   463→    letterVersion = currentVersion?.version || 1;
+   464→  }
+   465→
+   466→  // Update case state
+   467→  if (resolution === 'approved') {
+   468→    await db.case.update({ where: { id: caseId }, data: { state: 'approved' } });
+   469→    await emitTraceEvent({
+   470→      caseId, agent: 'pipeline', step: 'state_approved',
+   471→      status: 'completed', detail: `Case ${caseId} state: hitl_gate_2 → approved`,
+   472→      timestamp: new Date().toISOString(),
+   473→    });
+   474→    return { success: true, newState: 'approved', letterVersion, gate2Status: 'approved' };
+   475→  } else {
+   476→    await db.case.update({ where: { id: caseId }, data: { state: 'hitl_gate_2' } });
+   477→    await emitTraceEvent({
+   478→      caseId, agent: 'pipeline', step: 'gate2_rejected',
+   479→      status: 'blocked', detail: `Gate 2 rejected for case ${caseId}. Appeal requires revision.`,
+   480→      timestamp: new Date().toISOString(),
+   481→    });
+   482→    return { success: false, newState: 'hitl_gate_2', letterVersion, gate2Status: 'rejected' };
+   483→  }
+   484→}
+   485→
+   486→// ─── Submit Appeal (after Gate 2 approval) ─────────────────────────────────
+   487→
+   488→export async function submitAppeal(caseId: string): Promise<{ success: boolean; newState: string }> {
+   489→  const caseRecord = await db.case.findUnique({ where: { id: caseId } });
+   490→  if (!caseRecord) throw new Error(`Case ${caseId} not found`);
+   491→  if (caseRecord.state !== 'approved') throw new Error(`Case must be in 'approved' state to submit. Current: ${caseRecord.state}`);
+   492→
+   493→  await db.case.update({ where: { id: caseId }, data: { state: 'submitted' } });
+   494→  await emitTraceEvent({
+   495→    caseId, agent: 'pipeline', step: 'submit_appeal',
+   496→    status: 'completed', detail: `Appeal submitted for case ${caseId}`,
+   497→    timestamp: new Date().toISOString(),
+   498→  });
+   499→
+   500→  return { success: true, newState: 'submitted' };
+   501→}
+   502→
+   503→// ─── Triage Edit → Re-run Policy Research ─────────────────────────────────
+   504→
+   505→export async function editTriageAndRerun(
+   506→  caseId: string,
+   507→  field: string,
+   508→  oldValue: string,
+   509→  newValue: string,
+   510→  currentTriageResult: TriageResult,
+   511→): Promise<{
+   512→  updatedTriage: TriageResult;
+   513→  newPolicyResearch: PolicyResearchResult;
+   514→  traceEvent: StructuredTraceEvent;
+   515→}> {
+   516→  const { recordTriageEdit } = await import('./letter-version-history');
+   517→  recordTriageEdit(caseId, field, oldValue, newValue);
+   518→
+   519→  // Apply the edit to triage result
+   520→  const updatedTriage: TriageResult = { ...currentTriageResult };
+   521→  switch (field) {
+   522→    case 'payer':
+   523→      updatedTriage.denialJson = { ...updatedTriage.denialJson, payer: newValue };
+   524→      break;
+   525→    case 'reasonCode':
+   526→      updatedTriage.denialJson = { ...updatedTriage.denialJson, reasonCode: newValue };
+   527→      break;
+   528→    case 'denialType':
+   529→      updatedTriage.denialJson = { ...updatedTriage.denialJson, denialType: newValue, denialTypeLabel: newValue, category: newValue };
+   530→      break;
+   531→  }
+   532→
+   533→  // Re-run Policy Research with updated context
+   534→  const newPolicyResult = await policyResearchAgent.run({ triageResult: updatedTriage });
+   535→
+   536→  const traceEvent = await emitTraceEvent({
+   537→    caseId, agent: 'policy-research', step: 'rerun_after_edit',
+   538→    status: 'completed', detail: `Re-ran Policy Research after triage edit "${field}": "${oldValue}" → "${newValue}". Retrieved ${newPolicyResult.data.clauses.length} clauses.`,
+   539→    timestamp: new Date().toISOString(),
+   540→    latencyMs: newPolicyResult.latencyMs,
+   541→    references: newPolicyResult.data.clauses.map(c => c.clauseId),
+   542→    metadata: { field, oldValue, newValue },
+   543→  });
+   544→
+   545→  return { updatedTriage, newPolicyResearch: newPolicyResult.data, traceEvent };
+   546→}
+   547→
+   548→// ─── Gate Test ─────────────────────────────────────────────────────────────
+   549→
+   550→export async function runDay6GateTest(
+   551→  input: FullPipelineInput,
+   552→): Promise<{
+   553→  fullWorkflowCompleted: boolean;
+   554→  traceEventCount: number;
+   555→  bothGatesWorking: boolean;
+   556→  gate1BlocksPipeline: boolean;
+   557→  gate2BlocksSubmission: boolean;
+   558→  traceAuditable: boolean;
+   559→  traceChecklist: TraceChecklistItem[];
+   560→  gateResult: 'PASS' | 'FAIL';
+   561→}> {
+   562→  // Run the full pipeline up to Gate 1
+   563→  const phase1 = await runFullPipeline(input);
+   564→  const caseId = phase1.caseId!;
+   565→
+   566→  // Gate 1 should block the pipeline
+   567→  const gate1BlocksPipeline = phase1.pipelineStatus === 'awaiting_gate1';
+   568→
+   569→  // Resume with approval → runs all remaining agents → creates Gate 2
+   570→  const phase2 = await resumeAfterGate1(caseId, 'approved');
+   571→  const fullWorkflowCompleted = phase2.pipelineStatus === 'awaiting_gate2';
+   572→
+   573→  // Count trace events (combine both phases)
+   574→  const traceEventCount = phase1.structuredTraces.length + phase2.structuredTraces.length;
+   575→
+   576→  // Verify Gate 2 blocks submission (case should be in hitl_gate_2 state)
+   577→  const caseAfterPhase2 = await db.case.findUnique({ where: { id: caseId } });
+   578→  const gate2BlocksSubmission = caseAfterPhase2?.state === 'hitl_gate_2';
+   579→
+   580→  // Resolve Gate 2 with approval
+   581→  if (phase2.gate2?.gateId) {
+   582→    await resolveGate2(caseId, 'approved');
+   583→  }
+   584→  const caseAfterApproval = await db.case.findUnique({ where: { id: caseId } });
+   585→  const bothGatesWorking = gate1BlocksPipeline && fullWorkflowCompleted && gate2BlocksSubmission && caseAfterApproval?.state === 'approved';
+   586→
+   587→  // Verify trace is auditable (structured events, not free text)
+   588→  const allTraces = [...phase1.structuredTraces, ...phase2.structuredTraces];
+   589→  const traceAuditable = allTraces.every(e =>
+   590→    typeof e.agent === 'string' &&
+   591→    typeof e.step === 'string' &&
+   592→    ['started', 'completed', 'error', 'blocked'].includes(e.status)
+   593→  );
+   594→
+   595→  const gateResult: 'PASS' | 'FAIL' = bothGatesWorking && traceAuditable && traceEventCount >= 7 ? 'PASS' : 'FAIL';
+   596→
+   597→  return {
+   598→    fullWorkflowCompleted,
+   599→    traceEventCount,
+   600→    bothGatesWorking,
+   601→    gate1BlocksPipeline,
+   602→    gate2BlocksSubmission,
+   603→    traceAuditable,
+   604→    traceChecklist: buildTraceChecklist([...phase1.structuredTraces, ...phase2.structuredTraces]),
+   605→    gateResult,
+   606→  };
+   607→}
+   608→
+   609→// ─── Helpers ───────────────────────────────────────────────────────────────
+   610→
+   611→function buildDefaultTriage(denial: { payer?: string; reason_code?: string; category?: string; confidence?: number | null; } | null): TriageResult {
+   612→  return {
+   613→    denialJson: {
+   614→      payer: denial?.payer || 'Unknown', reasonCode: denial?.reason_code || 'UNKNOWN',
+   615→      denialType: (denial?.category as string) || 'medical_necessity',
+   616→      denialTypeLabel: (denial?.category as string) || 'Medical Necessity',
+   617→      category: (denial?.category as string) || 'medical_necessity',
+   618→      confidence: denial?.confidence || 0.7, cptCodes: [], icdCodes: [], amountDenied: 0, deadline: null,
+   619→    },
+   620→    classification: { isAppealable: true, appealStrategy: 'Medical Necessity — cite clinical guidelines', estimatedSuccessRate: 0.65, keyFactors: ['Clinical guidelines'] },
+   621→    humanConfirmPrompt: 'Gate 1 default prompt',
+   622→  };
+   623→}
+   624→
+   625→function buildDefaultAdvocate(denial: { payer?: string; deadline?: Date | null; } | null): AdvocateResult {
+   626→  return {
+   627→    caseFraming: {
+   628→      patientSummary: 'Case information from existing record', denialImpact: 'Pipeline proceeding — Gate 1 approved',
+   629→      urgencyLevel: 'standard', recommendedActions: [],
+   630→      deadline: denial?.deadline?.toISOString().split('T')[0] || null, deadlineDaysRemaining: null,
+   631→    },
+   632→    empatheticNote: 'The denial classification was confirmed.',
+   633→  };
+   634→}
+   635→
+   636→function buildResult(
+   637→  caseId: string,
+   638→  cachedAdvocateResult: AdvocateResult | undefined,
+   639→  cachedTriageResult: TriageResult | undefined,
+   640→  denial: { payer?: string; reason_code?: string; category?: string; confidence?: number | null; } | null,
+   641→  extra: {
+   642→    gate1: { status: 'rejected'; gateId: string | null; confirmPrompt: string };
+   643→    pipelineStatus: 'gate1_rejected';
+   644→    traces: TraceEvent[];
+   645→    structuredTraces: StructuredTraceEvent[];
+   646→    latencyMs: number;
+   647→  },
+   648→): FullPipelineResult {
+   649→  return {
+   650→    advocate: cachedAdvocateResult || buildDefaultAdvocate(denial),
+   651→    triage: cachedTriageResult || buildDefaultTriage(denial),
+   652→    gate1: extra.gate1,
+   653→    policyResearch: null, evidenceAssembly: null, letterDrafting: null, qualityReview: null, gate2: null,
+   654→    pipelineStatus: extra.pipelineStatus,
+   655→    caseId,
+   656→    latencyMs: extra.latencyMs,
+   657→    traces: extra.traces,
+   658→    structuredTraces: extra.structuredTraces,
+   659→    traceChecklist: buildTraceChecklist(extra.structuredTraces),
+   660→    letterVersion: 0,
+   661→  };
+   662→}
+   663→
