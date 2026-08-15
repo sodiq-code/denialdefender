@@ -1219,3 +1219,67 @@ Stage Summary:
 - Before/After shows Outcome Learning improvement: Top-3 retrieval 70%→88%
 - Principle 5 (honest reporting) enforced: negative deltas reported, not hidden
 - Day 8 Gate: PASSED
+
+---
+Task ID: 10
+Agent: Main Coordinator
+Task: Day 10 — PHI Guard: Front gate of the governance vertex
+
+Work Log:
+- Read both blueprint documents to extract Day 10 exact specification
+- Day 10 spec: "Build the phi-guard service as the front gate. The classifier runs before any agent invocation; a block guarantees zero model calls and is logged. Construct a deliberately sensitive test document. Deliverable: the PHI Guard demo moment — synthetic case → allow; sensitive document → block with 'no model invocation.' Gate: a block is provably a no-invocation event (verified in the decision trace and the audit log)."
+- Created `src/lib/phi-guard.ts` — Core PHI Guard service with:
+  - 10 PHI detection patterns (SSN, MRN, Insurance ID, DOB, Patient Name, Phone, Address, Email, Diagnosis Link, Medication Link)
+  - 3 severity levels (high/medium/low) with composite risk score (0-100)
+  - BLOCK threshold: any high-severity match OR risk score >= 50
+  - Content hashing (SHA-256) for audit deduplication
+  - `classifyContent()` — pure function, no model calls
+  - `runPhiGuard()` — full gate: classify → persist audit → emit trace
+  - `verifyPhiGuardGate()` — 4-check gate verification
+  - Deliberately sensitive test document (SSN, MRN, DOB, patient name, phone, email, medications, diagnosis)
+  - Synthetic test document (public Medicare denial letter)
+  - `runPhiGuardDemo()` — demo moment: synthetic → ALLOW, sensitive → BLOCK
+- Added `PhiGuardAudit` model to Prisma schema with indexes
+- Created 3 API endpoints:
+  - `POST /api/phi-guard` — classify content for PHI
+  - `GET /api/phi-guard` — get audit log
+  - `GET /api/phi-guard/demo` — run demo moment
+  - `GET /api/phi-guard/verify` — gate verification
+- Created `src/components/day10-phi-guard-panel.tsx` — Full UI panel with:
+  - PHI Guard flow diagram (Figure 10.1)
+  - Demo moment: Run Demo button, synthetic result (ALLOW), sensitive result (BLOCK)
+  - Custom classification: textarea + Classify button
+  - PHI Pattern Library (collapsible)
+  - Audit Log (collapsible)
+  - Compliance posture note
+  - Gate verification display (4 checks)
+- Updated `src/app/page.tsx`:
+  - Added "Day 10: PHI Guard" tab with ShieldAlert icon
+  - Added PHI Guard to pipeline flow (Upload → PHI Guard → Triage → ...)
+  - Added PHI Guard to Governance pillar in Architecture
+  - Added PHI Guard to System Status section
+- Verified via curl:
+  - Synthetic case: ALLOW (risk=0, 0 patterns) ✅
+  - Sensitive document: BLOCK (risk=100, 6 patterns: SSN, MRN, DOB, patient_name, phone, email) ✅
+  - modelInvocations=0 on BLOCK ✅
+  - Custom classification (SSN+DOB+name): BLOCK (risk=70, 3 patterns) ✅
+  - Gate verification: ALL 4 CHECKS PASSED ✅
+    1. ✅ All BLOCK entries have zero model invocations
+    2. ✅ BLOCK events exist in decision trace for blocked content
+    3. ✅ No agent invocations after BLOCK
+    4. ✅ Every BLOCK in audit log has corresponding trace event
+  - Audit log: 9 entries (5 blocked, 4 allowed), zeroInvocationsOnBlock=true ✅
+- ESLint passes clean
+- Verified UI renders correctly (agent-browser: Day 10 tab visible, panel loads)
+- Pushed to GitHub: commit 4d0b2c8
+
+Stage Summary:
+- Day 10 Gate: PASSED (block is provably a no-invocation event)
+- PHI Guard is the front gate: classifier runs BEFORE any agent invocation
+- BLOCK guarantees zero model calls (provable in decision trace + audit log)
+- Demo moment: synthetic → ALLOW; sensitive → BLOCK with "no model invocation"
+- 10 PHI detection patterns across 3 severity levels
+- Audit log integrity verified (content hash matching)
+- Compliance posture: "prototype intentionally processes no PHI"
+- Files: src/lib/phi-guard.ts, src/components/day10-phi-guard-panel.tsx, 3 API routes
+- Repo: https://github.com/sodiq-code/denialdefender (commit 4d0b2c8)
