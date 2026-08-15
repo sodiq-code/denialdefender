@@ -9,6 +9,7 @@ import { TraceStreamTab } from '@/components/trace-stream-tab';
 import { EvidenceCorpusTab } from '@/components/evidence-corpus-tab';
 import { VerticalSlicePanel } from '@/components/vertical-slice-panel';
 import { ThreeAgentPipelinePanel } from '@/components/three-agent-pipeline-panel';
+import { SixAgentPipelinePanel } from '@/components/six-agent-pipeline-panel';
 import { useTraceStream } from '@/hooks/useTraceStream';
 import {
   Shield,
@@ -39,6 +40,7 @@ import {
   Radio,
   Zap,
   UsersRound,
+  ShieldCheck,
 } from 'lucide-react';
 
 interface AgentFleetHealth {
@@ -190,6 +192,10 @@ export default function Home() {
               <UsersRound className="h-4 w-4" />
               Day 4: Agents 1-3
             </TabsTrigger>
+            <TabsTrigger value="day5-agents" className="gap-1.5">
+              <ShieldCheck className="h-4 w-4" />
+              Day 5: Agents 4-6
+            </TabsTrigger>
             <TabsTrigger value="architecture" className="gap-1.5">
               <Cpu className="h-4 w-4" />
               Architecture
@@ -219,6 +225,11 @@ export default function Home() {
           {/* ── Day 4: Agents 1-3 Tab ──────────────────────────── */}
           <TabsContent value="day4-agents">
             <ThreeAgentPipelinePanel />
+          </TabsContent>
+
+          {/* ── Day 5: Agents 4-6 Tab ──────────────────────────── */}
+          <TabsContent value="day5-agents">
+            <SixAgentPipelinePanel />
           </TabsContent>
 
           {/* ── Architecture Tab ───────────────────────────────── */}
