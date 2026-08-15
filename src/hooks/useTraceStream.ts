@@ -5,7 +5,8 @@ import { io, Socket } from "socket.io-client";
 
 // ─── Gateway Pattern ──────────────────────────────────────────
 // MUST use XTransformPort for gateway routing — NEVER use direct localhost URL
-const SOCKET_URL = "/?XTransformPort=3003";
+// Use relative path + query option so socket.io includes XTransformPort on every request
+const SOCKET_URL = "/";
 
 // ─── Types ────────────────────────────────────────────────────
 export interface TraceEvent {
@@ -100,12 +101,14 @@ export function useTraceStream(): TraceStreamState {
   // ── Initialize socket connection ──────────────────────────
   useEffect(() => {
     const socket: Socket = io(SOCKET_URL, {
-      transports: ["websocket", "polling"],
+      transports: ["polling", "websocket"], // Polling first — works through Caddy gateway
+      upgrade: true, // Will upgrade to websocket if available
+      query: { XTransformPort: "3003" }, // Ensure gateway routing for all requests
       reconnection: true,
-      reconnectionAttempts: 20, // Limit attempts to avoid console spam
-      reconnectionDelay: 2000,
-      reconnectionDelayMax: 30000,
-      timeout: 20000,
+      reconnectionAttempts: 10,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 10000,
+      timeout: 10000,
       autoConnect: true,
     });
 
