@@ -204,3 +204,24 @@ model HitlGate {
   // Relations
   case Case @relation(fields: [case_id], references: [id], onDelete: Cascade)
 }
+
+// Day 10 — PHI Guard Audit Log
+model PhiGuardAudit {
+  id              String   @id @default(cuid())
+  case_id         String
+  content_hash    String   // SHA-256 of classified content
+  verdict         String   // "ALLOW" or "BLOCK"
+  risk_score      Int      // 0-100
+  pattern_count   Int      // Number of PHI patterns detected
+  pattern_types   String   // JSON array of pattern type strings
+  model_invocations Int    @default(0) // MUST be 0 on BLOCK — the gate guarantee
+  blocked_at      DateTime?
+  allowed_at      DateTime?
+  content_preview String   // First 100 chars
+  details         String?  // JSON with patterns and reason
+  timestamp       DateTime @default(now())
+
+  @@index([case_id])
+  @@index([verdict])
+  @@index([content_hash])
+}
