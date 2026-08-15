@@ -1099,3 +1099,94 @@ Stage Summary:
   - src/app/2api/full-pipeline/gate-test/route.ts (new — 50+ lines)
   - src/components/day6-pipeline-panel.tsx (C new — 836 lines)
   - src/app/page.tsx (modified0 modified — added Day 6 tab)
+
+---
+Task ID: 7-outcome-learning
+Agent: Main Coordinator
+Task: Day 7 — Outcome Learning harness v1 + Demo Reliability (Validation Gate 3)
+
+Work Log:
+- Read both blueprint documents to extract Day 7 specification
+- Day 7 (Ultimate Blueprint): "Build the eval service. Define the ten held-out cases under data/cases/held_out/. Implement the before-scoring run: top-1 accuracy, top-3 accuracy, citation grounding, argument selection, appeal quality. Pin temperature to zero for eval runs. Build the outcome-ingestion path. Deliverable: a before-scores snapshot for the ten held-out cases, checked into the repo. Gate: the snapshot is deterministic — running it twice produces identical scores."
+- Day 7 (Grand Prize Blueprint): "Validation Gate 3 — Demo Flow Reliable with Fallback. Implement all 3 execution paths (Live / Fallback / Demo-safe). Assert: live path <90s; fallback engages within 5s of API failure; demo-safe path <10s."
+
+Created 10 held-out test cases:
+- data/cases/held_out/case_001_medical_necessity_knee.json (CO50, TKA, UnitedHealthcare)
+- data/cases/held_out/case_002_prior_auth_mri.json (CO197, MRI Brain, Anthem BlueCross)
+- data/cases/held_out/case_003_coding_mismatch_endoscopy.json (CO11, Upper GI Endoscopy, Aetna)
+- data/cases/held_out/case_004_experimental_investigational.json (CO27, ESI, Cigna)
+- data/cases/held_out/case_005_non_covered_service.json (CO96, Psychotherapy, Humana)
+- data/cases/held_out/case_006_coordination_benefits.json (CO22, Echocardiography, Kaiser Permanente)
+- data/cases/held_out/case_007_modifier_inconsistency.json (CO4, Central Venous Catheter, Blue Shield of CA)
+- data/cases/held_out/case_008_timely_filing.json (CO29, Office Visit, Molina Healthcare)
+- data/cases/held_out/case_009_hip_replacement_mn.json (CO16, THA, Centene)
+- data/cases/held_out/case_010_deductible_patient_resp.json (PR1, Office Visit, WellCare — NOT appealable)
+
+Created Eval Service (src/lib/eval-service.ts):
+- 5 metrics: top-1 accuracy, top-3 accuracy, citation grounding, argument selection, appeal quality
+- Temperature pinned to 0 for deterministic eval runs
+- Determinism hash computed from all scores (SHA-256)
+- verifyDeterminism() runs eval N times and compares hashes
+- saveEvalSnapshot() / loadEvalSnapshot() for repo check-in
+- generateEvalReport() with delta from previous snapshot
+
+Created Outcome Ingestion Path (src/lib/outcome-ingestion.ts):
+- ingestOutcome(): single outcome → Memory Bank weight update
+- ingestOutcomeBatch(): batch processing for 50+ outcomes
+- Weight rules: WON +0.05, PARTIAL +0.02, LOST -0.03 (capped [0.1, 1.0])
+- Primary: SQLite Memory Bank via Prisma
+- Fallback: Firestore (GCP) when Memory Bank unstable
+- Category-level weight adjustments (half delta to avoid overcorrection)
+- generatePublicOutcomeRecords(): 5 real CMS MA appeal data records
+- generateSyntheticOutcomeRecords(): clearly labeled synthetic (NOT fake wins)
+
+Created Execution Paths (src/lib/execution-paths.ts):
+- 3 paths# Live (inline workflow engine, <90s), Fallback (template-based, <5s), Demo-safe (canned data, <10s)
+- executeAutoSelect(): tries Live → Fallback → Demo-safe
+- Pre-built templates for 5 denial categories × any payer
+- Canned demo-safe appeals for 5 denial categories
+- testDemoReliability(): full Validation Gate 3 test
+
+Created API routes:
+- /api/eval (GET: list cases, POST: run eval)
+- /api/eval/determinism (POST: verify determinism gate)
+- /api/eval/snapshot (GET: load snapshot, POST: generate snapshot)
+- /api/outcome-ingest (GET: sources, POST: ingest outcomes)
+- /api/execution-paths (GET: path info, POST: execute path)
+- /api/execution-paths/demo-test (POST: Validation Gate 3)
+
+Created Day 7 UI Panel (src/components/day7-eval-panel.tsx):
+- 3 sub-tabs: Eval Service, Outcome Learning, Execution Paths
+- Held-out cases display with appealability badges
+- Aggregate metrics visualization with progress bars
+- Per-case breakdown table
+- Determinism gate pass/fail alert
+- Outcome ingestion buttons (public records, synthetic)
+- Three execution path cards with test buttons
+- Demo reliability gate result display
+
+Added Day 7 tab to main page (src/app/page.tsx)
+
+Verification Results:
+✅ GET /api/eval returns all 10 held-out cases (200, 587ms)
+✅ Fallback path: 6ms latency, 1232-char appeal, 2 citations (200)
+✅ Demo-safe path: 51ms latency, 1450-char appeal, quality 0.82 (200)
+✅ Live path: 919ms latency, 2251-char appeal, 5 citations, quality 0.888 (200)
+✅ Outcome ingestion (public): 35ms, 1 weight update, Memory Bank status (200)
+✅ Outcome ingestion (synthetic): 43ms, 2 weight updates (200)
+✅ Demo Reliability Test: Gate GO — all paths pass (200, 1400ms)
+✅ Before-scores snapshot generated: 10 cases, temp=0, hash=2b86d3a389127936
+✅ Determinism Gate PASSED — 2 runs produce identical hash 2b86d3a389127936
+✅ Day 7 UI panel renders correctly with all 3 sub-tabs
+✅ "Load Held-Out Cases" button works in browser
+✅ ESLint passes with no errors
+
+Stage Summary:
+- Day 7 eval service complete with 5 metrics and temperature=0 determinism
+- 10 held-out cases checked into data/cases/held_out/
+- Before-scores snapshot saved to data/eval_snapshots/before-scores.json
+- DETERMINISM GATE PASSED: identical hash across 2 consecutive runs
+- Outcome ingestion path operational: Memory Bank (primary) + Firestore (fallback)
+- 3 execution paths implemented: Live (<90s), Fallback (<5s), Demo-safe (<10s)
+- VALIDATION GATE 3: GO — demo survives API failure, all paths produce usable appeals
+- Outcome Learning loop: Verdict → Weight Delta → Memory Bank → Better Retrieval
