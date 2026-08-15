@@ -11,7 +11,7 @@
 
 import { runInlineWorkflow } from "./workflow-engine";
 
-const AGENT_FLEET_URL = 'http://localhost:3004';
+const AGENT_FLEET_URL = process.env.AGENT_FLEET_URL || 'http://localhost:3004';
 const AGENT_FLEET_TIMEOUT_MS = 5_000;
 
 // ─── Types ────────────────────────────────────────────────────────

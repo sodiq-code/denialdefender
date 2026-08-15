@@ -4,9 +4,10 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { io, Socket } from "socket.io-client";
 
 // ─── Gateway Pattern ──────────────────────────────────────────
-// MUST use XTransformPort for gateway routing — NEVER use direct localhost URL
-// Use relative path + query option so socket.io includes XTransformPort on every request
-const SOCKET_URL = "/";
+// In production (Cloud Run), use NEXT_PUBLIC_TRACE_STREAM_URL directly.
+// In sandbox/development, use relative path + XTransformPort for gateway routing.
+const TRACE_STREAM_URL = process.env.NEXT_PUBLIC_TRACE_STREAM_URL || "";
+const IS_CLOUD_RUN = TRACE_STREAM_URL !== "";
 
 // ─── Types ────────────────────────────────────────────────────
 export interface TraceEvent {
@@ -100,10 +101,11 @@ export function useTraceStream(): TraceStreamState {
 
   // ── Initialize socket connection ──────────────────────────
   useEffect(() => {
-    const socket: Socket = io(SOCKET_URL, {
+    const socket: Socket = io(IS_CLOUD_RUN ? TRACE_STREAM_URL : "/", {
       transports: ["polling", "websocket"], // Polling first — works through Caddy gateway
       upgrade: true, // Will upgrade to websocket if available
-      query: { XTransformPort: "3003" }, // Ensure gateway routing for all requests
+      // Only use XTransformPort in sandbox mode (not Cloud Run)
+      ...(IS_CLOUD_RUN ? {} : { query: { XTransformPort: "3003" } }),
       reconnection: true,
       reconnectionAttempts: 10,
       reconnectionDelay: 1000,
