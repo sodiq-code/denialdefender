@@ -14,6 +14,7 @@ import { Day6PipelinePanel } from '@/components/day6-pipeline-panel';
 import Day7EvalPanel from '@/components/day7-eval-panel';
 import Day8ExperimentPanel from '@/components/day8-experiment-panel';
 import Day9TwoCasePanel from '@/components/day9-two-case-panel';
+import Day10PhiGuardPanel from '@/components/day10-phi-guard-panel';
 import { useTraceStream } from '@/hooks/useTraceStream';
 import {
   Shield,
@@ -48,6 +49,8 @@ import {
   FlaskConical,
   TrendingUp,
   Brain,
+  ShieldAlert,
+  Lock,
 } from 'lucide-react';
 
 interface AgentFleetHealth {
@@ -221,6 +224,10 @@ export default function Home() {
               <Brain className="h-4 w-4" />
               Day 9: Two-Case Demo
             </TabsTrigger>
+            <TabsTrigger value="day10-phi-guard" className="gap-1.5">
+              <ShieldAlert className="h-4 w-4" />
+              Day 10: PHI Guard
+            </TabsTrigger>
             <TabsTrigger value="architecture" className="gap-1.5">
               <Cpu className="h-4 w-4" />
               Architecture
@@ -277,6 +284,11 @@ export default function Home() {
             <Day9TwoCasePanel />
           </TabsContent>
 
+          {/* ── Day 10: PHI Guard Tab ────────────────────────────── */}
+          <TabsContent value="day10-phi-guard">
+            <Day10PhiGuardPanel />
+          </TabsContent>
+
           {/* ── Architecture Tab ───────────────────────────────── */}
           <TabsContent value="architecture">
             <div className="space-y-6">
@@ -330,9 +342,10 @@ export default function Home() {
                       <h4 className="font-semibold text-amber-700 dark:text-amber-300">Governance</h4>
                     </div>
                     <p className="text-sm text-muted-foreground mb-3">
-                      Human-in-the-loop gates ensure every critical decision requires explicit human approval.
+                      Human-in-the-loop gates ensure every critical decision requires explicit human approval. PHI Guard is the front gate.
                     </p>
                     <ul className="space-y-1.5 text-xs text-muted-foreground">
+                      <li className="flex items-center gap-1.5"><CheckCircle2 className="h-3 w-3 text-amber-500" /> <strong>PHI Guard</strong> — front gate (BLOCK = zero model calls)</li>
                       <li className="flex items-center gap-1.5"><CheckCircle2 className="h-3 w-3 text-amber-500" /> Gate 1: Confirm Denial Understanding</li>
                       <li className="flex items-center gap-1.5"><CheckCircle2 className="h-3 w-3 text-amber-500" /> Gate 2: Approve Final Appeal Letter</li>
                       <li className="flex items-center gap-1.5"><CheckCircle2 className="h-3 w-3 text-amber-500" /> Full decision trace with audit trail</li>
@@ -347,7 +360,8 @@ export default function Home() {
                 <h3 className="text-lg font-semibold mb-4">Pipeline Flow</h3>
                 <div className="flex items-center gap-2 overflow-x-auto pb-2 text-sm">
                   {[
-                    { label: 'Created', color: 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300' },
+                    { label: 'Upload', color: 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300' },
+                    { label: 'PHI Guard', color: 'bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300' },
                     { label: 'Triage', color: 'bg-teal-100 dark:bg-teal-900 text-teal-700 dark:text-teal-300' },
                     { label: 'Gate 1', color: 'bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300' },
                     { label: 'Evidence', color: 'bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300' },
@@ -500,6 +514,14 @@ export default function Home() {
               <div>
                 <h3 className="text-lg font-semibold mb-4">System Status</h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  <div className="flex items-center gap-3 rounded-lg border p-3">
+                    <ShieldAlert className="h-4 w-4 text-amber-600" />
+                    <div className="flex-1">
+                      <p className="text-sm font-medium">PHI Guard</p>
+                      <p className="text-xs text-muted-foreground">Front gate — BLOCK = zero model calls</p>
+                    </div>
+                    <Badge className="bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200 text-[10px]">Active</Badge>
+                  </div>
                   <div className="flex items-center gap-3 rounded-lg border p-3">
                     <Server className="h-4 w-4 text-muted-foreground" />
                     <div className="flex-1">
