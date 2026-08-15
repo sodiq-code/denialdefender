@@ -16,6 +16,7 @@ import Day8ExperimentPanel from '@/components/day8-experiment-panel';
 import Day9TwoCasePanel from '@/components/day9-two-case-panel';
 import Day10PhiGuardPanel from '@/components/day10-phi-guard-panel';
 import Day11GovernancePanel from '@/components/day11-governance-panel';
+import { Day12PolishPanel } from '@/components/day12-polish-panel';
 import { useTraceStream } from '@/hooks/useTraceStream';
 import {
   Shield,
@@ -53,6 +54,7 @@ import {
   ShieldAlert,
   Lock,
   Fingerprint,
+  Globe,
 } from 'lucide-react';
 
 interface AgentFleetHealth {
@@ -234,6 +236,10 @@ export default function Home() {
               <Scale className="h-4 w-4" />
               Day 11: Governance
             </TabsTrigger>
+            <TabsTrigger value="day12-polish" className="gap-1.5">
+              <Globe className="h-4 w-4" />
+              Day 12: NPI + Polish
+            </TabsTrigger>
             <TabsTrigger value="architecture" className="gap-1.5">
               <Cpu className="h-4 w-4" />
               Architecture
@@ -298,6 +304,11 @@ export default function Home() {
           {/* ── Day 11: Governance Tab ─────────────────────────── */}
           <TabsContent value="day11-governance">
             <Day11GovernancePanel />
+          </TabsContent>
+
+          {/* ── Day 12: NPI + Polish Tab ─────────────────────────── */}
+          <TabsContent value="day12-polish">
+            <Day12PolishPanel />
           </TabsContent>
 
           {/* ── Architecture Tab ───────────────────────────────── */}
@@ -380,6 +391,7 @@ export default function Home() {
                     { label: 'Triage', color: 'bg-teal-100 dark:bg-teal-900 text-teal-700 dark:text-teal-300' },
                     { label: 'Gate 1', color: 'bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300' },
                     { label: 'Evidence', color: 'bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300' },
+                    { label: 'NPI Lookup', color: 'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300' },
                     { label: 'Drafting', color: 'bg-teal-100 dark:bg-teal-900 text-teal-700 dark:text-teal-300' },
                     { label: 'QA', color: 'bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300' },
                     { label: 'Gate 2', color: 'bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300' },
@@ -616,6 +628,22 @@ export default function Home() {
                       <p className="text-xs text-muted-foreground">Prisma ORM + SQLite</p>
                     </div>
                     <Badge className="bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200 text-[10px]">Connected</Badge>
+                  </div>
+                  <div className="flex items-center gap-3 rounded-lg border p-3">
+                    <Globe className="h-4 w-4 text-blue-600" />
+                    <div className="flex-1">
+                      <p className="text-sm font-medium">NPI Registry</p>
+                      <p className="text-xs text-muted-foreground">Provider validation — npiregistry.cms.hhs.gov</p>
+                    </div>
+                    <Badge className="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 text-[10px]">Active</Badge>
+                  </div>
+                  <div className="flex items-center gap-3 rounded-lg border p-3">
+                    <BookOpen className="h-4 w-4 text-purple-600" />
+                    <div className="flex-1">
+                      <p className="text-sm font-medium">Citation Classifier</p>
+                      <p className="text-xs text-muted-foreground">Gemma on-device credibility scoring</p>
+                    </div>
+                    <Badge className="bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200 text-[10px]">Active</Badge>
                   </div>
                 </div>
               </div>
