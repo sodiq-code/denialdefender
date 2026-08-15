@@ -8,6 +8,7 @@ import { CaseDashboard } from '@/components/case-dashboard';
 import { TraceStreamTab } from '@/components/trace-stream-tab';
 import { EvidenceCorpusTab } from '@/components/evidence-corpus-tab';
 import { VerticalSlicePanel } from '@/components/vertical-slice-panel';
+import { ThreeAgentPipelinePanel } from '@/components/three-agent-pipeline-panel';
 import { useTraceStream } from '@/hooks/useTraceStream';
 import {
   Shield,
@@ -37,6 +38,7 @@ import {
   Database,
   Radio,
   Zap,
+  UsersRound,
 } from 'lucide-react';
 
 interface AgentFleetHealth {
@@ -184,6 +186,10 @@ export default function Home() {
               <Zap className="h-4 w-4" />
               Vertical Slice
             </TabsTrigger>
+            <TabsTrigger value="day4-agents" className="gap-1.5">
+              <UsersRound className="h-4 w-4" />
+              Day 4: Agents 1-3
+            </TabsTrigger>
             <TabsTrigger value="architecture" className="gap-1.5">
               <Cpu className="h-4 w-4" />
               Architecture
@@ -208,6 +214,11 @@ export default function Home() {
           {/* ── Vertical Slice Tab ───────────────────────────── */}
           <TabsContent value="vertical-slice">
             <VerticalSlicePanel />
+          </TabsContent>
+
+          {/* ── Day 4: Agents 1-3 Tab ──────────────────────────── */}
+          <TabsContent value="day4-agents">
+            <ThreeAgentPipelinePanel />
           </TabsContent>
 
           {/* ── Architecture Tab ───────────────────────────────── */}
