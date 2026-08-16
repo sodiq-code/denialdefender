@@ -32,8 +32,13 @@ const io = new Server(httpServer, {
     origin: [
       "http://localhost:3000",
       "http://127.0.0.1:3000",
+      // Production Cloud Run URLs
+      "https://denialdefender-web-7ffj23k2va-ew.a.run.app",
+      "https://denialdefender-web-315133452553.europe-west1.run.app",
       // Allow sandbox preview origins
       /^https?:\/\/.*\.preview\..*$/,
+      // Allow any Cloud Run URL
+      /^https:\/\/denialdefender-web.*\.run\.app$/,
     ],
     methods: ["GET", "POST"],
     credentials: true,

@@ -1778,3 +1778,30 @@ Stage Summary:
 - Health endpoint returns: {"status":"healthy","service":"denialdefender-web"}
 - Platform status returns: 3 adopted GEAP components, platformAvailable=true, projectId=denialdefender
 - Agent registry returns: 8 agents, all healthy
+---
+Task ID: deploy-2
+Agent: main
+Task: Fix agent-fleet and trace-stream (403 errors), add Gemini API keys, fix CORS
+
+Work Log:
+- Diagnosed agent-fleet returning 403: deployed with --no-allow-unauthenticated, Cloud Run health checks couldn't reach it
+- Diagnosed trace-stream CORS limited to localhost:3000, blocking production web service
+- Created Secret Manager secrets: gemini-api-key-1, gemini-api-key-2
+- Fixed agent-fleet: added allUsers IAM invoker binding (public access for health checks)
+- Fixed agent-fleet: added GEMINI_API_KEY and GEMINI_API_KEY_2 env vars → mock_mode changed from true to false
+- Fixed trace-stream: added production Cloud Run URLs to CORS origin list
+- Rebuilt trace-stream image via Cloud Build, redeployed with CORS fix
+- Added GEMINI_API_KEY and GOOGLE_AGENT_PLATFORM_ENABLED=true to web service
+- Verified all 3 services return HTTP 200 with correct data:
+  - Agent fleet: {"status":"ok", "mock_mode":false, "model":"gemini-3.5-flash"}
+  - Trace stream: {"status":"ok", "connectedClients":0}
+  - Web service: {"status":"healthy"}
+- Browser verification: full app loads, all tabs work, Platform Status Card shows "3 adopted components"
+- Zero console errors
+
+Stage Summary:
+- ALL 3 services fully operational with real Gemini API
+- Agent fleet running in LIVE mode (mock_mode: false) with gemini-3.5-flash
+- Trace stream accepting connections from production web service
+- Web service connected to both agent-fleet and trace-stream
+- Google Agent Platform integration enabled (GOOGLE_AGENT_PLATFORM_ENABLED=true)
