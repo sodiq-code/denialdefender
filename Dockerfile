@@ -5,24 +5,29 @@
 # Uses Next.js standalone output for minimal image size.
 #
 # Build:  docker build -t denialdefender-web .
-# Run:    docker run -p 3000:3000 -e GCP_PROJECT_ID=denialdefender denialdefender-web
+# Run:    docker run -p 8080:8080 -e GCP_PROJECT_ID=denialdefender denialdefender-web
+#
+# Cloud Run injects PORT=8080 by default. The standalone Next.js server
+# respects the PORT environment variable automatically.
+#
+# Note: The agent-fleet service has its own Dockerfile at
+#       mini-services/agent-fleet/Dockerfile and is deployed separately.
 # ══════════════════════════════════════════════════════════════════════════════
 
 # ── Stage 1: Dependencies ─────────────────────────────────────────────────────
 FROM node:20-alpine AS deps
 RUN apk add --no-cache libc6-compat python3 make g++
 
-# Install bun for package management
-RUN npm install -g bun@latest
-
 WORKDIR /app
 
 # Copy package manifests for dependency install
 COPY package.json bun.lock ./
 
-# Install production dependencies using bun
-# We use npm install here for maximum Docker cache compatibility
-RUN npm ci --omit=dev
+# Install bun for reproducible dependency installation (matches local dev)
+RUN npm install -g bun@latest
+
+# Install all dependencies (including devDependencies needed for build)
+RUN bun install --frozen-lockfile
 
 # ── Stage 2: Build ────────────────────────────────────────────────────────────
 FROM node:20-alpine AS builder
@@ -51,7 +56,8 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
-ENV PORT=3000
+# Cloud Run injects PORT=8080 by default; standalone server.js respects it
+ENV PORT=8080
 
 # Create non-root user for security
 RUN addgroup --system --gid 1001 nodejs && \
@@ -72,16 +78,17 @@ COPY --from=builder --chown=nextjs:nodejs /app/db ./db
 
 USER nextjs
 
-EXPOSE 3000
+# Cloud Run default port
+EXPOSE 8080
 
 # GCP environment variables (overridden at deploy time via Cloud Run env config)
 ENV GCP_PROJECT_ID=denialdefender
 ENV GCP_REGION=europe-west1
 ENV FIRESTORE_LOCATION=eur3
 
-# Health check
+# Health check — Cloud Run uses this to determine container readiness
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
-  CMD wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1
+  CMD wget --no-verbose --tries=1 --spider http://localhost:${PORT:-8080}/api/health || exit 1
 
-# Start Next.js standalone server
+# Start Next.js standalone server (respects PORT env var)
 CMD ["node", "server.js"]

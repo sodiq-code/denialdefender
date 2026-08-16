@@ -1,11 +1,21 @@
 /**
- * API Route — Model Armor Scan
+ * API Route — Model Armor Scan (Task 4)
  *
  * POST /api/governance/armor — Scan content for prompt-injection/jailbreak
+ *   Response now includes `scanner` field ("geap" | "regex") and `policyId`
+ *   when GEAP Model Armor API was used.
+ *
  * GET  /api/governance/armor — Get Model Armor audit log
+ *   Supports `?config=true` to return GEAP configuration status.
  */
 import { NextRequest, NextResponse } from 'next/server';
-import { scanContent, runModelArmor, getModelArmorAudit, INJECTION_PATTERNS } from '@/lib/model-armor';
+import {
+  runModelArmor,
+  getModelArmorAudit,
+  INJECTION_PATTERNS,
+  isGEAPAvailable,
+  getGEAPConfig,
+} from '@/lib/model-armor';
 
 export async function POST(request: NextRequest) {
   try {
@@ -41,6 +51,8 @@ export async function POST(request: NextRequest) {
         })),
         reason: result.result.reason,
         sanitizedContent: result.result.sanitizedContent,
+        scanner: result.result.scanner,
+        policyId: result.result.policyId || null,
       },
       auditId: result.auditId,
       traceEventId: result.traceEventId,
@@ -59,6 +71,22 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const caseId = searchParams.get('caseId') || undefined;
     const patterns = searchParams.get('patterns') === 'true';
+    const config = searchParams.get('config') === 'true';
+
+    // Return GEAP configuration status if requested
+    if (config) {
+      const geapAvailable = isGEAPAvailable();
+      const geapConfig = getGEAPConfig();
+      return NextResponse.json({
+        scanner: geapAvailable ? 'geap' : 'regex',
+        geapAvailable,
+        geapConfig: geapAvailable ? {
+          projectId: geapConfig!.projectId,
+          location: geapConfig!.location,
+          policyId: geapConfig!.policyId,
+        } : null,
+      });
+    }
 
     // Return pattern library if requested
     if (patterns) {

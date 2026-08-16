@@ -1,12 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { runSixAgentPipeline } from '@/lib/six-agent-pipeline';
 
+const FLEET_URL = 'http://localhost:3004';
+const FLEET_TIMEOUT_MS = 10_000;
+
 /**
  * POST /api/six-agent-pipeline — Run the six-agent pipeline
- * (Advocate → Triage → Gate 1 → STOPS)
+ * (Advocate → Triage → Gate 1 → Policy → Evidence → Draft → Quality Review)
  *
- * Input: { denialText, payer, patientContext? }
- * Returns: SixAgentPipelineResult with pipelineStatus: 'awaiting_gate1'
+ * Tries the Gemini-backed agent fleet first; falls back to local mock pipeline.
+ * Response includes `dataSource: 'live' | 'mock'` to indicate which was used.
  */
 export async function POST(request: NextRequest) {
   try {
@@ -26,13 +29,175 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const result = await runSixAgentPipeline({
-      denialText: body.denialText,
-      payer: body.payer,
-      patientContext: body.patientContext || undefined,
-    });
+    let dataSource: 'live' | 'mock' = 'mock';
+    let result: Record<string, unknown>;
 
-    return NextResponse.json(result);
+    // ── Try the agent fleet (Gemini-backed) ──
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), FLEET_TIMEOUT_MS);
+
+      const triageRes = await fetch(`${FLEET_URL}/agents/triage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
+        body: JSON.stringify({
+          denial: {
+            denial_code: 'UNKNOWN',
+            denial_reason: body.denialText,
+            carrier_name: body.payer,
+          },
+          patient_context: body.patientContext || {},
+        }),
+      });
+      clearTimeout(timeout);
+
+      if (triageRes.ok) {
+        const triageData = await triageRes.json();
+
+        // Run policy agent
+        const policyController = new AbortController();
+        const policyTimeout = setTimeout(() => policyController.abort(), FLEET_TIMEOUT_MS);
+        const policyRes = await fetch(`${FLEET_URL}/agents/policy`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          signal: policyController.signal,
+          body: JSON.stringify({
+            denial: {
+              denial_code: 'UNKNOWN',
+              denial_reason: body.denialText,
+              carrier_name: body.payer,
+            },
+            patient_context: body.patientContext || {},
+            triage: triageData.data || {},
+          }),
+        });
+        clearTimeout(policyTimeout);
+        const policyData = policyRes.ok ? await policyRes.json() : { data: null };
+
+        // Run evidence agent
+        const evidenceController = new AbortController();
+        const evidenceTimeout = setTimeout(() => evidenceController.abort(), FLEET_TIMEOUT_MS);
+        const evidenceRes = await fetch(`${FLEET_URL}/agents/evidence`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          signal: evidenceController.signal,
+          body: JSON.stringify({
+            denial: {
+              denial_code: 'UNKNOWN',
+              denial_reason: body.denialText,
+              carrier_name: body.payer,
+            },
+            patient_context: body.patientContext || {},
+            triage: triageData.data || {},
+          }),
+        });
+        clearTimeout(evidenceTimeout);
+        const evidenceData = evidenceRes.ok ? await evidenceRes.json() : { data: null };
+
+        // Run citation agent
+        const citationController = new AbortController();
+        const citationTimeout = setTimeout(() => citationController.abort(), FLEET_TIMEOUT_MS);
+        const citationRes = await fetch(`${FLEET_URL}/agents/citation`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          signal: citationController.signal,
+          body: JSON.stringify({
+            evidence: evidenceData.data || {},
+            policy: policyData.data || {},
+          }),
+        });
+        clearTimeout(citationTimeout);
+        const citationData = citationRes.ok ? await citationRes.json() : { data: null };
+
+        // Run drafter agent
+        const draftController = new AbortController();
+        const draftTimeout = setTimeout(() => draftController.abort(), FLEET_TIMEOUT_MS);
+        const draftRes = await fetch(`${FLEET_URL}/agents/drafter`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          signal: draftController.signal,
+          body: JSON.stringify({
+            denial: {
+              denial_code: 'UNKNOWN',
+              denial_reason: body.denialText,
+              carrier_name: body.payer,
+            },
+            patient_context: body.patientContext || {},
+            triage: triageData.data || {},
+            evidence: evidenceData.data || {},
+            policy: policyData.data || {},
+            citations: citationData.data || {},
+          }),
+        });
+        clearTimeout(draftTimeout);
+        const draftData = draftRes.ok ? await draftRes.json() : { data: null };
+
+        // Run reviewer agent
+        const reviewController = new AbortController();
+        const reviewTimeout = setTimeout(() => reviewController.abort(), FLEET_TIMEOUT_MS);
+        const reviewRes = await fetch(`${FLEET_URL}/agents/reviewer`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          signal: reviewController.signal,
+          body: JSON.stringify({
+            denial: {
+              denial_code: 'UNKNOWN',
+              denial_reason: body.denialText,
+              carrier_name: body.payer,
+            },
+            triage: triageData.data || {},
+            evidence: evidenceData.data || {},
+            draft: draftData.data || {},
+          }),
+        });
+        clearTimeout(reviewTimeout);
+        const reviewData = reviewRes.ok ? await reviewRes.json() : { data: null };
+
+        dataSource = 'live';
+        result = {
+          advocate: {
+            caseFraming: {
+              patientSummary: `Denial from ${body.payer}`,
+              denialImpact: triageData.data?.appealability || 'Unknown',
+              urgencyLevel: triageData.data?.urgency || 'standard',
+              recommendedActions: [],
+              deadline: null,
+              deadlineDaysRemaining: null,
+            },
+            empatheticNote: 'Fleet-powered triage analysis completed.',
+          },
+          triage: triageData.data || {},
+          gate1: {
+            status: 'pending',
+            gateId: null,
+            confirmPrompt: 'Review triage classification and confirm to proceed.',
+          },
+          policyResearch: policyData.data || null,
+          evidenceAssembly: evidenceData.data || null,
+          letterDrafting: draftData.data || null,
+          qualityReview: reviewData.data || null,
+          citations: citationData.data || null,
+          pipelineStatus: 'awaiting_gate1',
+          caseId: null,
+          latencyMs: 0,
+        };
+      }
+    } catch {
+      // Fleet unavailable — fall through to mock
+    }
+
+    // ── Fallback: local mock pipeline ──
+    if (dataSource === 'mock') {
+      const mockResult = await runSixAgentPipeline({
+        denialText: body.denialText,
+        payer: body.payer,
+        patientContext: body.patientContext || undefined,
+      });
+      result = { ...mockResult };
+    }
+
+    return NextResponse.json({ ...result, dataSource });
   } catch (error: unknown) {
     console.error('[POST /api/six-agent-pipeline] Error:', error);
     const msg = error instanceof Error ? error.message : String(error);
@@ -47,9 +212,22 @@ export async function POST(request: NextRequest) {
  * GET /api/six-agent-pipeline — Returns pipeline info
  */
 export async function GET() {
+  let dataSource: 'live' | 'mock' = 'mock';
+
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 3_000);
+    const healthRes = await fetch(`${FLEET_URL}/health`, { signal: controller.signal });
+    clearTimeout(timeout);
+    if (healthRes.ok) dataSource = 'live';
+  } catch {
+    // Fleet unavailable
+  }
+
   return NextResponse.json({
     pipeline: 'six-agent',
     version: 'day-5',
+    dataSource,
     agents: [
       { name: 'patient-advocate', description: 'Empathetic intake and case framing', order: 1 },
       { name: 'denial-triage', description: 'Denial classification and structured JSON', order: 2 },

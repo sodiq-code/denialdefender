@@ -7,9 +7,9 @@
  *
  * This module:
  * 1. Ingests outcome records (won/lost/partial verdicts from real appeals)
- * 2. Updates procedural-evidence weights in the local Memory Bank (SQLite via Prisma)
- * 3. Falls back to Firestore if Memory Bank is unstable
- * 4. Feeds updated weights back into the Policy Research agent for better retrieval
+ * 2. Updates procedural-evidence weights via the GEAP Memory Bank
+ *    (Vertex AI Memory Bank → Firestore fallback → SQLite fallback)
+ * 3. Feeds updated weights back into the Policy Research agent for better retrieval
  *
  * The Outcome Learning loop:
  *   Case → Pipeline → Appeal Submitted → Real-World Verdict → Outcome Ingested
@@ -18,6 +18,7 @@
 
 import { db } from './db';
 import { createHash } from 'crypto';
+import { memoryBank, type MemoryBankResult } from './geap-memory-bank';
 
 // ─── Outcome Record Types ──────────────────────────────────────────────────
 
@@ -50,16 +51,18 @@ export interface WeightUpdate {
 export interface IngestionResult {
   outcomeId: string;
   weightUpdates: WeightUpdate[];
-  memoryBankStatus: 'primary' | 'firestore_fallback' | 'failed';
+  memoryBankStatus: 'vertex_ai_memory_bank' | 'firestore_fallback' | 'sqlite_fallback' | 'failed';
   durationMs: number;
+  storeDetail?: string;
 }
 
-// ─── Memory Bank (SQLite via Prisma) ───────────────────────────────────────
+// ─── Weight Adjustment Constants ──────────────────────────────────────────
 
 /**
- * The Memory Bank stores procedural evidence weights that are learned from
- * outcomes. These weights influence which evidence the Policy Research agent
- * retrieves first, creating the Outcome Learning loop.
+ * Weight adjustment constants for the Outcome Learning loop.
+ * The GEAP Memory Bank stores procedural evidence weights that are learned
+ * from outcomes. These weights influence which evidence the Policy Research
+ * agent retrieves first.
  *
  * Weight adjustment rules:
  * - WON: +0.05 to all citations used (capped at 1.0)
@@ -80,12 +83,14 @@ const WEIGHT_FLOOR = 0.1;
 
 /**
  * Ingest an outcome record and update procedural-evidence weights.
- * Primary: SQLite Memory Bank. Fallback: Firestore.
+ * Uses the GEAP Memory Bank with tiered fallback:
+ *   Vertex AI Memory Bank → Firestore → SQLite
  */
 export async function ingestOutcome(record: OutcomeRecord): Promise<IngestionResult> {
   const start = Date.now();
-  let memoryBankStatus: 'primary' | 'firestore_fallback' | 'failed' = 'primary';
+  let memoryBankStatus: IngestionResult['memoryBankStatus'] = 'sqlite_fallback';
   let weightUpdates: WeightUpdate[] = [];
+  let storeDetail = '';
 
   // Create outcome in database
   let outcomeId: string;
@@ -104,23 +109,38 @@ export async function ingestOutcome(record: OutcomeRecord): Promise<IngestionRes
       .update(`${record.caseId}:${record.verdict}:${record.timestamp}`)
       .digest('hex')
       .slice(0, 12);
-    memoryBankStatus = 'firestore_fallback';
   }
 
-  try {
-    // Primary path: Update weights in SQLite Memory Bank
-    weightUpdates = await updateWeightsInMemoryBank(record, outcomeId);
-  } catch (e: any) {
-    console.error('Memory Bank update failed, falling back to Firestore:', e.message);
-    memoryBankStatus = 'firestore_fallback';
+  // Compute weight updates from the evidence corpus
+  weightUpdates = await computeWeightUpdates(record, outcomeId);
 
-    try {
-      // Fallback path: Update weights in Firestore
-      weightUpdates = await updateWeightsInFirestore(record, outcomeId);
-    } catch (fe: any) {
-      console.error('Firestore fallback also failed:', fe.message);
+  // Apply weight updates via the GEAP Memory Bank (tiered: Vertex AI → Firestore → SQLite)
+  if (weightUpdates.length > 0) {
+    const result: MemoryBankResult = await memoryBank.updateOutcomeWeights(weightUpdates);
+
+    if (result.success) {
+      // Map the store name to the status enum
+      if (result.store === 'vertex_ai_memory_bank') {
+        memoryBankStatus = 'vertex_ai_memory_bank';
+      } else if (result.store === 'firestore_fallback') {
+        memoryBankStatus = 'firestore_fallback';
+      } else {
+        memoryBankStatus = 'sqlite_fallback';
+      }
+      storeDetail = `Applied ${result.updatesApplied} updates via ${result.store} in ${result.durationMs}ms`;
+    } else {
       memoryBankStatus = 'failed';
+      storeDetail = 'All Memory Bank tiers failed';
     }
+  } else {
+    // No weight updates to apply (e.g., pending verdict)
+    const status = memoryBank.getStatus();
+    memoryBankStatus = status.longTermMemory.store === 'vertex_ai_memory_bank'
+      ? 'vertex_ai_memory_bank'
+      : status.longTermMemory.store === 'firestore_fallback'
+        ? 'firestore_fallback'
+        : 'sqlite_fallback';
+    storeDetail = 'No weight updates needed';
   }
 
   return {
@@ -128,17 +148,22 @@ export async function ingestOutcome(record: OutcomeRecord): Promise<IngestionRes
     weightUpdates,
     memoryBankStatus,
     durationMs: Date.now() - start,
+    storeDetail,
   };
 }
 
 /**
- * Update evidence retrieval weights in the local Memory Bank (SQLite).
- * For each citation used in the appeal:
- * - Retrieve the evidence record
- * - Apply the weight delta based on verdict
- * - Store the weight update
+ * Compute weight updates for evidence based on outcome verdict.
+ * This only COMPUTES the updates — it does NOT apply them.
+ * The GEAP Memory Bank's updateOutcomeWeights() applies them to the correct tier.
+ *
+ * Weight adjustment rules:
+ * - WON: +0.05 to all citations used (capped at 1.0)
+ * - LOST: -0.03 to all citations used (floored at 0.1)
+ * - PARTIAL: +0.02 to citations used
+ * - Per denial_category + payer: strategy-specific adjustments (halved delta)
  */
-async function updateWeightsInMemoryBank(
+async function computeWeightUpdates(
   record: OutcomeRecord,
   outcomeId: string,
 ): Promise<WeightUpdate[]> {
@@ -149,7 +174,7 @@ async function updateWeightsInMemoryBank(
 
   for (const citationId of record.citationsUsed) {
     try {
-      // Find the evidence record by clause_id or content match
+      // Find the evidence record by clause_id
       const evidence = await db.evidence.findFirst({
         where: { clause_id: citationId },
       });
@@ -157,11 +182,6 @@ async function updateWeightsInMemoryBank(
       if (evidence) {
         const oldWeight = evidence.retrieval_weight || 0.5;
         const newWeight = Math.min(WEIGHT_CAP, Math.max(WEIGHT_FLOOR, oldWeight + delta));
-
-        await db.evidence.update({
-          where: { id: evidence.id },
-          data: { retrieval_weight: newWeight },
-        });
 
         updates.push({
           evidenceId: evidence.id,
@@ -173,13 +193,11 @@ async function updateWeightsInMemoryBank(
         });
       }
     } catch (e: any) {
-      // Skip individual evidence updates that fail (don't block the whole batch)
-      console.warn(`Failed to update weight for citation ${citationId}:`, e.message);
+      console.warn(`Failed to compute weight for citation ${citationId}:`, e.message);
     }
   }
 
-  // Also update strategy-level weights
-  // For the denial_category + payer + strategy combination, adjust the base weight
+  // Also compute strategy-level weight updates for the denial_category + payer
   try {
     const categoryEvidences = await db.evidence.findMany({
       where: {
@@ -193,15 +211,10 @@ async function updateWeightsInMemoryBank(
     // Apply a smaller delta to category-level evidence (halved to avoid overcorrection)
     const categoryDelta = delta * 0.5;
     for (const ev of categoryEvidences) {
-      if (record.citationsUsed.includes(ev.clause_id || '')) continue; // already updated above
+      if (record.citationsUsed.includes(ev.clause_id || '')) continue; // already computed above
 
       const oldWeight = ev.retrieval_weight || 0.5;
       const newWeight = Math.min(WEIGHT_CAP, Math.max(WEIGHT_FLOOR, oldWeight + categoryDelta));
-
-      await db.evidence.update({
-        where: { id: ev.id },
-        data: { retrieval_weight: newWeight },
-      });
 
       updates.push({
         evidenceId: ev.id,
@@ -213,76 +226,17 @@ async function updateWeightsInMemoryBank(
       });
     }
   } catch (e: any) {
-    console.warn('Category-level weight update failed:', e.message);
+    console.warn('Category-level weight computation failed:', e.message);
   }
 
   return updates;
 }
 
-/**
- * Fallback: Update weights in Firestore.
- * Used when the local Memory Bank is unstable.
- */
-async function updateWeightsInFirestore(
-  record: OutcomeRecord,
-  outcomeId: string,
-): Promise<WeightUpdate[]> {
-  const updates: WeightUpdate[] = [];
-  const delta = WEIGHT_DELTA[record.verdict];
-
-  if (delta === 0) return updates;
-
-  // Attempt Firestore connection
-  try {
-    const { getFirestore } = await import('firebase-admin/firestore');
-    const admin = await import('firebase-admin');
-
-    let app: any;
-    try {
-      app = admin.app('denialdefender');
-    } catch {
-      app = admin.initializeApp({
-        credential: admin.credential.applicationDefault(),
-        projectId: process.env.GCP_PROJECT_ID,
-      }, 'denialdefender');
-    }
-
-    const firestore = getFirestore(app);
-    const weightsCollection = firestore.collection('procedural_evidence_weights');
-
-    for (const citationId of record.citationsUsed) {
-      const docRef = weightsCollection.doc(citationId);
-      const doc = await docRef.get();
-
-      const oldWeight = doc.exists ? (doc.data()?.weight || 0.5) : 0.5;
-      const newWeight = Math.min(WEIGHT_CAP, Math.max(WEIGHT_FLOOR, oldWeight + delta));
-
-      await docRef.set({
-        weight: newWeight,
-        lastOutcome: record.verdict,
-        lastOutcomeId: outcomeId,
-        lastUpdated: admin.firestore.FieldValue.serverTimestamp(),
-        payer: record.payer,
-        denialCategory: record.denialCategory,
-        strategy: record.strategyUsed,
-      }, { merge: true });
-
-      updates.push({
-        evidenceId: citationId,
-        oldWeight,
-        newWeight,
-        delta: newWeight - oldWeight,
-        reason: `Firestore fallback: Outcome ${record.verdict}`,
-        outcomeId,
-      });
-    }
-  } catch (e: any) {
-    console.error('Firestore fallback failed:', e.message);
-    throw e;
-  }
-
-  return updates;
-}
+// Note: The old updateWeightsInFirestore() function has been replaced by the
+// GEAP Memory Bank's built-in Firestore fallback tier. The Memory Bank class
+// handles the Vertex AI → Firestore → SQLite fallback chain internally.
+// The computeWeightUpdates() function above only computes the updates;
+// memoryBank.updateOutcomeWeights() applies them to the appropriate tier.
 
 // ─── Batch Outcome Ingestion ───────────────────────────────────────────────
 
@@ -291,14 +245,18 @@ export interface BatchIngestionResult {
   successful: number;
   failed: number;
   totalWeightUpdates: number;
-  memoryBankStatus: 'primary' | 'firestore_fallback' | 'mixed';
+  memoryBankStatus: 'vertex_ai_memory_bank' | 'firestore_fallback' | 'sqlite_fallback' | 'mixed' | 'failed';
   durationMs: number;
   errors: string[];
+  storesUsed: string[];
 }
 
 /**
  * Ingest a batch of outcome records.
  * Used for the Day 8 "before/after experiment" (50 outcome records).
+ *
+ * Each record is ingested individually via the GEAP Memory Bank,
+ * which applies the tiered fallback (Vertex AI → Firestore → SQLite).
  */
 export async function ingestOutcomeBatch(
   records: OutcomeRecord[],
@@ -307,18 +265,16 @@ export async function ingestOutcomeBatch(
   let successful = 0;
   let failed = 0;
   let totalWeightUpdates = 0;
-  let hasPrimary = false;
-  let hasFallback = false;
+  const storesUsed = new Set<string>();
   const errors: string[] = [];
 
   for (const record of records) {
     try {
       const result = await ingestOutcome(record);
-      if (result.memoryBankStatus === 'primary') hasPrimary = true;
-      if (result.memoryBankStatus === 'firestore_fallback') hasFallback = true;
+      storesUsed.add(result.memoryBankStatus);
       if (result.memoryBankStatus === 'failed') {
         failed++;
-        errors.push(`Case ${record.caseId}: Memory Bank and Firestore both failed`);
+        errors.push(`Case ${record.caseId}: All Memory Bank tiers failed`);
       } else {
         successful++;
         totalWeightUpdates += result.weightUpdates.length;
@@ -329,8 +285,16 @@ export async function ingestOutcomeBatch(
     }
   }
 
-  const memoryBankStatus: 'primary' | 'firestore_fallback' | 'mixed' =
-    hasPrimary && hasFallback ? 'mixed' : hasFallback ? 'firestore_fallback' : 'primary';
+  // Determine overall status based on stores used
+  let memoryBankStatus: BatchIngestionResult['memoryBankStatus'];
+  if (storesUsed.size === 0) {
+    memoryBankStatus = 'failed';
+  } else if (storesUsed.size === 1) {
+    const sole = [...storesUsed][0];
+    memoryBankStatus = sole as BatchIngestionResult['memoryBankStatus'];
+  } else {
+    memoryBankStatus = 'mixed';
+  }
 
   return {
     totalRecords: records.length,
@@ -340,6 +304,7 @@ export async function ingestOutcomeBatch(
     memoryBankStatus,
     durationMs: Date.now() - start,
     errors,
+    storesUsed: [...storesUsed],
   };
 }
 

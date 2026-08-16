@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ══════════════════════════════════════════════════════════════════════════════
-# DenialDefender — Cloud Run Deployment Script
+# DenialDefender — Cloud Run Deployment Script (Production-Ready)
 # ══════════════════════════════════════════════════════════════════════════════
 #
 # Deploys the DenialDefender application to Google Cloud Run.
@@ -12,6 +12,7 @@
 #   3. APIs enabled: cloudbuild, run, secretmanager, firestore, sqladmin, pubsub
 #   4. Secrets populated: gemini-api-key, cloud-sql-connection-string, phi-guard-config
 #   5. VPC connector created (for Cloud SQL access)
+#   6. Model Armor policy created (via bootstrap.sh)
 #
 # Usage:
 #   bash infra/gcp/cloudrun/deploy.sh              # Full deployment
@@ -32,6 +33,9 @@ WEB_SERVICE="denialdefender-web"
 AGENT_SERVICE="denialdefender-agents"
 WEB_IMAGE="gcr.io/${PROJECT_ID}/${WEB_SERVICE}"
 AGENT_IMAGE="gcr.io/${PROJECT_ID}/${AGENT_SERVICE}"
+SA_EMAIL="json-775@${PROJECT_ID}.iam.gserviceaccount.com"
+VPC_CONNECTOR="dd-vpc-connector"
+MODEL_ARMOR_POLICY_ID="${MODEL_ARMOR_POLICY_ID:-dd-model-armor}"
 
 # Resolve script directory for relative paths
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -89,7 +93,15 @@ gcloud config set project "${PROJECT_ID}" --quiet
 log "Project set to ${PROJECT_ID}"
 
 # Verify required APIs
-REQUIRED_APIS=("run.googleapis.com" "cloudbuild.googleapis.com" "secretmanager.googleapis.com")
+REQUIRED_APIS=(
+  "run.googleapis.com"
+  "cloudbuild.googleapis.com"
+  "secretmanager.googleapis.com"
+  "firestore.googleapis.com"
+  "sqladmin.googleapis.com"
+  "pubsub.googleapis.com"
+  "aiplatform.googleapis.com"
+)
 for api in "${REQUIRED_APIS[@]}"; do
   if gcloud services list --enabled --filter="name:${api}" --format="value(name)" | grep -q "${api}" 2>/dev/null; then
     log "API ${api} is enabled"
@@ -98,6 +110,15 @@ for api in "${REQUIRED_APIS[@]}"; do
     gcloud services enable "${api}" --project="${PROJECT_ID}" --quiet || warn "Failed to enable ${api} (requires billing)"
   fi
 done
+
+# Verify VPC connector exists
+if gcloud compute networks vpc-access connectors describe "${VPC_CONNECTOR}" \
+  --region="${REGION}" --project="${PROJECT_ID}" 2>/dev/null | grep -q "name"; then
+  log "VPC connector ${VPC_CONNECTOR} exists"
+else
+  warn "VPC connector ${VPC_CONNECTOR} not found — Cloud SQL access may fail"
+  warn "Run bootstrap.sh or create manually"
+fi
 
 # ── Deploy Web Service (Next.js) ──────────────────────────────────────────────
 if [[ "${DEPLOY_WEB}" == true ]]; then
@@ -130,13 +151,19 @@ if [[ "${DEPLOY_WEB}" == true ]]; then
     --max-instances 4 \
     --concurrency 80 \
     --timeout 300 \
+    --service-account "${SA_EMAIL}" \
+    --vpc-connector "${VPC_CONNECTOR}" \
+    --vpc-egress private-ranges-only \
     --set-env-vars "NODE_ENV=production" \
-    --set-env-vars "PORT=3000" \
+    --set-env-vars "PORT=8080" \
     --set-env-vars "GCP_PROJECT_ID=${PROJECT_ID}" \
     --set-env-vars "GCP_REGION=${REGION}" \
     --set-env-vars "FIRESTORE_LOCATION=${FIRESTORE_LOCATION}" \
     --set-env-vars "NEXT_PUBLIC_GCP_PROJECT_ID=${PROJECT_ID}" \
     --set-env-vars "NEXT_PUBLIC_APP_NAME=DenialDefender" \
+    --set-env-vars "MODEL_ARMOR_POLICY_ID=${MODEL_ARMOR_POLICY_ID}" \
+    --set-env-vars "MODEL_ARMOR_LOCATION=${REGION}" \
+    --set-env-vars "MEMORY_BANK_STORE=vertex_ai" \
     --set-secrets "GEMINI_API_KEY=gemini-api-key:latest" \
     --set-secrets "DATABASE_URL=cloud-sql-connection-string:latest" \
     --project "${PROJECT_ID}"
@@ -150,7 +177,7 @@ if [[ "${DEPLOY_WEB}" == true ]]; then
   log "Web service deployed: ${WEB_URL}"
 fi
 
-# ── Deploy Agent Fleet (Python ADK) ───────────────────────────────────────────
+# ── Deploy Agent Fleet (TypeScript/Bun + Python ADK) ──────────────────────────
 if [[ "${DEPLOY_AGENTS}" == true ]]; then
   step "Step 2: Build & Deploy Agent Fleet Service"
 
@@ -189,15 +216,21 @@ if [[ "${DEPLOY_AGENTS}" == true ]]; then
     --max-instances 10 \
     --concurrency 10 \
     --timeout 600 \
+    --service-account "${SA_EMAIL}" \
+    --vpc-connector "${VPC_CONNECTOR}" \
+    --vpc-egress private-ranges-only \
     --set-env-vars "GCP_PROJECT_ID=${PROJECT_ID}" \
     --set-env-vars "GCP_REGION=${REGION}" \
     --set-env-vars "FIRESTORE_LOCATION=${FIRESTORE_LOCATION}" \
-    --set-env-vars "AGENT_FLEET_PORT=3004" \
+    --set-env-vars "PORT=8080" \
     --set-env-vars "LOG_LEVEL=info" \
     --set-env-vars "GEMINI_MODEL=gemini-3.5-flash" \
     --set-env-vars "EMBEDDING_MODEL=text-embedding-004" \
     --set-env-vars "EMBEDDING_DIMENSIONS=768" \
-    --set-env-vars "GCP_PROJECT_NUMBER=315133452553" \
+    --set-env-vars "FORCE_LLM_BACKEND=gemini" \
+    --set-env-vars "MODEL_ARMOR_POLICY_ID=${MODEL_ARMOR_POLICY_ID}" \
+    --set-env-vars "MODEL_ARMOR_LOCATION=${REGION}" \
+    --set-env-vars "MEMORY_BANK_STORE=vertex_ai" \
     --set-secrets "GEMINI_API_KEY=gemini-api-key:latest" \
     --set-secrets "DATABASE_URL=cloud-sql-connection-string:latest" \
     --set-secrets "PHI_GUARD_CONFIG=phi-guard-config:latest" \
@@ -215,12 +248,10 @@ if [[ "${DEPLOY_AGENTS}" == true ]]; then
   step "Step 3: Configure Pub/Sub → Agent Fleet Push Subscription"
 
   # Create push subscription so Pub/Sub forwards agent_tasks to the agent fleet
-  AGENT_TOKEN_URL="https://agent-fleet-push@${AGENT_URL}"
-
   gcloud pubsub subscriptions create agent-tasks-push \
     --topic agent_tasks \
     --push-endpoint="${AGENT_URL}/pubsub/handle" \
-    --push-auth-service-account="json-775@${PROJECT_ID}.iam.gserviceaccount.com" \
+    --push-auth-service-account="${SA_EMAIL}" \
     --project "${PROJECT_ID}" 2>/dev/null || warn "Subscription may already exist"
 
   log "Pub/Sub push subscription configured"
@@ -245,6 +276,20 @@ fi
 
 log "Service YAMLs applied"
 
+# ── IAM: Allow Web Service to Invoke Agent Fleet ──────────────────────────────
+if [[ "${DEPLOY_WEB}" == true ]] && [[ "${DEPLOY_AGENTS}" == true ]]; then
+  step "Step 5: Configure IAM for Inter-Service Communication"
+
+  # Allow the web service's SA to invoke the agent fleet
+  gcloud run services add-iam-policy-binding "${AGENT_SERVICE}" \
+    --member="serviceAccount:${SA_EMAIL}" \
+    --role="roles/run.invoker" \
+    --region="${REGION}" \
+    --project="${PROJECT_ID}" 2>/dev/null || warn "IAM binding may already exist"
+
+  log "Web → Agent fleet invocation permission configured"
+fi
+
 # ── Summary ───────────────────────────────────────────────────────────────────
 echo ""
 echo "═══════════════════════════════════════════════════════════════"
@@ -256,6 +301,7 @@ if [[ "${DEPLOY_WEB}" == true ]]; then
   echo "  🌐 Web Service:"
   echo "     URL:  ${WEB_URL:-https://${WEB_SERVICE}-${REGION}.run.app}"
   echo "     Image: ${WEB_IMAGE}:latest"
+  echo "     Port:  8080 (Cloud Run default)"
   echo "     Access: Public (unauthenticated)"
   echo ""
 fi
@@ -264,19 +310,24 @@ if [[ "${DEPLOY_AGENTS}" == true ]]; then
   echo "  🤖 Agent Fleet:"
   echo "     URL:  ${AGENT_URL:-https://${AGENT_SERVICE}-${REGION}.run.app}"
   echo "     Image: ${AGENT_IMAGE}:latest"
+  echo "     Port:  8080 (Cloud Run default)"
   echo "     Access: Internal only (Pub/Sub push)"
   echo ""
 fi
 
 echo "  📦 GCP Resources:"
-echo "     Project:  ${PROJECT_ID}"
-echo "     Region:   ${REGION}"
-echo "     Firestore: ${FIRESTORE_LOCATION}"
-echo "     Pub/Sub:  decision_trace, agent_tasks, case_events, gate_events"
-echo "     Cloud SQL: denialdefender-pg (PostgreSQL 16 + pgvector)"
+echo "     Project:    ${PROJECT_ID}"
+echo "     Region:     ${REGION}"
+echo "     Firestore:  ${FIRESTORE_LOCATION}"
+echo "     Pub/Sub:    decision_trace, agent_tasks, case_events, gate_events"
+echo "     Cloud SQL:  denialdefender-pg (PostgreSQL 16 + pgvector)"
+echo "     VPC:        ${VPC_CONNECTOR}"
+echo "     Model Armor: ${MODEL_ARMOR_POLICY_ID}"
+echo "     Memory Bank: vertex_ai"
 echo ""
 echo "  🔗 Next steps:"
 echo "     1. Verify health: curl ${WEB_URL:-https://${WEB_SERVICE}-${REGION}.run.app}/api/health"
 echo "     2. Test case round-trip via web UI"
-echo "     3. Monitor: gcloud run services logs read ${WEB_SERVICE} --region ${REGION}"
+echo "     3. Verify Model Armor: curl ${WEB_URL}/api/governance/armor"
+echo "     4. Monitor: gcloud run services logs read ${WEB_SERVICE} --region ${REGION}"
 echo ""

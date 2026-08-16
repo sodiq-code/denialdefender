@@ -1662,3 +1662,49 @@ Files Modified:
   - /home/z/my-project/infra/gcp/bootstrap.sh (complete rewrite)
   - /home/z/my-project/infra/gcp/cloudrun/deploy.sh (3 fixes)
   - /home/z/my-project/next.config.ts (standalone output + security headers)
+---
+Task ID: 3-9
+Agent: main
+Task: Fix all 5 critical/medium gaps for Grand Prize competitiveness
+
+Work Log:
+- Removed z-ai-web-dev-sdk from package.json, updated lockfile
+- Rewrote two-agent-pipeline.ts to call agent fleet (port 3004) instead of z-ai CLI
+- Rewrote llm_backend.py to Gemini-only (removed ZAI_SDK enum, _generate_zai, _check_zai_sdk)
+- Rewrote llm_backend.ts to Gemini-only
+- Cleaned config.py (removed FORCE_LLM_BACKEND, ZAI_SDK_CLI_PATH)
+- Fixed evidence-embed.ts comments (z-ai → Gemini references)
+- Added dev-only comments to data/search4.mjs and data/s5.mjs
+- Changed layout.tsx icon from z-ai CDN to /favicon.ico
+- Built GEAP Agent Registry (src/lib/agent-registry.ts) with all 8 agents, discovery/versioning API
+- Created /api/governance/registry route with filtering, search, capabilities, demo
+- Integrated registry into governance demo endpoint
+- Built GEAP Memory Bank (src/lib/geap-memory-bank.ts) with 3-tier: session/case/long-term
+- Vertex AI Memory Bank as primary, Firestore fallback, SQLite final fallback
+- Created /api/governance/memory-bank route for status, patterns, weights, case state
+- Added LearnedPattern and CaseMemoryState to Prisma schema
+- Updated outcome-ingestion.ts to use GEAPMemoryBank for weight updates
+- Wired Model Armor to Google's Model Armor API (scanContentWithGEAP function)
+- GEAP first, regex fallback for local dev
+- Created infra/gcp/model-armor-setup.sh for GCP deployment
+- Updated armor API route with scanner/policyId fields
+- Updated pipeline routes (3-agent, 6-agent, full, vertical-slice, citation, npi-lookup) to try fleet first, mock fallback
+- Added dataSource: 'live'|'mock' to all pipeline responses
+- Added service account key patterns to .gitignore
+- Replaced real SA key with placeholder template
+- Fixed Dockerfile (bun install, PORT 8080)
+- Fixed Cloud Run service YAMLs (ports, env vars, Model Armor, Memory Bank)
+- Updated deploy.sh with service-account, vpc-connector, IAM
+- Updated bootstrap.sh with Model Armor API, policy creation, 19 APIs
+- Created /api/health endpoint for Cloud Run probes
+- Created .dockerignore for production builds
+- Created .env.gcp.production template
+- Updated DEPLOY.md with GEAP component verification
+
+Stage Summary:
+- ALL 5 gaps FIXED: z-ai removed, Model Armor GEAP wired, Agent Registry built, Memory Bank GEAP built, mock routes use fleet
+- Zero z-ai references in production code (src/ and agent-fleet/)
+- All 7 GEAP components implemented: Agent Registry ✅, Agent Runtime (ADK) ✅, Memory Bank ✅, Agent Identity ✅, Gateway ✅, Model Armor ✅, Observability ✅
+- Lint: 0 errors
+- Dev server: running, all endpoints responding
+- Browser verification: 6/6 checks passed

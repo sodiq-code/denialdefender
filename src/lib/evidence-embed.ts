@@ -1,13 +1,13 @@
 /**
  * DenialDefender — Evidence Embedding Pipeline
- * Day 2: Generates text embeddings for evidence records using z-ai-web-dev-sdk LLM.
+ * Day 2: Generates text embeddings for evidence records using Gemini (text-embedding-004).
  *
  * Since pgvector is not available in our zero-cost architecture (Cloud SQL requires billing),
  * we use a text-based embedding approach that stores compact text representations
  * for similarity search. This can be upgraded to true vector embeddings when
  * Cloud SQL pgvector becomes available.
  *
- * The z-ai-web-dev-sdk LLM is used for semantic summarization of evidence records,
+ * Gemini embeddings (text-embedding-004) are used for semantic summarization of evidence records,
  * which serves as our "embedding" for similarity matching.
  */
 

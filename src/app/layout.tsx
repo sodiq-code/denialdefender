@@ -19,12 +19,12 @@ export const metadata: Metadata = {
   keywords: ["DenialDefender", "medical insurance", "denial appeal", "ADK", "AI agents", "evidence-based", "HITL"],
   authors: [{ name: "DenialDefender Team" }],
   icons: {
-    icon: "https://z-cdn.chatglm.cn/z-ai/static/logo.svg",
+    icon: "/favicon.ico",
   },
   openGraph: {
     title: "DenialDefender — Evidence-Grounded Denial Appeal Operations",
     description: "8-agent ADK fleet that turns medical insurance claim denials into evidence-backed appeal letters",
-    url: "https://chat.z.ai",
+    url: "https://denialdefender.app",
     siteName: "DenialDefender",
     type: "website",
   },

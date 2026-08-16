@@ -3,18 +3,17 @@
  * Day 2 Core Deliverable
  *
  * This pipeline wires together:
- * 1. Triage Agent — classifies a denial using LLM (z-ai SDK)
+ * 1. Triage Agent — classifies a denial using Gemini via agent fleet (port 3004)
  * 2. Policy Research Agent — retrieves relevant evidence from the corpus
  *
  * The combined result flows back through the API with latency measurements.
  */
 
-import { execFile } from 'child_process';
-import { promisify } from 'util';
-import { readFileSync, unlinkSync, existsSync } from 'fs';
 import { retrievePolicyClauses, type PolicyQuery, type PolicyRetrievalResponse } from './policy-research';
 
-const execAsync = promisify(execFile);
+// ─── Agent Fleet Configuration ────────────────────────────────────────────
+
+const AGENT_FLEET_URL = 'http://localhost:3004';
 
 // ─── Types ────────────────────────────────────────────────────────────────
 
@@ -83,96 +82,69 @@ function denialTypeLabel(normalized: string): string {
 // ─── Step 1: Triage — Classify the Denial ─────────────────────────────────
 
 /**
- * Use the z-ai SDK LLM to classify a denial letter.
+ * Use the Gemini agent fleet (port 3004) to classify a denial letter.
  * Extracts: denial_type, payer, reason_codes, cpt_codes, icd_codes, category.
  *
- * Falls back to rule-based extraction if LLM is unavailable.
+ * Falls back to rule-based extraction if the agent fleet is unavailable.
  */
 export async function triageDenial(denialLetter: string, payer: string): Promise<TriageResult> {
-  const systemPrompt = `You are a medical insurance denial triage agent. Analyze the denial letter and extract structured information.
-
-Return a JSON object with exactly these fields:
-- "denial_type": one of "medical_necessity", "prior_auth", "coding", "experimental", "out_of_network"
-- "reason_codes": array of claim adjustment reason codes (e.g., ["CO16", "CO15", "PR96"])
-- "cpt_codes": array of CPT procedure codes found (e.g., ["99213", "43239"])
-- "icd_codes": array of ICD-10 diagnosis codes found (e.g., ["K21.0", "R12"])
-- "category": brief category label
-- "confidence": your confidence score 0.0 to 1.0
-- "summary": one-sentence summary of the denial
-- "appeal_strategy": one-sentence suggested appeal strategy
-
-Return ONLY the JSON object, no other text.`;
-
-  const prompt = `Denial Letter from ${payer}:
-
-${denialLetter}
-
-Classify this denial. Return structured JSON only.`;
-
-  // Try LLM-based triage via z-ai SDK
+  // Try Gemini agent fleet triage
   try {
-    const tmpFile = `/tmp/triage-result-${Date.now()}.json`;
+    const fleetPayload = {
+      denial: {
+        denial_code: '',
+        denial_reason: denialLetter,
+        cpt_code: '',
+        icd10_code: '',
+        carrier_name: payer,
+        amount_denied: 0,
+      },
+      patient_context: {
+        diagnosis: '',
+        treatment_history: '',
+        prior_authorizations: '',
+      },
+    };
 
-    // Escape prompts for shell safety
-    const escapedSystem = systemPrompt.replace(/"/g, '\\"').replace(/`/g, '\\`');
-    const escapedPrompt = prompt.replace(/"/g, '\\"').replace(/`/g, '\\`');
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30_000);
 
-    const { stdout, stderr } = await execAsync(
-      'z-ai',
-      ['chat', '--prompt', escapedPrompt, '--system', escapedSystem, '--output', tmpFile],
-      { timeout: 30_000, maxBuffer: 1024 * 1024 }
-    );
+    const response = await fetch(`${AGENT_FLEET_URL}/agents/triage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(fleetPayload),
+      signal: controller.signal,
+    });
 
-    // Read the output file
-    if (existsSync(tmpFile)) {
-      const raw = readFileSync(tmpFile, 'utf-8');
-      // Clean up temp file
-      try { unlinkSync(tmpFile); } catch {}
+    clearTimeout(timeoutId);
 
-      // Parse the LLM response — it may contain JSON in various formats
-      let parsed: any = null;
-      try {
-        // Try direct JSON parse (if output file contains JSON)
-        const outputData = JSON.parse(raw);
-        // The z-ai output file wraps the response
-        const content = outputData.content || outputData.text || outputData.message || raw;
-        // Extract JSON from content (may be wrapped in markdown code block)
-        const jsonMatch = typeof content === 'string'
-          ? content.match(/```json\s*([\s\S]*?)```/) || content.match(/\{[\s\S]*\}/)
-          : null;
-        if (jsonMatch) {
-          parsed = JSON.parse(jsonMatch[1] || jsonMatch[0]);
-        } else if (typeof content === 'object') {
-          parsed = content;
-        }
-      } catch {
-        // Try to extract JSON from the raw output
-        const jsonMatch = raw.match(/```json\s*([\s\S]*?)```/) || raw.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-          try {
-            parsed = JSON.parse(jsonMatch[1] || jsonMatch[0]);
-          } catch {}
-        }
-      }
+    if (!response.ok) {
+      throw new Error(`Agent fleet returned HTTP ${response.status}`);
+    }
 
-      if (parsed && parsed.denial_type) {
-        const normalizedType = normalizeDenialType(parsed.denial_type);
-        return {
-          denial_type: normalizedType,
-          denial_type_label: denialTypeLabel(normalizedType),
-          payer,
-          reason_codes: parsed.reason_codes || [],
-          cpt_codes: parsed.cpt_codes || [],
-          icd_codes: parsed.icd_codes || [],
-          category: parsed.category || normalizedType,
-          confidence: parsed.confidence || 0.7,
-          summary: parsed.summary || 'Denial classified by LLM triage',
-          appeal_strategy: parsed.appeal_strategy || 'Review payer policy and submit appeal with supporting evidence',
-        };
-      }
+    const data = await response.json();
+
+    // The agent fleet returns a triage result with the expected structure
+    // Extract the result — the fleet may wrap it in { result: ... } or return it directly
+    const parsed = data.result || data;
+
+    if (parsed && parsed.denial_type) {
+      const normalizedType = normalizeDenialType(parsed.denial_type);
+      return {
+        denial_type: normalizedType,
+        denial_type_label: denialTypeLabel(normalizedType),
+        payer,
+        reason_codes: parsed.reason_codes || [],
+        cpt_codes: parsed.cpt_codes || [],
+        icd_codes: parsed.icd_codes || [],
+        category: parsed.category || normalizedType,
+        confidence: parsed.confidence || 0.7,
+        summary: parsed.summary || 'Denial classified by Gemini triage agent',
+        appeal_strategy: parsed.appeal_strategy || 'Review payer policy and submit appeal with supporting evidence',
+      };
     }
   } catch (error: any) {
-    console.warn(`[two-agent-pipeline] LLM triage failed: ${error.message}. Falling back to rule-based triage.`);
+    console.warn(`[two-agent-pipeline] Gemini agent fleet triage failed: ${error.message}. Falling back to rule-based triage.`);
   }
 
   // Fallback: rule-based triage
@@ -283,7 +255,7 @@ function triResultToReason(t: TriageResult): string {
 /**
  * Run the two-agent pipeline: Triage → Policy Research
  *
- * 1. Triage Agent classifies the denial (denial type, payer, codes)
+ * 1. Triage Agent classifies the denial via Gemini agent fleet (denial type, payer, codes)
  * 2. Policy Research Agent uses the triage output to retrieve relevant evidence
  * 3. Combined result flows back with latency measurements
  */

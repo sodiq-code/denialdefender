@@ -28,7 +28,7 @@ spec:
         # Resource allocation — 2 vCPU, 1 GiB RAM for SSR + API workloads
         run.googleapis.com/cpu: "2"
         run.googleapis.com/memory: "1Gi"
-        # Auto-scale: 0→4 instances (cost-controlled for hackathon)
+        # Auto-scale: 0→4 instances (cost-controlled)
         autoscaling.knative.dev/minScale: "0"
         autoscaling.knative.dev/maxScale: "4"
         # Connection pooling via VPC connector for Cloud SQL
@@ -43,12 +43,12 @@ spec:
         image: gcr.io/denialdefender/denialdefender-web:latest
         ports:
         - name: http1
-          containerPort: 3000
+          containerPort: 8080
         env:
         - name: NODE_ENV
           value: production
         - name: PORT
-          value: "3000"
+          value: "8080"
         - name: GCP_PROJECT_ID
           value: denialdefender
         - name: GCP_REGION
@@ -59,11 +59,21 @@ spec:
           value: denialdefender
         - name: NEXT_PUBLIC_APP_NAME
           value: DenialDefender
+        # Model Armor — GEAP safety shield
+        - name: MODEL_ARMOR_POLICY_ID
+          value: "dd-model-armor"
+        - name: MODEL_ARMOR_LOCATION
+          value: europe-west1
+        # Memory Bank — GEAP long-term memory store
+        - name: MEMORY_BANK_STORE
+          value: vertex_ai
+        # Gemini API Key from Secret Manager
         - name: GEMINI_API_KEY
           valueFrom:
             secretKeyRef:
               name: gemini-api-key
               key: latest
+        # Cloud SQL connection string from Secret Manager
         - name: DATABASE_URL
           valueFrom:
             secretKeyRef:
@@ -77,7 +87,7 @@ spec:
         livenessProbe:
           httpGet:
             path: /api/health
-            port: 3000
+            port: 8080
           initialDelaySeconds: 30
           periodSeconds: 30
           timeoutSeconds: 5
@@ -86,7 +96,7 @@ spec:
         readinessProbe:
           httpGet:
             path: /api/health
-            port: 3000
+            port: 8080
           initialDelaySeconds: 10
           periodSeconds: 10
           timeoutSeconds: 3

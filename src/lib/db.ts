@@ -137,6 +137,36 @@ CREATE INDEX IF NOT EXISTS "Evidence_status_idx" ON "Evidence"("status");
 CREATE INDEX IF NOT EXISTS "PhiGuardAudit_case_id_idx" ON "PhiGuardAudit"("case_id");
 CREATE INDEX IF NOT EXISTS "GovernanceAudit_component_idx" ON "GovernanceAudit"("component");
 CREATE INDEX IF NOT EXISTS "GovernanceAudit_verdict_idx" ON "GovernanceAudit"("verdict");
+CREATE TABLE IF NOT EXISTS "LearnedPattern" (
+  "id" TEXT NOT NULL PRIMARY KEY,
+  "pattern_type" TEXT NOT NULL,
+  "denial_category" TEXT NOT NULL,
+  "payer" TEXT NOT NULL,
+  "data" TEXT NOT NULL,
+  "confidence" REAL NOT NULL DEFAULT 0.5,
+  "source_outcomes" TEXT NOT NULL,
+  "created_at" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updated_at" DATETIME NOT NULL
+);
+CREATE TABLE IF NOT EXISTS "CaseMemoryState" (
+  "id" TEXT NOT NULL PRIMARY KEY,
+  "case_id" TEXT NOT NULL UNIQUE,
+  "state" TEXT NOT NULL DEFAULT 'intake',
+  "denial_category" TEXT,
+  "payer" TEXT,
+  "deadline" DATETIME,
+  "hitl_gates" TEXT NOT NULL DEFAULT '{"gate1":false,"gate2":false}',
+  "agent_results" TEXT NOT NULL DEFAULT '{}',
+  "decision_trace" TEXT NOT NULL DEFAULT '[]',
+  "created_at" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updated_at" DATETIME NOT NULL
+);
+CREATE INDEX IF NOT EXISTS "LearnedPattern_pattern_type_idx" ON "LearnedPattern"("pattern_type");
+CREATE INDEX IF NOT EXISTS "LearnedPattern_denial_category_idx" ON "LearnedPattern"("denial_category");
+CREATE INDEX IF NOT EXISTS "LearnedPattern_payer_idx" ON "LearnedPattern"("payer");
+CREATE INDEX IF NOT EXISTS "LearnedPattern_confidence_idx" ON "LearnedPattern"("confidence");
+CREATE INDEX IF NOT EXISTS "CaseMemoryState_case_id_idx" ON "CaseMemoryState"("case_id");
+CREATE INDEX IF NOT EXISTS "CaseMemoryState_state_idx" ON "CaseMemoryState"("state");
 `
 
 let initPromise: Promise<void> | null = null

@@ -41,6 +41,7 @@ export async function POST(req: NextRequest) {
         outcomeId: result.outcomeId,
         weightUpdates: result.weightUpdates.length,
         memoryBankStatus: result.memoryBankStatus,
+        storeDetail: result.storeDetail,
         durationMs: result.durationMs,
         details: result.weightUpdates.map(u => ({
           evidenceId: u.evidenceId,

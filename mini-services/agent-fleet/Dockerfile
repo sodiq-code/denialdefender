@@ -60,7 +60,7 @@ EXPOSE 8080
 
 # GCP environment variables (overridden at deploy time via Cloud Run env config)
 ENV GCP_PROJECT_ID=denialdefender
-ENV GCP_REGION=us-central1
+ENV GCP_REGION=europe-west1
 ENV GEMINI_MODEL=gemini-3.5-flash
 
 # Health check

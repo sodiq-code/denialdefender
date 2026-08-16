@@ -1,7 +1,7 @@
-# DenialDefender Agent Fleet — Cloud Run Service (Python ADK)
+# DenialDefender Agent Fleet — Cloud Run Service (TypeScript/Bun + Python ADK)
 # Deploy: gcloud run services replace agent-fleet-service.yaml
 #
-# This service runs the multi-agent Python fleet using Google ADK:
+# This service runs the multi-agent fleet:
 #   - Researcher Agent: Evidence retrieval + citation verification
 #   - Drafter Agent: Appeal letter generation with provenance cards
 #   - Reviewer Agent: Quality scoring + compliance checks
@@ -9,7 +9,10 @@
 #   - Orchestrator: Routes tasks via Pub/Sub, manages HITL gates
 #
 # Invoked internally via Pub/Sub push subscriptions or direct HTTP from web service.
-# NOT publicly accessible (no unauthenticated ingress).
+# NOT publicly accessible (internal ingress only).
+#
+# Project: denialdefender
+# Region:  europe-west1
 
 apiVersion: serving.knative.dev/v1
 kind: Service
@@ -45,7 +48,7 @@ spec:
         image: gcr.io/denialdefender/denialdefender-agents:latest
         ports:
         - name: http1
-          containerPort: 3004
+          containerPort: 8080
         env:
         - name: GCP_PROJECT_ID
           value: denialdefender
@@ -53,8 +56,8 @@ spec:
           value: europe-west1
         - name: FIRESTORE_LOCATION
           value: eur3
-        - name: AGENT_PORT
-          value: "3004"
+        - name: PORT
+          value: "8080"
         - name: LOG_LEVEL
           value: info
         - name: GEMINI_MODEL
@@ -63,6 +66,18 @@ spec:
           value: text-embedding-004
         - name: EMBEDDING_DIMENSIONS
           value: "768"
+        # Force Gemini backend for all LLM calls
+        - name: FORCE_LLM_BACKEND
+          value: gemini
+        # Model Armor — GEAP safety shield
+        - name: MODEL_ARMOR_POLICY_ID
+          value: "dd-model-armor"
+        - name: MODEL_ARMOR_LOCATION
+          value: europe-west1
+        # Memory Bank — GEAP long-term memory store
+        - name: MEMORY_BANK_STORE
+          value: vertex_ai
+        # Secrets from Secret Manager
         - name: GEMINI_API_KEY
           valueFrom:
             secretKeyRef:
@@ -86,7 +101,7 @@ spec:
         livenessProbe:
           httpGet:
             path: /health
-            port: 3004
+            port: 8080
           initialDelaySeconds: 20
           periodSeconds: 30
           timeoutSeconds: 5
@@ -94,7 +109,7 @@ spec:
         readinessProbe:
           httpGet:
             path: /health
-            port: 3004
+            port: 8080
           initialDelaySeconds: 10
           periodSeconds: 10
           timeoutSeconds: 3

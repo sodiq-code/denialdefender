@@ -246,3 +246,38 @@ model GovernanceAudit {
   @@index([case_id])
   @@index([verdict])
 }
+
+// Day 6 — GEAP Memory Bank (Learned Patterns & Case State)
+model LearnedPattern {
+  id            String   @id @default(cuid())
+  pattern_type  String   // "strategy_weight" | "citation_relevance" | "payer_behavior" | "outcome_prediction"
+  denial_category String
+  payer         String
+  data          String   // JSON — pattern-specific data
+  confidence    Float   @default(0.5)
+  source_outcomes String // JSON array of outcome IDs
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+
+  @@index([pattern_type])
+  @@index([denial_category])
+  @@index([payer])
+  @@index([confidence])
+}
+
+model CaseMemoryState {
+  id              String   @id @default(cuid())
+  case_id         String   @unique
+  state           String   @default("intake") // "intake" | "triaged" | "researched" | "drafted" | "verified" | "approved" | "submitted" | "outcome_recorded" | "learned"
+  denial_category String?
+  payer           String?
+  deadline        DateTime?
+  hitl_gates      String   @default("{\"gate1\":false,\"gate2\":false}") // JSON
+  agent_results   String   @default("{}") // JSON
+  decision_trace  String   @default("[]") // JSON array of TraceEvent
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+
+  @@index([case_id])
+  @@index([state])
+}
