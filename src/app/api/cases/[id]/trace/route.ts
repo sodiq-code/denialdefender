@@ -25,7 +25,7 @@ export async function GET(
       }
 
       const result = await client.execute({
-        sql: `SELECT id, case_id, agent_name, step, status, details, references, timestamp
+        sql: `SELECT id, case_id, agent_name, step, status, details, "references", timestamp
               FROM "DecisionTraceEvent" WHERE case_id = ? ORDER BY timestamp ASC`,
         args: [id],
       });
@@ -92,13 +92,13 @@ export async function POST(
       const references = body.references ? JSON.stringify(body.references) : null;
 
       await client.execute({
-        sql: `INSERT INTO "DecisionTraceEvent" (id, case_id, agent_name, step, status, details, references, timestamp)
+        sql: `INSERT INTO "DecisionTraceEvent" (id, case_id, agent_name, step, status, details, "references", timestamp)
               VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
         args: [traceId, id, body.agent_name, body.step, body.status ?? 'started', details, references, now],
       });
 
       const result = await client.execute({
-        sql: `SELECT id, case_id, agent_name, step, status, details, references, timestamp
+        sql: `SELECT id, case_id, agent_name, step, status, details, "references", timestamp
               FROM "DecisionTraceEvent" WHERE id = ?`,
         args: [traceId],
       });

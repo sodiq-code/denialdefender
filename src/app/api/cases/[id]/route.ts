@@ -41,7 +41,7 @@ export async function GET(
 
       // Fetch traces
       const traceResult = await client.execute({
-        sql: 'SELECT id, case_id, agent_name, step, status, details, references, timestamp FROM "DecisionTraceEvent" WHERE case_id = ? ORDER BY timestamp DESC',
+        sql: 'SELECT id, case_id, agent_name, step, status, details, "references", timestamp FROM "DecisionTraceEvent" WHERE case_id = ? ORDER BY timestamp DESC',
         args: [id],
       });
 
