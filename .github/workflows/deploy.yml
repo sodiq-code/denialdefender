@@ -1,0 +1,142 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# DenialDefender — Auto-Deploy to Cloud Run on Push to Main
+# ══════════════════════════════════════════════════════════════════════════════
+# Triggers on every push to main branch.
+# Builds all 3 services and deploys them to Google Cloud Run.
+#
+# Setup:
+#   1. Add these secrets to your GitHub repo (Settings > Secrets):
+#      - GCP_PROJECT_ID: denialdefender
+#      - GCP_SA_KEY: Service account JSON key (json-775@denialdefender.iam.gserviceaccount.com)
+#
+# The service account needs these roles:
+#   - roles/run.admin
+#   - roles/storage.admin
+#   - roles/artifactregistry.writer
+#   - roles/cloudbuild.builds.editor
+# ══════════════════════════════════════════════════════════════════════════════
+
+name: Deploy to Cloud Run
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: # Allow manual trigger from GitHub UI
+
+env:
+  GCP_PROJECT_ID: denialdefender
+  GCP_REGION: europe-west1
+  AR_REPO: denialdefender
+
+jobs:
+  deploy:
+    name: Build & Deploy All Services
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: |
+          gcloud auth configure-docker ${{ env.GCP_REGION }}-docker.pkg.dev --quiet
+
+      - name: Build & Push Web Service
+        run: |
+          docker build -t ${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.AR_REPO }}/denialdefender-web:${{ github.sha }} \
+            -t ${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.AR_REPO }}/denialdefender-web:latest .
+          docker push ${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.AR_REPO }}/denialdefender-web:${{ github.sha }}
+          docker push ${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.AR_REPO }}/denialdefender-web:latest
+
+      - name: Build & Push Agent Fleet
+        run: |
+          docker build -t ${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.AR_REPO }}/denialdefender-agents:${{ github.sha }} \
+            -t ${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.AR_REPO }}/denialdefender-agents:latest \
+            ./mini-services/agent-fleet
+          docker push ${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.AR_REPO }}/denialdefender-agents:${{ github.sha }}
+          docker push ${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.AR_REPO }}/denialdefender-agents:latest
+
+      - name: Build & Push Trace Stream
+        run: |
+          docker build -t ${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.AR_REPO }}/trace-stream:${{ github.sha }} \
+            -t ${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.AR_REPO }}/trace-stream:latest \
+            ./mini-services/trace-stream
+          docker push ${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.AR_REPO }}/trace-stream:${{ github.sha }}
+          docker push ${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.AR_REPO }}/trace-stream:latest
+
+      - name: Deploy Web Service
+        run: |
+          gcloud run deploy denialdefender-web \
+            --image=${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.AR_REPO }}/denialdefender-web:${{ github.sha }} \
+            --region=${{ env.GCP_REGION }} \
+            --platform=managed \
+            --allow-unauthenticated \
+            --cpu=2 --memory=1Gi \
+            --min-instances=0 --max-instances=4 \
+            --concurrency=80 --timeout=300 \
+            --service-account=json-775@${{ env.GCP_PROJECT_ID }}.iam.gserviceaccount.com \
+            --set-env-vars=NODE_ENV=production \
+            --set-env-vars=GCP_PROJECT_ID=${{ env.GCP_PROJECT_ID }} \
+            --set-env-vars=GCP_REGION=${{ env.GCP_REGION }} \
+            --set-env-vars=FIRESTORE_LOCATION=eur3 \
+            --set-env-vars=NEXT_PUBLIC_GCP_PROJECT_ID=${{ env.GCP_PROJECT_ID }} \
+            --set-env-vars=NEXT_PUBLIC_APP_NAME=DenialDefender \
+            --set-env-vars=MEMORY_BANK_STORE=vertex_ai \
+            --set-secrets=GEMINI_API_KEY=gemini-api-key-1:latest \
+            --quiet
+
+      - name: Deploy Agent Fleet
+        run: |
+          gcloud run deploy denialdefender-agents \
+            --image=${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.AR_REPO }}/denialdefender-agents:${{ github.sha }} \
+            --region=${{ env.GCP_REGION }} \
+            --platform=managed \
+            --no-allow-unauthenticated \
+            --cpu=4 --memory=2Gi \
+            --min-instances=0 --max-instances=10 \
+            --concurrency=10 --timeout=600 \
+            --service-account=json-775@${{ env.GCP_PROJECT_ID }}.iam.gserviceaccount.com \
+            --set-env-vars=GCP_PROJECT_ID=${{ env.GCP_PROJECT_ID }} \
+            --set-env-vars=GCP_REGION=${{ env.GCP_REGION }} \
+            --set-env-vars=FIRESTORE_LOCATION=eur3 \
+            --set-env-vars=LOG_LEVEL=info \
+            --set-env-vars=GEMINI_MODEL=gemini-3.5-flash \
+            --set-env-vars=EMBEDDING_MODEL=text-embedding-004 \
+            --set-env-vars=EMBEDDING_DIMENSIONS=768 \
+            --set-env-vars=FORCE_LLM_BACKEND=gemini \
+            --set-env-vars=MEMORY_BANK_STORE=vertex_ai \
+            --set-secrets=GEMINI_API_KEY=gemini-api-key-1:latest \
+            --quiet
+
+      - name: Deploy Trace Stream
+        run: |
+          gcloud run deploy denialdefender-trace-stream \
+            --image=${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.AR_REPO }}/trace-stream:${{ github.sha }} \
+            --region=${{ env.GCP_REGION }} \
+            --platform=managed \
+            --allow-unauthenticated \
+            --cpu=1 --memory=512Mi \
+            --min-instances=0 --max-instances=2 \
+            --concurrency=80 --timeout=300 \
+            --set-env-vars=NODE_ENV=production \
+            --set-env-vars=GCP_PROJECT_ID=${{ env.GCP_PROJECT_ID }} \
+           E --set-env-vars=GCP_REGION=${{ env.GCP_REGION }} \
+            --quiet
+
+      - name: Verify Deployment
+        run: |
+          WEB_URL=$(gcloud run services describe denialdefender-web \
+            --region=${{ env.GCP_REGION }} --format='value(status.url)')
+          echo "Web URL: $WEB_URL"
+          echo "Health check..."
+          curl -sf "$WEB_URL/api/health" && echo " ✓ Web healthy" || echo " ✗ Web unhealthy"
+          echo "GCP status check..."
+          curl -sf "$WEB_URL/api/agents/gcp/status" | python3 -m json.tool || echo "GCP status check failed"
