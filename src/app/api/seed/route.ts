@@ -155,7 +155,7 @@ export async function POST(request: NextRequest) {
 
           await client.execute({
             sql: `INSERT INTO "Denial" (id, case_id, payer, reason_code, category, denial_letter_text, deadline, confidence, structured_json, created_at)
-                  VALUES (?, ?, ?, ?, 'Your claim has been denied per clinical guidelines. See attached denial letter for full details and appeal rights.', ?, 0.85, '{}', ?)`,
+                  VALUES (?, ?, ?, ?, ?, 'Your claim has been denied per clinical guidelines. See attached denial letter for full details and appeal rights.', ?, 0.85, '{}', ?)`,
             args: [`denial_${sc.id}`, sc.id, sc.payer, sc.code, sc.cat, deadline, now],
           });
 
