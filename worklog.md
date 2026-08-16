@@ -94,3 +94,36 @@ Stage Summary:
 - BLOCKED (needs billing): Cloud SQL, Vertex AI inference, Cloud Run, Secret Manager, Cloud Build
 - NEXT: User needs to fix billing (reopen/create active billing account) to unlock Cloud SQL + Vertex AI
 - Can proceed with Firestore + Pub/Sub + local SQLite stand-in for evidence store
+
+---
+Task ID: 2
+Agent: Main Coordinator
+Task: Set up Cloud Build auto-deployment (Option A — GitHub Actions + Cloud Build)
+
+Work Log:
+- Analyzed user's uploaded screenshot: GitHub repo settings showing GCP_SA_KEY secret
+- Identified critical issue: user pasted `gcloud` command as secret value instead of the actual JSON key
+- Created Dockerfile: multi-stage build (deps → builder → runner) for Next.js 16 standalone output
+- Created .dockerignore: excludes dev files, logs, skills, upload, infra from Docker context
+- Created .github/workflows/deploy.yml: 3-job GitHub Actions pipeline (lint → build → deploy to Cloud Run)
+- Created cloudbuild.yaml: 4-step Cloud Build pipeline as alternative to GitHub Actions
+- Updated infra/gcp/bootstrap.sh: added Artifact Registry + Cloud Build IAM + trigger setup (Steps 9-11)
+- Created infra/gcp/setup-ci.sh: one-time CI/CD setup script (SA creation, IAM roles, key generation, instructions)
+- Created DEPLOY.md: comprehensive deployment guide with troubleshooting, rollback instructions
+- Updated .gitignore: added patterns for service account key files (*sa-key*.json, dd-deploy-sa-key.json, key.json)
+- Verified next.config.ts already has output: "standalone" (required for Docker build)
+
+Stage Summary:
+- CI/CD FILES CREATED:
+  - Dockerfile (multi-stage Next.js build for Cloud Run)
+  - .dockerignore
+  - .github/workflows/deploy.yml (GitHub Actions: lint → build → deploy)
+  - cloudbuild.yaml (Cloud Build alternative)
+  - infra/gcp/setup-ci.sh (one-time setup script)
+  - DEPLOY.md (comprehensive guide)
+- CRITICAL FIX IDENTIFIED: GCP_SA_KEY GitHub secret must contain the JSON key content, NOT the gcloud command
+- TWO DEPLOYMENT OPTIONS:
+  - Option A (recommended): GitHub Actions → Artifact Registry → Cloud Run
+  - Option B: Cloud Build Trigger → Artifact Registry → Cloud Run
+- Cloud Run config: 1 vCPU, 512Mi, scale-to-zero, max 10 instances, port 8080
+- NEXT: User needs to fix GCP_SA_KEY secret value, add GCP_PROJECT_ID secret, then push to main

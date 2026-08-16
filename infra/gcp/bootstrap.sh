@@ -54,6 +54,8 @@ APIS=(
   "cloudresourcemanager.googleapis.com"
   "compute.googleapis.com"
   "identitytoolkit.googleapis.com"
+  "artifactregistry.googleapis.com"
+  "sourcerepo.googleapis.com"
 )
 
 for api in "${APIS[@]}"; do
@@ -179,6 +181,64 @@ for secret in "${SECRETS[@]}"; do
 done
 log "Secrets created (populate with real values via gcloud secrets versions add)"
 
+# ── Step 9: Create Artifact Registry Repository ──────────────────────────────
+echo ""
+echo "── Step 9: Creating Artifact Registry Repository ────────────"
+
+gcloud artifacts repositories create denialdefender-artifacts \
+  --repository-format=docker \
+  --location="${REGION}" \
+  --project="${PROJECT_ID}" \
+  --description="DenialDefender container images" 2>/dev/null || warn "Artifact registry may already exist"
+
+log "Artifact Registry repository created at ${REGION}-docker.pkg.dev/${PROJECT_ID}/denialdefender-artifacts"
+
+# ── Step 10: Grant Cloud Build Permissions ────────────────────────────────────
+echo ""
+echo "── Step 10: Granting Cloud Build IAM Permissions ────────────"
+
+# Cloud Build service account
+CLOUD_BUILD_SA="${PROJECT_ID}@cloudbuild.gserviceaccount.com"
+
+# Grant Cloud Run admin to Cloud Build SA
+gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
+  --member="serviceAccount:${CLOUD_BUILD_SA}" \
+  --role="roles/run.admin" \
+  --quiet 2>/dev/null || warn "Role may already be bound"
+
+# Grant IAM service account user to Cloud Build SA
+gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
+  --member="serviceAccount:${CLOUD_BUILD_SA}" \
+  --role="roles/iam.serviceAccountUser" \
+  --quiet 2>/dev/null || warn "Role may already be bound"
+
+# Grant Artifact Registry writer to Cloud Build SA
+gcloud artifacts repositories add-iam-policy-binding denialdefender-artifacts \
+  --location="${REGION}" \
+  --member="serviceAccount:${CLOUD_BUILD_SA}" \
+  --role="roles/artifactregistry.writer" \
+  --project="${PROJECT_ID}" 2>/dev/null || warn "Repository IAM may already be set"
+
+log "Cloud Build service account permissions granted"
+
+# ── Step 11: Create Cloud Build Trigger (GitHub) ──────────────────────────────
+echo ""
+echo "── Step 11: Creating Cloud Build Trigger ────────────────────"
+echo "  NOTE: GitHub connection must be created manually in Cloud Console first"
+echo "  → Cloud Build > Repositories > Connect Repository"
+
+warn "Run the following command AFTER connecting your GitHub repo:"
+echo ""
+echo "  gcloud builds triggers create github \\"
+echo "    --repo-name=denialdefender \\"
+echo "    --repo-owner=sodiq-code \\"
+echo "    --branch-pattern='^main$' \\"
+echo "    --build-config=cloudbuild.yaml \\"
+echo "    --project=${PROJECT_ID}"
+echo ""
+
+log "Cloud Build trigger setup instructions provided"
+
 # ── Summary ───────────────────────────────────────────────────────────────────
 echo ""
 echo "═══════════════════════════════════════════════════════════════"
@@ -194,5 +254,8 @@ echo ""
 echo "  Next steps:"
 echo "  1. Apply cloud-sql-schema.sql to the Cloud SQL instance"
 echo "  2. Populate secrets with real values"
-echo "  3. Run verify_day1_gate.py to confirm the round-trip"
+echo "  3. Connect GitHub repo in Cloud Build console"
+echo "  4. Create Cloud Build trigger (see Step 11 command)"
+echo "  5. Set GitHub Actions secrets: GCP_SA_KEY, GCP_PROJECT_ID"
+echo "  6. Run verify_day1_gate.py to confirm the round-trip"
 echo ""
