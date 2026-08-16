@@ -49,6 +49,10 @@ jobs:
       # ── Pre-flight: Check billing & enable ALL required APIs ────────────────
       - name: Pre-flight Check — Enable APIs & Verify Billing
         run: |
+          echo "━━━ Pre-flight: Enabling Cloud Billing API first ━━━"
+          gcloud services enable cloudbilling.googleapis.com --project=${{ secrets.GCP_PROJECT_ID }} --quiet 2>/dev/null || true
+          
+          echo ""
           echo "━━━ Pre-flight: Checking billing status ━━━"
           BILLING_ENABLED=$(gcloud billing projects describe ${{ secrets.GCP_PROJECT_ID }} \
             --format="value(billingEnabled)" 2>/dev/null || echo "false")
@@ -73,6 +77,7 @@ jobs:
           echo "━━━ Pre-flight: Enabling all required APIs ━━━"
           
           APIS=(
+            "cloudbilling.googleapis.com"
             "run.googleapis.com"
             "cloudbuild.googleapis.com"
             "artifactregistry.googleapis.com"
