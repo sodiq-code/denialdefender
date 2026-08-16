@@ -74,13 +74,19 @@ export default function PlatformStatusCard() {
   const fetchStatus = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/governance/platform');
+      const res = await fetch('/api/governance/platform', {
+        signal: AbortSignal.timeout(5000), // 5s timeout
+      });
       if (res.ok) {
         const json = await res.json();
         setData(json);
       }
     } catch (error) {
-      console.error('Platform status fetch failed:', error);
+      // Transient failure (HMR rebuild, network blip) — don't log noisily
+      // The component renders gracefully with null data (local-only fallback shown)
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('[PlatformStatus] Fetch failed (transient in dev):', error instanceof Error ? error.message : error);
+      }
     } finally {
       setLoading(false);
     }
@@ -88,6 +94,10 @@ export default function PlatformStatusCard() {
 
   useEffect(() => {
     fetchStatus();
+    // Re-fetch on window focus (user returns to tab — platform might now be available)
+    const onFocus = () => { if (!data) fetchStatus(); };
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
   }, []);
 
   return (
