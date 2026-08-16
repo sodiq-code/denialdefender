@@ -25,7 +25,7 @@ RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
 # ── Stage 2: Bun runtime with Python venv ────────────────────────────────────
-FROM bun:1
+FROM oven/bun:1
 
 WORKDIR /app
 

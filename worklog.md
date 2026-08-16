@@ -1742,3 +1742,39 @@ Stage Summary:
 - Every operation records which backend was used (auditability)
 - When deployed on GCP: platform APIs used. When local: fallback to existing implementations.
 - This converts "checkbox integration" into "genuine GEAP integration" — defense against Anti-Pattern #3
+---
+Task ID: deploy-1
+Agent: main
+Task: Deploy DenialDefender to Google Cloud Run (GCP)
+
+Work Log:
+- Authenticated with GCP using service account key (json-775@denialdefender.iam.gserviceaccount.com)
+- Set project to denialdefender (315133452553), region europe-west1
+- Enabled 16 GCP APIs (run, cloudbuild, artifactregistry, firestore, pubsub, secretmanager, aiplatform, generativelanguage, sqladmin, iam, etc.)
+- Verified existing infrastructure: Firestore (eur3, Native mode), 4 Pub/Sub topics (agent_tasks, decision_trace, case_events, gate_events)
+- Created Artifact Registry repository: denialdefender (docker format, europe-west1)
+- Granted IAM roles: storage.admin, run.admin, artifactregistry.writer/admin to Cloud Build SAs and compute SA
+- Fixed Dockerfile: Added prisma schema copy before bun install, set DATABASE_URL=file:./prisma/dev.db for both deps and builder stages
+- Fixed Dockerfile: Changed build command from npm run build to explicit prisma db push + next build (avoids env var issues)
+- Built Next.js web image via Cloud Build → SUCCESS, pushed to europe-west1-docker.pkg.dev/denialdefender/denialdefender/denialdefender-web:latest (166MB)
+- Fixed agent-fleet Dockerfile: Changed FROM bun:1 to FROM oven/bun:1 (official Bun image)
+- Fixed trace-stream Dockerfile: Same bun image fix
+- Built agent-fleet image via Cloud Build → SUCCESS
+- Built trace-stream image via Cloud Build → SUCCESS
+- Deployed 3 Cloud Run services:
+  1. denialdefender-web (public, 2 CPU, 1Gi RAM, 0-4 instances, concurrency 80)
+  2. denialdefender-agents (private, 4 CPU, 2Gi RAM, 0-10 instances, concurrency 10)
+  3. denialdefender-trace-stream (public, 1 CPU, 512Mi RAM, 0-1 instances)
+- Updated web service with AGENT_FLEET_URL and NEXT_PUBLIC_TRACE_STREAM_URL env vars
+- Configured IAM: web service SA can invoke agent-fleet and trace-stream
+- Verified all endpoints return HTTP 200: /api/health, /, /api/governance/platform, /api/governance/registry
+- Browser verification: Full app loads with all tabs (Dashboard, New Appeal, Cases, Evidence, Trace Stream, Governance)
+
+Stage Summary:
+- ALL 3 services deployed and verified on Cloud Run
+- Production URL: https://denialdefender-web-7ffj23k2va-ew.a.run.app/
+- Agent Fleet URL: https://denialdefender-agents-7ffj23k2va-ew.a.run.app/
+- Trace Stream URL: https://denialdefender-trace-stream-7ffj23k2va-ew.a.run.app/
+- Health endpoint returns: {"status":"healthy","service":"denialdefender-web"}
+- Platform status returns: 3 adopted GEAP components, platformAvailable=true, projectId=denialdefender
+- Agent registry returns: 8 agents, all healthy

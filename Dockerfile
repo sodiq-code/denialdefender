@@ -20,11 +20,15 @@ RUN apk add --no-cache libc6-compat python3 make g++
 
 WORKDIR /app
 
-# Copy package manifests for dependency install
+# Copy package manifests + prisma schema for dependency install
 COPY package.json bun.lock ./
+COPY prisma ./prisma
 
 # Install bun for reproducible dependency installation (matches local dev)
 RUN npm install -g bun@latest
+
+# Set DATABASE_URL for prisma generate (postinstall hook)
+ENV DATABASE_URL=file:./prisma/dev.db
 
 # Install all dependencies (including devDependencies needed for build)
 RUN bun install --frozen-lockfile
@@ -45,8 +49,10 @@ RUN npx prisma generate
 # Build Next.js (uses standalone output mode via next.config.ts)
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
+ENV DATABASE_URL=file:./prisma/dev.db
 
-RUN npm run build
+# Push Prisma schema to SQLite then build Next.js
+RUN npx prisma db push --accept-data-loss && npx next build
 
 # ── Stage 3: Production Runtime ──────────────────────────────────────────────
 FROM node:20-alpine AS runner

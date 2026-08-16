@@ -8,7 +8,7 @@
 # Cloud Run sets PORT=8080 automatically.
 # ══════════════════════════════════════════════════════════════════════════════
 
-FROM bun:1
+FROM oven/bun:1
 
 WORKDIR /app
 
