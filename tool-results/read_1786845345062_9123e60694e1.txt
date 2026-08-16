@@ -1,0 +1,826 @@
+     1→/**
+     2→ * DenialDefender — GEAP Agent Registry (Task 5)
+     3→ *
+     4→ * The Agent Registry is one of the 7 GEAP components required for the
+     5→ * Fortified Enterprise Fleet track. It provides:
+     6→ *   - Central registration of all 8 DenialDefender agents with full metadata
+     7→ *   - Discovery API (list, search by capability, get by name)
+     8→ *   - Versioning (each agent has a version; registry tracks compatible versions)
+     9→ *   - Health status tracking (based on last execution result)
+    10→ *   - Capability, tool, and schema tracking
+    11→ *   - Registry events emitted to the decision trace
+    12→ *
+    13→ * Per the Ultimate Blueprint:
+    14→ *   "GEAP Agent Registry — every agent must register with its capabilities,
+    15→ *    tools, input/output schemas, and version. Discovery must support
+    16→ *    capability-based lookup and version compatibility."
+    17→ *
+    18→ * The 8 DenialDefender agents:
+    19→ *   1. Patient Advocate — empathetic intake, case framing, user trust
+    20→ *   2. Denial Triage — multimodal parse of denial letter → structured JSON
+    21→ *   3. Policy Research — retrieve payer policy + clause citations
+    22→ *   4. Evidence Assembly — match clinical evidence to denial reason
+    23→ *   5. Letter Drafting — compose evidence-backed appeal draft
+    24→ *   6. Quality Review (adversarial) — attempt to break the draft; verify every citation
+    25→ *   7. Outcome Learning — ingest outcomes; update retrieval; before/after eval
+    26→ *   8. Compliance & Deadline — deadline tracking, payer-format checks, audit trail
+    27→ */
+    28→
+    29→import { emitTraceEvent } from './decision-trace-stream';
+    30→
+    31→// ─── Types ────────────────────────────────────────────────────────────────
+    32→
+    33→export type AgentCategory = 'core' | 'governance' | 'learning';
+    34→export type HealthStatus = 'healthy' | 'degraded' | 'offline';
+    35→
+    36→export interface AgentRegistration {
+    37→  name: string;           // e.g., "denial-triage"
+    38→  displayName: string;    // e.g., "Denial Triage"
+    39→  version: string;        // e.g., "1.0.0"
+    40→  description: string;
+    41→  category: AgentCategory;
+    42→  capabilities: string[]; // e.g., ["denial_classification", "code_extraction"]
+    43→  tools: string[];        // e.g., ["gemini_api", "evidence_corpus"]
+    44→  inputSchema: object;    // JSON schema for inputs
+    45→  outputSchema: object;   // JSON schema for outputs
+    46→  permissions: string[];  // e.g., ["read:cases", "write:traces"]
+    47→  healthStatus: HealthStatus;
+    48→  lastExecution?: {
+    49→    timestamp: string;
+    50→    success: boolean;
+    51→    latencyMs: number;
+    52→  };
+    53→  endpoint: string;       // e.g., "/agents/denial-triage"
+    54→  model: string;          // e.g., "gemini-2.0-flash"
+    55→}
+    56→
+    57→export interface RegistrySummary {
+    58→  totalAgents: number;
+    59→  categories: Record<AgentCategory, number>;
+    60→  healthSummary: Record<HealthStatus, number>;
+    61→  agentsByVersion: Record<string, string[]>;
+    62→  registryVersion: string;
+    63→  lastUpdated: string;
+    64→}
+    65→
+    66→export interface RegistryEvent {
+    67→  type: 'agent_registered' | 'health_updated' | 'agent_discovered';
+    68→  agentName: string;
+    69→  timestamp: string;
+    70→  detail: string;
+    71→}
+    72→
+    73→// ─── Version Compatibility ────────────────────────────────────────────────
+    74→
+    75→/**
+    76→ * Compatible version ranges for inter-agent communication.
+    77→ * If an agent at version X calls agent Y, Y must be within the
+    78→ * compatible range for X's version.
+    79→ */
+    80→const VERSION_COMPATIBILITY: Record<string, Record<string, string>> = {
+    81→  'patient-advocate': { 'denial-triage': '>=1.0.0', 'deadline-tracker': '>=1.0.0' },
+    82→  'denial-triage': { 'policy-research': '>=1.0.0', 'evidence-assembly': '>=1.0.0' },
+    83→  'policy-research': { 'evidence-assembly': '>=1.0.0', 'letter-drafting': '>=1.0.0' },
+    84→  'evidence-assembly': { 'letter-drafting': '>=1.0.0', 'quality-review': '>=1.0.0' },
+    85→  'letter-drafting': { 'quality-review': '>=1.0.0' },
+    86→  'quality-review': { 'outcome-learning': '>=1.0.0', 'deadline-tracker': '>=1.0.0' },
+    87→  'outcome-learning': { 'policy-research': '>=1.0.0' },
+    88→  'deadline-tracker': {},
+    89→};
+    90→
+    91→// ─── Agent Catalog ────────────────────────────────────────────────────────
+    92→
+    93→/**
+    94→ * Full agent catalog with all 8 DenialDefender agents.
+    95→ * Each entry contains complete metadata per the AgentRegistration interface.
+    96→ */
+    97→const AGENT_CATALOG: AgentRegistration[] = [
+    98→  {
+    99→    name: 'patient-advocate',
+   100→    displayName: 'Patient Advocate',
+   101→    version: '1.0.0',
+   102→    description: 'Empathetic intake, case framing, urgency assessment. Builds user trust and frames the denial for downstream agents.',
+   103→    category: 'core',
+   104→    capabilities: [
+   105→      'empathetic_intake',
+   106→      'case_framing',
+   107→      'urgency_assessment',
+   108→      'deadline_extraction',
+   109→      'trust_building',
+   110→    ],
+   111→    tools: ['gemini_api', 'case_store'],
+   112→    inputSchema: {
+   113→      type: 'object',
+   114→      properties: {
+   115→        denialText: { type: 'string', description: 'Raw denial letter text' },
+   116→        patientInfo: { type: 'object', description: 'Patient demographics (PHI-safe)' },
+   117→        payer: { type: 'string', description: 'Insurance payer name' },
+   118→      },
+   119→      required: ['denialText', 'payer'],
+   120→    },
+   121→    outputSchema: {
+   122→      type: 'object',
+   123→      properties: {
+   124→        caseFraming: { type: 'object', description: 'Structured case framing with urgency and deadline' },
+   125→        humanSummary: { type: 'string', description: 'Human-readable case summary' },
+   126→        confidence: { type: 'number', description: 'Intake confidence score 0-1' },
+   127→      },
+   128→    },
+   129→    permissions: ['read:cases', 'write:cases', 'read:denials', 'read:appeals', 'read:evidence', 'write:traces', 'read:hitl_gates'],
+   130→    healthStatus: 'healthy',
+   131→    endpoint: '/agents/patient-advocate',
+   132→    model: 'gemini-2.0-flash',
+   133→  },
+   134→  {
+   135→    name: 'denial-triage',
+   136→    displayName: 'Denial Triage',
+   137→    version: '1.0.0',
+   138→    description: 'Multimodal parse of denial letter into structured JSON. Classifies denial type, extracts codes, assesses appealability and strategy.',
+   139→    category: 'core',
+   140→    capabilities: [
+   141→      'denial_classification',
+   142→      'code_extraction',
+   143→      'reason_code_parsing',
+   144→      'appeal_strategy_selection',
+   145→      'confidence_assessment',
+   146→      'hitl_gate1_creation',
+   147→    ],
+   148→    tools: ['gemini_api', 'regex_parser', 'code_lookup'],
+   149→    inputSchema: {
+   150→      type: 'object',
+   151→      properties: {
+   152→        denialText: { type: 'string', description: 'Raw denial letter text' },
+   153→        payer: { type: 'string', description: 'Insurance payer name' },
+   154→        advocateResult: { type: 'object', description: 'Patient Advocate output for context' },
+   155→      },
+   156→      required: ['denialText', 'payer'],
+   157→    },
+   158→    outputSchema: {
+   159→      type: 'object',
+   160→      properties: {
+   161→        denialJson: { type: 'object', description: 'Structured denial JSON with codes and classification' },
+   162→        classification: { type: 'object', description: 'Appealability assessment and strategy' },
+   163→        humanConfirmPrompt: { type: 'string', description: 'HITL Gate 1 confirmation prompt' },
+   164→      },
+   165→    },
+   166→    permissions: ['read:cases', 'write:cases', 'read:denials', 'write:denials', 'read:appeals', 'read:evidence', 'write:traces', 'read:hitl_gates', 'write:hitl_gates'],
+   167→    healthStatus: 'healthy',
+   168→    endpoint: '/agents/denial-triage',
+   169→    model: 'gemini-2.0-flash',
+   170→  },
+   171→  {
+   172→    name: 'policy-research',
+   173→    displayName: 'Policy Research',
+   174→    version: '1.0.0',
+   175→    description: 'Retrieve payer policy, select relevant clauses, track provenance of each citation. Matches denial reason to policy exceptions.',
+   176→    category: 'core',
+   177→    capabilities: [
+   178→      'policy_retrieval',
+   179→      'clause_selection',
+   180→      'provenance_tracking',
+   181→      'denial_reason_matching',
+   182→      'coverage_determination',
+   183→    ],
+   184→    tools: ['gemini_api', 'policy_corpus', 'vector_search'],
+   185→    inputSchema: {
+   186→      type: 'object',
+   187→      properties: {
+   188→        denialJson: { type: 'object', description: 'Structured denial from Triage' },
+   189→        payer: { type: 'string', description: 'Payer name for policy lookup' },
+   190→      },
+   191→      required: ['denialJson', 'payer'],
+   192→    },
+   193→    outputSchema: {
+   194→      type: 'object',
+   195→      properties: {
+   196→        clauses: { type: 'array', description: 'Matched policy clauses with citations' },
+   197→        provenance: { type: 'array', description: 'Provenance records for each clause' },
+   198→        strategy: { type: 'string', description: 'Recommended appeal strategy based on policy' },
+   199→      },
+   200→    },
+   201→    permissions: ['read:cases', 'read:denials', 'read:execute:policies', 'read:evidence', 'write:evidence', 'read:citations', 'write:citations', 'write:traces'],
+   202→    healthStatus: 'healthy',
+   203→    endpoint: '/agents/policy-research',
+   204→    model: 'gemini-2.0-flash',
+   205→  },
+   206→  {
+   207→    name: 'evidence-assembly',
+   208→    displayName: 'Evidence Assembly',
+   209→    version: '1.0.0',
+   210→    description: 'Match clinical evidence to denial reason. Score and rank evidence by relevance and provenance quality.',
+   211→    category: 'core',
+   212→    capabilities: [
+   213→      'evidence_matching',
+   214→      'provenance_scoring',
+   215→      'evidence_ranking',
+   216→      'clinical_guideline_lookup',
+   217→      'citation_verification',
+   218→    ],
+   219→    tools: ['gemini_api', 'evidence_corpus', 'vector_search'],
+   220→    inputSchema: {
+   221→      type: 'object',
+   222→      properties: {
+   223→        denialJson: { type: 'object', description: 'Structured denial from Triage' },
+   224→        policyClauses: { type: 'array', description: 'Policy clauses from Policy Research' },
+   225→      },
+   226→      required: ['denialJson'],
+   227→    },
+   228→    outputSchema: {
+   229→      type: 'object',
+   230→      properties: {
+   231→        evidence: { type: 'array', description: 'Ranked evidence items with provenance scores' },
+   232→        gaps: { type: 'array', description: 'Evidence gaps that need attention' },
+   233→        coverage: { type: 'number', description: 'Evidence coverage score 0-1' },
+   234→      },
+   235→    },
+   236→    permissions: ['read:cases', 'read:denials', 'read:evidence', 'write:evidence', 'read:citations', 'write:citations', 'write:traces'],
+   237→    healthStatus: 'healthy',
+   238→    endpoint: '/agents/evidence-assembly',
+   239→    model: 'gemini-2.0-flash',
+   240→  },
+   241→  {
+   242→    name: 'letter-drafting',
+   243→    displayName: 'Letter Drafting',
+   244→    version: '1.1.0',
+   245→    description: 'Compose evidence-backed appeal draft. Integrates policy clauses, clinical evidence, and payer-specific formatting. Cannot access outcomes (prevents bias).',
+   246→    category: 'core',
+   247→    capabilities: [
+   248→      'draft_composition',
+   249→      'evidence_integration',
+   250→      'policy_citation_inlining',
+   251→      'payer_format_compliance',
+   252→      'persuasion_structuring',
+   253→    ],
+   254→    tools: ['gemini_api', 'template_engine', 'phrase_discipline'],
+   255→    inputSchema: {
+   256→      type: 'object',
+   257→      properties: {
+   258→        denialJson: { type: 'object', description: 'Structured denial' },
+   259→        policyClauses: { type: 'array', description: 'Policy clauses' },
+   260→        evidence: { type: 'array', description: 'Assembled evidence' },
+   261→        payerFormat: { type: 'string', description: 'Payer-specific format requirements' },
+   262→      },
+   263→      required: ['denialJson', 'policyClauses', 'evidence'],
+   264→    },
+   265→    outputSchema: {
+   266→      type: 'object',
+   267→      properties: {
+   268→        draft: { type: 'string', description: 'Appeal letter draft text' },
+   269→        citationsUsed: { type: 'array', description: 'Citations embedded in the draft' },
+   270→        wordCount: { type: 'number', description: 'Draft word count' },
+   271→        phraseDisciplineScore: { type: 'number', description: 'Compliance with phrase discipline rules' },
+   272→      },
+   273→    },
+   274→    permissions: ['read:cases', 'read:denials', 'read:appeals', 'write:appeals', 'read:evidence', 'read:citations', 'read:policies', 'write:traces'],
+   275→    healthStatus: 'healthy',
+   276→    endpoint: '/agents/letter-drafting',
+   277→    model: 'gemini-2.5-flash',
+   278→  },
+   279→  {
+   280→    name: 'quality-review',
+   281→    displayName: 'Quality Review (Adversarial)',
+   282→    version: '1.1.0',
+   283→    description: 'Adversarial review: attempt to break the draft, verify every citation, check logical consistency. Cannot write appeals (prevents self-approval).',
+   284→    category: 'governance',
+   285→    capabilities: [
+   286→      'adversarial_testing',
+   287→      'citation_verification',
+   288→      'logical_consistency_check',
+   289→      'unsupported_claim_detection',
+   290→      'hitl_gate2_creation',
+   291→      'draft_rejection',
+   292→    ],
+   293→    tools: ['gemini_api', 'citation_checker', 'adversarial_battery'],
+   294→    inputSchema: {
+   295→      type: 'object',
+   296→      properties: {
+   297→        draft: { type: 'string', description: 'Appeal letter draft from Letter Drafting' },
+   298→        citationsUsed: { type: 'array', description: 'Citations used in the draft' },
+   299→        evidence: { type: 'array', description: 'Source evidence for cross-checking' },
+   300→      },
+   301→      required: ['draft', 'citationsUsed'],
+   302→    },
+   303→    outputSchema: {
+   304→      type: 'object',
+   305→      properties: {
+   306→        verdict: { type: 'string', enum: ['pass', 'fail', 'needs_revision'], description: 'Review verdict' },
+   307→        citationResults: { type: 'array', description: 'Per-citation verification results' },
+   308→        unsupportedClaims: { type: 'number', description: 'Count of unsupported claims found' },
+   309→        adversarialResults: { type: 'array', description: 'Adversarial test results' },
+   310→        qualityScore: { type: 'number', description: 'Overall quality score 0-1' },
+   311→      },
+   312→    },
+   313→    permissions: ['read:cases', 'read:denials', 'read:appeals', 'read:evidence', 'read:citations', 'write:citations', 'read:outcomes', 'write:traces', 'read:hitl_gates', 'write:hitl_gates'],
+   314→    healthStatus: 'healthy',
+   315→    endpoint: '/agents/quality-review',
+   316→    model: 'gemini-2.5-flash',
+   317→  },
+   318→  {
+   319→    name: 'outcome-learning',
+   320→    displayName: 'Outcome Learning',
+   321→    version: '1.0.0',
+   322→    description: 'Ingest appeal outcomes (won/lost/partial), update retrieval weights, run before/after evaluations. Read-only on product data (appeals, evidence).',
+   323→    category: 'learning',
+   324→    capabilities: [
+   325→      'outcome_ingestion',
+   326→      'weight_update',
+   327→      'before_after_evaluation',
+   328→      'strategy_effectiveness_tracking',
+   329→      'retrieval_weight_adjustment',
+   330→    ],
+   331→    tools: ['gemini_api', 'outcome_store', 'weight_engine'],
+   332→    inputSchema: {
+   333→      type: 'object',
+   334→      properties: {
+   335→        caseId: { type: 'string', description: 'Case ID for outcome recording' },
+   336→        outcome: { type: 'string', enum: ['won', 'lost', 'partial'], description: 'Appeal outcome' },
+   337→        outcomeDetail: { type: 'object', description: 'Detailed outcome metadata' },
+   338→      },
+   339→      required: ['caseId', 'outcome'],
+   340→    },
+   341→    outputSchema: {
+   342→      type: 'object',
+   343→      properties: {
+   344→        weightUpdates: { type: 'array', description: 'Retrieval weight changes made' },
+   345→        beforeAfter: { type: 'object', description: 'Before/after evaluation metrics' },
+   346→        effectivenessDelta: { type: 'number', description: 'Change in strategy effectiveness' },
+   347→      },
+   348→    },
+   349→    permissions: ['read:cases', 'read:outcomes', 'write:outcomes', 'read:policies', 'write:policies', 'write:traces'],
+   350→    healthStatus: 'healthy',
+   351→    endpoint: '/agents/outcome-learning',
+   352→    model: 'gemini-2.0-flash',
+   353→  },
+   354→  {
+   355→    name: 'deadline-tracker',
+   356→    displayName: 'Compliance & Deadline',
+   357→    version: '1.0.0',
+   358→    description: 'Deadline tracking, payer-format compliance checks, escalation alerts, and audit trail maintenance. Temporal-only authority — cannot write clinical content.',
+   359→    category: 'governance',
+   360→    capabilities: [
+   361→      'deadline_tracking',
+   362→      'payer_format_compliance',
+   363→      'escalation_alerting',
+   364→      'audit_trail_maintenance',
+   365→      'timely_filing_verification',
+   366→      'deadline_escalation',
+   367→    ],
+   368→    tools: ['deadline_calculator', 'payer_rules', 'alert_engine'],
+   369→    inputSchema: {
+   370→      type: 'object',
+   371→      properties: {
+   372→        caseId: { type: 'string', description: 'Case ID for deadline tracking' },
+   373→        payer: { type: 'string', description: 'Payer for deadline rules lookup' },
+   374→        denialDate: { type: 'string', description: 'Denial date ISO string' },
+   375→        appealLevel: { type: 'number', description: 'Appeal level (1=redetermination, 2=reconsideration, etc.)' },
+   376→      },
+   377→      required: ['caseId', 'payer'],
+   378→    },
+   379→    outputSchema: {
+   380→      type: 'object',
+   381→      properties: {
+   382→        deadlineDate: { type: 'string', description: 'Calculated deadline date ISO string' },
+   383→        daysRemaining: { type: 'number', description: 'Days until deadline' },
+   384→        escalationLevel: { type: 'string', enum: ['normal', 'warning', 'critical', 'expired'], description: 'Escalation level' },
+   385→        complianceChecks: { type: 'array', description: 'Payer format compliance check results' },
+   386→      },
+   387→    },
+   388→    permissions: ['read:cases', 'read:deadlines', 'write:deadlines', 'execute:deadlines', 'write:traces', 'read:hitl_gates'],
+   389→    healthStatus: 'healthy',
+   390→    endpoint: '/agents/deadline-tracker',
+   391→    model: 'gemini-2.0-flash',
+   392→  },
+   393→];
+   394→
+   395→// ─── Registry State ───────────────────────────────────────────────────────
+   396→
+   397→/** Internal registry store — maps agent name to registration */
+   398→const registry = new Map<string, AgentRegistration>();
+   399→
+   400→/** Registry event log for trace emission */
+   401→const registryEvents: RegistryEvent[] = [];
+   402→
+   403→/** Registry version — bumped when agents are added/updated */
+   404→let REGISTRY_VERSION = '1.0.0';
+   405→
+   406→/** Flag to ensure auto-registration happens only once */
+   407→let autoRegistered = false;
+   408→
+   409→// ─── Auto-Registration ────────────────────────────────────────────────────
+   410→
+   411→/**
+   412→ * Auto-register all 8 agents on module import.
+   413→ * This ensures the registry is populated when the app starts.
+   414→ */
+   415→function autoRegister(): void {
+   416→  if (autoRegistered) return;
+   417→  autoRegistered = true;
+   418→
+   419→  for (const agent of AGENT_CATALOG) {
+   420→    registry.set(agent.name, { ...agent });
+   421→    registryEvents.push({
+   422→      type: 'agent_registered',
+   423→      agentName: agent.name,
+   424→      timestamp: new Date().toISOString(),
+   425→      detail: `${agent.displayName} v${agent.version} registered [${agent.category}]`,
+   426→    });
+   427→  }
+   428→
+   429→  REGISTRY_VERSION = '1.0.0';
+   430→  console.log(`[AgentRegistry] Auto-registered ${AGENT_CATALOG.length} agents (registry v${REGISTRY_VERSION})`);
+   431→}
+   432→
+   433→// Execute auto-registration on import
+   434→autoRegister();
+   435→
+   436→// ─── Registration API ─────────────────────────────────────────────────────
+   437→
+   438→/**
+   439→ * Register an agent in the registry.
+   440→ * If an agent with the same name already exists, it will be updated.
+   441→ * Emits a registry event to the decision trace.
+   442→ */
+   443→export function registerAgent(agent: AgentRegistration): void {
+   444→  const existing = registry.get(agent.name);
+   445→  const isUpdate = !!existing;
+   446→
+   447→  registry.set(agent.name, { ...agent });
+   448→
+   449→  const event: RegistryEvent = {
+   450→    type: 'agent_registered',
+   451→    agentName: agent.name,
+   452→    timestamp: new Date().toISOString(),
+   453→    detail: isUpdate
+   454→      ? `${agent.displayName} updated from v${existing.version} to v${agent.version}`
+   455→      : `${agent.displayName} v${agent.version} registered [${agent.category}]`,
+   456→  };
+   457→  registryEvents.push(event);
+   458→
+   459→  // Emit trace event (fire and forget)
+   460→  emitRegistryTraceEvent(event).catch(() => {
+   461→    // Non-critical — trace emission is best-effort
+   462→  });
+   463→
+   464→  console.log(`[AgentRegistry] ${event.detail}`);
+   465→}
+   466→
+   467→// ─── Discovery API ────────────────────────────────────────────────────────
+   468→
+   469→/**
+   470→ * Get a specific agent by name.
+   471→ */
+   472→export function getAgent(name: string): AgentRegistration | undefined {
+   473→  return registry.get(name);
+   474→}
+   475→
+   476→/**
+   477→ * List agents with optional filtering.
+   478→ * Supports filtering by category and/or capability.
+   479→ */
+   480→export function listAgents(filter?: {
+   481→  category?: string;
+   482→  capability?: string;
+   483→}): AgentRegistration[] {
+   484→  let agents = Array.from(registry.values());
+   485→
+   486→  if (filter?.category) {
+   487→    agents = agents.filter(a => a.category === filter.category);
+   488→  }
+   489→
+   490→  if (filter?.capability) {
+   491→    agents = agents.filter(a => a.capabilities.includes(filter.capability!));
+   492→  }
+   493→
+   494→  return agents;
+   495→}
+   496→
+   497→/**
+   498→ * Search for agents that have a specific capability.
+   499→ * Returns agents sorted by health status (healthy first).
+   500→ */
+   501→export function searchByCapability(capability: string): AgentRegistration[] {
+   502→  const agents = Array.from(registry.values())
+   503→    .filter(a => a.capabilities.includes(capability));
+   504→
+   505→  // Sort by health status: healthy > degraded > offline
+   506→  const healthOrder: Record<HealthStatus, number> = {
+   507→    healthy: 0,
+   508→    degraded: 1,
+   509→    offline: 2,
+   510→  };
+   511→
+   512→  agents.sort((a, b) => healthOrder[a.healthStatus] - healthOrder[b.healthStatus]);
+   513→
+   514→  return agents;
+   515→}
+   516→
+   517→/**
+   518→ * Search for agents that have a specific tool.
+   519→ */
+   520→export function searchByTool(tool: string): AgentRegistration[] {
+   521→  return Array.from(registry.values())
+   522→    .filter(a => a.tools.includes(tool));
+   523→}
+   524→
+   525→/**
+   526→ * Search for agents that have a specific permission.
+   527→ */
+   528→export function searchByPermission(permission: string): AgentRegistration[] {
+   529→  return Array.from(registry.values())
+   530→    .filter(a => a.permissions.includes(permission));
+   531→}
+   532→
+   533→// ─── Health Status ────────────────────────────────────────────────────────
+   534→
+   535→/**
+   536→ * Update an agent's health status and last execution info.
+   537→ * Emits a health_updated registry event.
+   538→ */
+   539→export function updateHealthStatus(
+   540→  name: string,
+   541→  status: HealthStatus,
+   542→  execution: {
+   543→    timestamp: string;
+   544→    success: boolean;
+   545→    latencyMs: number;
+   546→  },
+   547→): void {
+   548→  const agent = registry.get(name);
+   549→  if (!agent) {
+   550→    console.warn(`[AgentRegistry] Cannot update health for unknown agent: ${name}`);
+   551→    return;
+   552→  }
+   553→
+   554→  agent.healthStatus = status;
+   555→  agent.lastExecution = execution;
+   556→
+   557→  const event: RegistryEvent = {
+   558→    type: 'health_updated',
+   559→    agentName: name,
+   560→    timestamp: new Date().toISOString(),
+   561→    detail: `${agent.displayName} health: ${status} (last exec: ${execution.success ? 'success' : 'failure'}, ${execution.latencyMs}ms)`,
+   562→  };
+   563→  registryEvents.push(event);
+   564→
+   565→  // Emit trace event (fire and forget)
+   566→  emitRegistryTraceEvent(event).catch(() => {
+   567→    // Non-critical
+   568→  });
+   569→}
+   570→
+   571→/**
+   572→ * Bulk health status update from pipeline results.
+   573→ * Updates all agents based on their execution results.
+   574→ */
+   575→export function bulkHealthUpdate(results: Array<{
+   576→  agentName: string;
+   577→  success: boolean;
+   578→  latencyMs: number;
+   579→}>): void {
+   580→  const now = new Date().toISOString();
+   581→
+   582→  for (const result of results) {
+   583→    const status: HealthStatus = result.success
+   584→      ? (result.latencyMs < 5000 ? 'healthy' : 'degraded')  // High latency = degraded
+   585→      : 'offline';
+   586→
+   587→    updateHealthStatus(result.agentName, status, {
+   588→      timestamp: now,
+   589→      success: result.success,
+   590→      latencyMs: result.latencyMs,
+   591→    });
+   592→  }
+   593→}
+   594→
+   595→// ─── Version Compatibility ────────────────────────────────────────────────
+   596→
+   597→/**
+   598→ * Check if two agents are version-compatible for communication.
+   599→ */
+   600→export function areVersionCompatible(
+   601→  agentA: string,
+   602→  agentB: string,
+   603→): { compatible: boolean; requiredRange: string | null } {
+   604→  const compatMap = VERSION_COMPATIBILITY[agentA];
+   605→  if (!compatMap || !compatMap[agentB]) {
+   606→    // No explicit compatibility requirement = compatible by default
+   607→    return { compatible: true, requiredRange: null };
+   608→  }
+   609→
+   610→  const requiredRange = compatMap[agentB];
+   611→  const agentBReg = registry.get(agentB);
+   612→  if (!agentBReg) {
+   613→    return { compatible: false, requiredRange };
+   614→  }
+   615→
+   616→  // Simple semver check: ">=X.Y.Z" means agentB version must be >= X.Y.Z
+   617→  const match = requiredRange.match(/^>=(\d+\.\d+\.\d+)$/);
+   618→  if (match) {
+   619→    const minVersion = match[1];
+   620→    const compatible = compareSemver(agentBReg.version, minVersion) >= 0;
+   621→    return { compatible, requiredRange };
+   622→  }
+   623→
+   624→  // If we can't parse the range, assume compatible
+   625→  return { compatible: true, requiredRange };
+   626→}
+   627→
+   628→/**
+   629→ * Get all version compatibility relationships for an agent.
+   630→ */
+   631→export function getVersionCompatibility(agentName: string): Record<string, string> {
+   632→  return VERSION_COMPATIBILITY[agentName] || {};
+   633→}
+   634→
+   635→// ─── Registry Summary ─────────────────────────────────────────────────────
+   636→
+   637→/**
+   638→ * Get a summary of the registry state.
+   639→ */
+   640→export function getRegistrySummary(): RegistrySummary {
+   641→  const agents = Array.from(registry.values());
+   642→
+   643→  const categories: Record<AgentCategory, number> = {
+   644→    core: 0,
+   645→    governance: 0,
+   646→    learning: 0,
+   647→  };
+   648→
+   649→  const healthSummary: Record<HealthStatus, number> = {
+   650→    healthy: 0,
+   651→    degraded: 0,
+   652→    offline: 0,
+   653→  };
+   654→
+   655→  const agentsByVersion: Record<string, string[]> = {};
+   656→
+   657→  for (const agent of agents) {
+   658→    categories[agent.category]++;
+   659→    healthSummary[agent.healthStatus]++;
+   660→
+   661→    if (!agentsByVersion[agent.version]) {
+   662→      agentsByVersion[agent.version] = [];
+   663→    }
+   664→    agentsByVersion[agent.version].push(agent.displayName);
+   665→  }
+   666→
+   667→  return {
+   668→    totalAgents: agents.length,
+   669→    categories,
+   670→    healthSummary,
+   671→    agentsByVersion,
+   672→    registryVersion: REGISTRY_VERSION,
+   673→    lastUpdated: new Date().toISOString(),
+   674→  };
+   675→}
+   676→
+   677→// ─── Registry Events ──────────────────────────────────────────────────────
+   678→
+   679→/**
+   680→ * Get the registry event log.
+   681→ */
+   682→export function getRegistryEvents(limit?: number): RegistryEvent[] {
+   683→  const events = [...registryEvents];
+   684→  return limit ? events.slice(-limit) : events;
+   685→}
+   686→
+   687→// ─── All Capabilities ─────────────────────────────────────────────────────
+   688→
+   689→/**
+   690→ * Get a dedicated list of all unique capabilities across all agents.
+   691→ */
+   692→export function getAllCapabilities(): string[] {
+   693→  const caps = new Set<string>();
+   694→  for (const agent of registry.values()) {
+   695→    for (const cap of agent.capabilities) {
+   696→      caps.add(cap);
+   697→    }
+   698→  }
+   699→  return Array.from(caps).sort();
+   700→}
+   701→
+   702→/**
+   703→ * Get all unique tools across all agents.
+   704→ */
+   705→export function getAllTools(): string[] {
+   706→  const tools = new Set<string>();
+   707→  for (const agent of registry.values()) {
+   708→    for (const tool of agent.tools) {
+   709→      tools.add(tool);
+   710→    }
+   711→  }
+   712→  return Array.from(tools).sort();
+   713→}
+   714→
+   715→// ─── Helper: Semver Comparison ────────────────────────────────────────────
+   716→
+   717→/**
+   718→ * Compare two semver strings.
+   719→ * Returns: -1 if a < b, 0 if a === b, 1 if a > b
+   720→ */
+   721→function compareSemver(a: string, b: string): number {
+   722→  const partsA = a.split('.').map(Number);
+   723→  const partsB = b.split('.').map(Number);
+   724→
+   725→  for (let i = 0; i < 3; i++) {
+   726→    const pA = partsA[i] || 0;
+   727→    const pB = partsB[i] || 0;
+   728→    if (pA > pB) return 1;
+   729→    if (pA < pB) return -1;
+   730→  }
+   731→
+   732→  return 0;
+   733→}
+   734→
+   735→// ─── Helper: Emit Registry Trace Event ────────────────────────────────────
+   736→
+   737→/**
+   738→ * Emit a registry event as a decision trace event.
+   739→ * Uses a synthetic case ID since registry events are system-level.
+   740→ */
+   741→async function emitRegistryTraceEvent(event: RegistryEvent): Promise<void> {
+   742→  try {
+   743→    await emitTraceEvent({
+   744→      caseId: 'system:agent-registry',
+   745→      agent: 'agent-registry',
+   746→      step: event.type,
+   747→      status: 'completed',
+   748→      detail: event.detail,
+   749→      timestamp: event.timestamp,
+   750→      metadata: {
+   751→        registryEvent: event.type,
+   752→        agentName: event.agentName,
+   753→      },
+   754→    });
+   755→  } catch (error) {
+   756→    // Non-critical — trace emission is best-effort
+   757→    console.warn('[AgentRegistry] Failed to emit trace event:', error);
+   758→  }
+   759→}
+   760→
+   761→// ─── Demo Function ────────────────────────────────────────────────────────
+   762→
+   763→/**
+   764→ * Run the Agent Registry demo moment.
+   765→ * Demonstrates discovery, version compatibility, and health tracking.
+   766→ */
+   767→export async function runRegistryDemo(): Promise<{
+   768→  summary: RegistrySummary;
+   769→  discoveryExamples: {
+   770→    coreAgents: AgentRegistration[];
+   771→    agentsWithCitationCapability: AgentRegistration[];
+   772→    agentsUsingGemini: AgentRegistration[];
+   773→  };
+   774→  versionCompatibility: Array<{
+   775→    agentA: string;
+   776→    agentB: string;
+   777→    compatible: boolean;
+   778→    requiredRange: string | null;
+   779→  }>;
+   780→  allCapabilities: string[];
+   781→  allTools: string[];
+   782→}> {
+   783→  // Summary
+   784→  const summary = getRegistrySummary();
+   785→
+   786→  // Discovery examples
+   787→  const coreAgents = listAgents({ category: 'core' });
+   788→  const agentsWithCitationCapability = searchByCapability('citation_verification');
+   789→  const agentsUsingGemini = searchByTool('gemini_api');
+   790→
+   791→  // Version compatibility checks (sample key relationships)
+   792→  const compatibilityChecks = [
+   793→    areVersionCompatible('denial-triage', 'policy-research'),
+   794→    areVersionCompatible('evidence-assembly', 'letter-drafting'),
+   795→    areVersionCompatible('letter-drafting', 'quality-review'),
+   796→    areVersionCompatible('quality-review', 'outcome-learning'),
+   797→    areVersionCompatible('patient-advocate', 'deadline-tracker'),
+   798→  ];
+   799→
+   800→  const agentPairs = [
+   801→    ['denial-triage', 'policy-research'],
+   802→    ['evidence-assembly', 'letter-drafting'],
+   803→    ['letter-drafting', 'quality-review'],
+   804→    ['quality-review', 'outcome-learning'],
+   805→    ['patient-advocate', 'deadline-tracker'],
+   806→  ];
+   807→
+   808→  const versionCompatibility = compatibilityChecks.map((check, i) => ({
+   809→    agentA: agentPairs[i][0],
+   810→    agentB: agentPairs[i][1],
+   811→    ...check,
+   812→  }));
+   813→
+   814→  return {
+   815→    summary,
+   816→    discoveryExamples: {
+   817→      coreAgents,
+   818→      agentsWithCitationCapability,
+   819→      agentsUsingGemini,
+   820→    },
+   821→    versionCompatibility,
+   822→    allCapabilities: getAllCapabilities(),
+   823→    allTools: getAllTools(),
+   824→  };
+   825→}
+   826→
