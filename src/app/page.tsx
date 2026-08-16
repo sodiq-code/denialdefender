@@ -10,6 +10,7 @@ import { TraceStreamTab } from '@/components/trace-stream-tab';
 import { EvidenceCorpusTab } from '@/components/evidence-corpus-tab';
 import { SixAgentPipelinePanel } from '@/components/six-agent-pipeline-panel';
 import Day11GovernancePanel from '@/components/day11-governance-panel';
+import PlatformStatusCard from '@/components/platform-status-card';
 import { useTraceStream } from '@/hooks/useTraceStream';
 import {
   Shield,
@@ -598,6 +599,7 @@ export default function Home() {
               </CardContent>
             </Card>
             <Day11GovernancePanel />
+            <PlatformStatusCard />
           </TabsContent>
         </Tabs>
       </main>
