@@ -84,14 +84,16 @@ export default function Home() {
   const [gcpStatus, setGcpStatus] = useState<GcpStatusData | null>(null);
 
   // Fetch agent fleet health on mount
+  // Use /api/agents/health which has OIDC auth for Cloud Run service-to-service calls
   useEffect(() => {
     const fetchHealth = async () => {
       setAgentFleetLoading(true);
       try {
-        const res = await fetch('/api/workflow');
+        const res = await fetch('/api/agents/health');
         if (res.ok) {
           const data = await res.json();
-          setAgentFleetHealth(data.health);
+          // /api/agents/health returns the health object directly
+          setAgentFleetHealth(data.health || data);
         }
       } catch {
         // Agent fleet not available
