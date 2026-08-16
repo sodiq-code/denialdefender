@@ -128,7 +128,7 @@ jobs:
             --concurrency=80 --timeout=300 \
             --set-env-vars=NODE_ENV=production \
             --set-env-vars=GCP_PROJECT_ID=${{ env.GCP_PROJECT_ID }} \
-           E --set-env-vars=GCP_REGION=${{ env.GCP_REGION }} \
+            --set-env-vars=GCP_REGION=${{ env.GCP_REGION }} \
             --quiet
 
       - name: Verify Deployment
