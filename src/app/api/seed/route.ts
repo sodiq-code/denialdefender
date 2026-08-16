@@ -38,17 +38,15 @@ export async function POST(request: NextRequest) {
       // If force, clear existing data
       if (force && existingCount > 0) {
         console.log('[seed] Clearing existing data...');
-        await client.execute('DELETE FROM "Citation"');
-        await client.execute('DELETE FROM "Outcome"');
-        await client.execute('DELETE FROM "HitlGate"');
-        await client.execute('DELETE FROM "DecisionTraceEvent"');
-        await client.execute('DELETE FROM "Denial"');
-        await client.execute('DELETE FROM "Evidence"');
-        await client.execute('DELETE FROM "PhiGuardAudit"');
-        await client.execute('DELETE FROM "GovernanceAudit"');
-        await client.execute('DELETE FROM "LearnedPattern"');
-        await client.execute('DELETE FROM "CaseMemoryState"');
-        await client.execute('DELETE FROM "Case"');
+        const clearSqls = [
+          'DELETE FROM "Citation"', 'DELETE FROM "Outcome"', 'DELETE FROM "HitlGate"',
+          'DELETE FROM "DecisionTraceEvent"', 'DELETE FROM "Denial"', 'DELETE FROM "Evidence"',
+          'DELETE FROM "PhiGuardAudit"', 'DELETE FROM "GovernanceAudit"',
+          'DELETE FROM "LearnedPattern"', 'DELETE FROM "CaseMemoryState"', 'DELETE FROM "Case"',
+        ];
+        for (const sql of clearSqls) {
+          try { await client.execute(sql); } catch { /* table may not exist */ }
+        }
         console.log('[seed] Cleared all tables');
       }
 
