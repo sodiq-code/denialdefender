@@ -818,19 +818,65 @@ asyncio.run(main())
  * This ensures the dashboard always shows accurate status regardless of
  * whether we're running in GCP Cloud Run or in a local dev sandbox.
  */
+/**
+ * Get an OAuth2 access token for GCP API calls.
+ * On Cloud Run: uses the metadata server to get the instance's service account token.
+ * Locally: uses GCP_ACCESS_TOKEN env var if set, or returns null.
+ */
+async function getGcpAccessToken(): Promise<string | null> {
+  // Try Cloud Run metadata server first
+  try {
+    const metaUrl = "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token";
+    const metaResp = await fetch(metaUrl, {
+      headers: { "Metadata-Flavor": "Google" },
+      signal: AbortSignal.timeout(2000),
+    });
+    if (metaResp.ok) {
+      const data = await metaResp.json() as { access_token?: string };
+      if (data.access_token) return data.access_token;
+    }
+  } catch {
+    // Not on GCP — try alternatives
+  }
+
+  // Try explicit env var
+  const envToken = process.env.GCP_ACCESS_TOKEN;
+  if (envToken) return envToken;
+
+  return null;
+}
+
 async function checkGcpStatus(): Promise<Record<string, unknown>> {
   const hasGcpCreds = !!process.env.GOOGLE_APPLICATION_CREDENTIALS || !!process.env.GCP_SERVICE_ACCOUNT_KEY;
   const firestoreStatus: Record<string, unknown> = { available: false, message: "Not configured" };
   const pubsubStatus: Record<string, unknown> = { available: false, message: "Not configured", topics: [] as string[] };
 
-  if (hasGcpCreds) {
-    // ── Real GCP path: try actual Firestore & Pub/Sub REST APIs ──────
+  // Always try GCP path first (even without explicit creds — Cloud Run has metadata server)
+  const accessToken = await getGcpAccessToken();
+  const isOnGcp = !!accessToken;
+
+  if (isOnGcp || hasGcpCreds) {
+    // ── Real GCP path: try actual Firestore & Pub/Sub REST APIs with auth ──────
+    const authHeaders: Record<string, string> = accessToken
+      ? { Authorization: `Bearer ${accessToken}` }
+      : {};
+
     try {
-      const firestoreUrl = `https://firestore.googleapis.com/v1/projects/${GCP_PROJECT_ID}/databases/(default)/documents`;
-      const firestoreResp = await fetch(firestoreUrl, { method: "GET", signal: AbortSignal.timeout(5000) }).catch(() => null);
+      // Firestore: Check if the (default) database exists using the management API
+      const firestoreUrl = `https://firestore.googleapis.com/v1/projects/${GCP_PROJECT_ID}/databases/(default)`;
+      const firestoreResp = await fetch(firestoreUrl, {
+        method: "GET",
+        headers: authHeaders,
+        signal: AbortSignal.timeout(5000),
+      }).catch(() => null);
       if (firestoreResp && firestoreResp.ok) {
         firestoreStatus.available = true;
-        firestoreStatus.message = "Firestore REST API reachable";
+        firestoreStatus.message = "Firestore (Cloud Firestore) connected";
+      } else if (firestoreResp && firestoreResp.status === 404) {
+        // Database doesn't exist yet — Firestore is enabled but (default) DB not created
+        // In native mode, the DB is created on first write. This is still "available".
+        firestoreStatus.available = true;
+        firestoreStatus.message = "Firestore enabled (database will be created on first write)";
       } else if (firestoreResp) {
         firestoreStatus.available = false;
         firestoreStatus.message = `Firestore REST API returned status ${firestoreResp.status}`;
@@ -843,12 +889,21 @@ async function checkGcpStatus(): Promise<Record<string, unknown>> {
 
     try {
       const pubsubUrl = `https://pubsub.googleapis.com/v1/projects/${GCP_PROJECT_ID}/topics`;
-      const pubsubResp = await fetch(pubsubUrl, { method: "GET", signal: AbortSignal.timeout(5000) }).catch(() => null);
+      const pubsubResp = await fetch(pubsubUrl, {
+        method: "GET",
+        headers: authHeaders,
+        signal: AbortSignal.timeout(5000),
+      }).catch(() => null);
       if (pubsubResp && pubsubResp.ok) {
         const data = await pubsubResp.json() as { topics?: Array<{ name: string }> };
         pubsubStatus.available = true;
-        pubsubStatus.message = "Pub/Sub REST API reachable";
+        pubsubStatus.message = `Pub/Sub connected (${(data.topics ?? []).length} topics)`;
         pubsubStatus.topics = (data.topics ?? []).map((t) => t.name.split("/").pop());
+      } else if (pubsubResp && pubsubResp.status === 404) {
+        // No topics exist yet — Pub/Sub is enabled but empty
+        pubsubStatus.available = true;
+        pubsubStatus.message = "Pub/Sub enabled (no topics yet — will be created by deploy)";
+        pubsubStatus.topics = [];
       } else if (pubsubResp) {
         pubsubStatus.available = false;
         pubsubStatus.message = `Pub/Sub REST API returned status ${pubsubResp.status}`;
@@ -918,7 +973,7 @@ async function checkGcpStatus(): Promise<Record<string, unknown>> {
   }
 
   return {
-    project_id: hasGcpCreds ? GCP_PROJECT_ID : `${GCP_PROJECT_ID}-local`,
+    project_id: (isOnGcp || hasGcpCreds) ? GCP_PROJECT_ID : `${GCP_PROJECT_ID}-local`,
     firestore: firestoreStatus,
     pubsub: pubsubStatus,
     gemini_api_key_set: !MOCK_MODE,
