@@ -56,7 +56,7 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=8080
-ENV DATABASE_URL=file:/tmp/production.db
+# DATABASE_URL is set at deploy time via Cloud Run env vars (Turso for persistent, file: for local)
 
 # Create non-root user for security
 RUN addgroup --system --gid 1001 nodejs && \

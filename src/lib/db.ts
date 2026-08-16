@@ -1,11 +1,11 @@
 /**
  * DenialDefender — Database Client
  *
- * Uses Prisma with SQLite:
- * - Local SQLite for development (persistent file)
- * - /tmp SQLite for Vercel production (writable in serverless)
+ * Supports both local SQLite and Turso (libSQL) for Cloud Run persistence:
+ * - libsql://... → Turso (persistent cloud SQLite via Prisma adapter)
+ * - file:... → Local SQLite (development / ephemeral)
  *
- * Auto-creates tables on first query in production using raw SQL.
+ * Auto-creates tables on first query using raw SQL.
  */
 
 import { PrismaClient } from '@prisma/client'
@@ -15,12 +15,56 @@ const globalForPrisma = globalThis as unknown as {
   dbInitialized: boolean | undefined
 }
 
-const prismaClient = globalForPrisma.prisma ??
-  new PrismaClient({
+const DATABASE_URL = process.env.DATABASE_URL || ''
+const IS_TURSO = DATABASE_URL.startsWith('libsql://')
+
+async function createPrismaClient(): Promise<PrismaClient> {
+  if (IS_TURSO) {
+    try {
+      const { PrismaLibSQL } = await import('@prisma/adapter-libsql')
+      const { createClient } = await import('@libsql/client')
+
+      const libsql = createClient({
+        url: DATABASE_URL,
+        authToken: process.env.DATABASE_AUTH_TOKEN || '',
+      })
+
+      const adapter = new PrismaLibSQL(libsql)
+      const client = new PrismaClient({ adapter } as any)
+      console.log('[db] Connected to Turso (persistent)')
+      return client
+    } catch (err) {
+      console.error('[db] Turso adapter failed, falling back to SQLite:', err)
+    }
+  }
+
+  return new PrismaClient({
     log: process.env.NODE_ENV === 'development' ? ['query'] : [],
   })
+}
 
-if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prismaClient
+// Synchronous init: if not Turso, create immediately; if Turso, defer
+let prismaClient: PrismaClient
+let prismaReady: Promise<void>
+
+if (IS_TURSO) {
+  // For Turso, we need async init — create a placeholder and swap when ready
+  prismaClient = new PrismaClient({ log: [] }) // temporary
+  prismaReady = createPrismaClient().then(client => {
+    prismaClient = client
+    if (process.env.NODE_ENV !== 'production') {
+      (globalThis as any).__prisma = client
+    }
+  })
+} else {
+  prismaClient = new PrismaClient({
+    log: process.env.NODE_ENV === 'development' ? ['query'] : [],
+  })
+  if (process.env.NODE_ENV !== 'production') {
+    (globalThis as any).__prisma = prismaClient
+  }
+  prismaReady = Promise.resolve()
+}
 
 // DDL statements for auto-initialization
 const INIT_SQL = `
@@ -175,6 +219,9 @@ async function initializeSchema(): Promise<void> {
   if (initPromise) return initPromise
 
   initPromise = (async () => {
+    // Wait for Turso client to be ready
+    await prismaReady
+
     if (globalForPrisma.dbInitialized) return
 
     try {
@@ -182,9 +229,8 @@ async function initializeSchema(): Promise<void> {
       globalForPrisma.dbInitialized = true
     } catch (e: any) {
       if (e?.code === 'P2021') {
-        console.log('[db] Creating tables in /tmp...')
+        console.log('[db] Creating tables...')
         try {
-          // Split by semicolons and execute each statement
           const statements = INIT_SQL.split(';').map(s => s.trim()).filter(s => s.length > 0)
           for (const stmt of statements) {
             await prismaClient.$executeRawUnsafe(stmt)
@@ -228,3 +274,6 @@ export const db = new Proxy(prismaClient, {
     return original
   }
 }) as PrismaClient
+
+/** Whether the database is Turso (persistent) or local SQLite (ephemeral) */
+export const isTurso = IS_TURSO

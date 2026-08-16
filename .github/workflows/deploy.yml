@@ -7,6 +7,8 @@
 #   1. Add these secrets to your GitHub repo (Settings > Secrets):
 #      - GCP_PROJECT_ID: denialdefender
 #      - GCP_SA_KEY: Service account JSON key
+#      - TURSO_DB_URL: libsql://vaultwatch-sodiq-code.aws-us-east-1.turso.io
+#      - TURSO_DB_TOKEN: Turso auth token
 # ══════════════════════════════════════════════════════════════════════════════
 
 name: Deploy to Cloud Run
@@ -163,6 +165,8 @@ jobs:
             --service-account=json-775@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com \
             --set-env-vars=GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }} \
             --set-env-vars=GCP_REGION=${{ env.GCP_REGION }} \
+            --set-env-vars=DATABASE_URL=${{ secrets.TURSO_DB_URL }} \
+            --set-env-vars=DATABASE_AUTH_TOKEN=${{ secrets.TURSO_DB_TOKEN }} \
             --set-env-vars=FIRESTORE_LOCATION=eur3 \
             --set-env-vars=LOG_LEVEL=info \
             --set-env-vars=GEMINI_MODEL=gemini-3.5-flash \
@@ -215,7 +219,8 @@ jobs:
             --concurrency=80 --timeout=300 \
             --service-account=json-775@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com \
             --set-env-vars=NODE_ENV=production \
-            --set-env-vars=DATABASE_URL=file:/tmp/production.db \
+            --set-env-vars=DATABASE_URL=${{ secrets.TURSO_DB_URL }} \
+            --set-env-vars=DATABASE_AUTH_TOKEN=${{ secrets.TURSO_DB_TOKEN }} \
             --set-env-vars=GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }} \
             --set-env-vars=GCP_REGION=${{ env.GCP_REGION }} \
             --set-env-vars=FIRESTORE_LOCATION=eur3 \
