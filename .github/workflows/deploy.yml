@@ -15,6 +15,7 @@
 #   - roles/artifactregistry.writer
 #   - roles/cloudbuild.builds.editor
 #   - roles/secretmanager.secretAccessor
+#   - roles/serviceusage.serviceUsageConsumer (to enable APIs)
 # ══════════════════════════════════════════════════════════════════════════════
 
 name: Deploy to Cloud Run
@@ -44,6 +45,96 @@ jobs:
 
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
+
+      # ── Pre-flight: Check billing & enable ALL required APIs ────────────────
+      - name: Pre-flight Check — Enable APIs & Verify Billing
+        run: |
+          echo "━━━ Pre-flight: Checking billing status ━━━"
+          BILLING_ENABLED=$(gcloud billing projects describe ${{ secrets.GCP_PROJECT_ID }} \
+            --format="value(billingEnabled)" 2>/dev/null || echo "false")
+          echo "  Billing enabled: ${BILLING_ENABLED}"
+          
+          if [ "${BILLING_ENABLED}" != "true" ]; then
+            echo ""
+            echo "❌ BILLING IS NOT ENABLED!"
+            echo ""
+            echo "  To fix this:"
+            echo "  1. Open: https://console.cloud.google.com/billing?project=${{ secrets.GCP_PROJECT_ID }}"
+            echo "  2. Click 'Link a billing account' or reopen the existing one"
+            echo "  3. If your billing account is closed, create a new one at:"
+            echo "     https://console.cloud.google.com/billing/create"
+            echo "  4. Re-run this workflow after billing is enabled"
+            echo ""
+            exit 1
+          fi
+          echo "✅ Billing is enabled"
+          
+          echo ""
+          echo "━━━ Pre-flight: Enabling all required APIs ━━━"
+          
+          APIS=(
+            "run.googleapis.com"
+            "cloudbuild.googleapis.com"
+            "artifactregistry.googleapis.com"
+            "firestore.googleapis.com"
+            "sqladmin.googleapis.com"
+            "pubsub.googleapis.com"
+            "secretmanager.googleapis.com"
+            "aiplatform.googleapis.com"
+            "generativelanguage.googleapis.com"
+            "iam.googleapis.com"
+            "iamcredentials.googleapis.com"
+            "cloudresourcemanager.googleapis.com"
+            "serviceusage.googleapis.com"
+            "vpcaccess.googleapis.com"
+            "compute.googleapis.com"
+            "cloudtrace.googleapis.com"
+            "clouderrorreporting.googleapis.com"
+            "logging.googleapis.com"
+            "monitoring.googleapis.com"
+          )
+          
+          FAILED_APIS=()
+          for api in "${APIS[@]}"; do
+            printf "  Enabling %-50s" "${api}"
+            if gcloud services enable "${api}" --project=${{ secrets.GCP_PROJECT_ID }} --quiet 2>/dev/null; then
+              printf " ✅\n"
+            else
+              printf " ⚠️\n"
+              FAILED_APIS+=("${api}")
+            fi
+          done
+          
+          # Critical APIs that MUST be enabled
+          CRITICAL=("artifactregistry.googleapis.com" "run.googleapis.com" "secretmanager.googleapis.com")
+          for api in "${CRITICAL[@]}"; do
+            if [[ " ${FAILED_APIS[*]} " =~ " ${api} " ]]; then
+              echo ""
+              echo "❌ CRITICAL API ${api} failed to enable!"
+              echo "   This usually means billing is not fully active yet."
+              echo "   Wait a few minutes and re-run, or check:"
+              echo "   https://console.cloud.google.com/apis/library?project=${{ secrets.GCP_PROJECT_ID }}"
+              exit 1
+            fi
+          done
+          
+          echo "✅ All critical APIs enabled"
+
+      # ── Create Artifact Registry repo if missing ───────────────────────────
+      - name: Ensure Artifact Registry Repository Exists
+        run: |
+          if ! gcloud artifacts repositories describe ${{ env.AR_REPO }} \
+            --location=${{ env.GCP_REGION }} \
+            --project=${{ secrets.GCP_PROJECT_ID }} 2>/dev/null | grep -q "name"; then
+            echo "Creating Artifact Registry repository..."
+            gcloud artifacts repositories create ${{ env.AR_REPO }} \
+              --repository-format=docker \
+              --location=${{ env.GCP_REGION }} \
+              --project=${{ secrets.GCP_PROJECT_ID }} \
+              --description="DenialDefender container images"
+          else
+            echo "Artifact Registry repository already exists"
+          fi
 
       - name: Configure Docker for Artifact Registry
         run: |
