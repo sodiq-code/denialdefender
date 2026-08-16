@@ -56,6 +56,7 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=8080
+ENV DATABASE_URL=file:/tmp/production.db
 
 # Create non-root user for security
 RUN addgroup --system --gid 1001 nodejs && \
@@ -82,7 +83,7 @@ USER nextjs
 EXPOSE 8080
 
 # GCP environment variables (overridden at deploy time via Cloud Run env config)
-ENV GCP_PROJECT_ID=denialdefender
+# GCP_PROJECT_ID is set by Cloud Run deploy --set-env-vars
 ENV GCP_REGION=europe-west1
 ENV FIRESTORE_LOCATION=eur3
 
