@@ -411,7 +411,7 @@ export async function ingestPayerPolicies(): Promise<PayerPolicyIngestResult> {
   };
 
   try {
-    const policiesPath = '/home/z/my-project/data/corpus/payer_policies.json';
+    const policiesPath = join(process.cwd(), 'data', 'corpus', 'payer_policies.json');
     const raw = JSON.parse(readFileSync(policiesPath, 'utf-8'));
     const entries: PayerPolicyEntry[] = raw.entries || [];
 

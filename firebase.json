@@ -1,7 +1,6 @@
 {
   "firestore": {
-    "rules": "infra/gcp/firestore.rules",
-    "indexes": "firestore.indexes.json"
+    "rules": "infra/gcp/firestore.rules"
   },
   "hosting": {
     "public": "out",

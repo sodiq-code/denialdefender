@@ -6,7 +6,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCorpusStats, ingestRawEvidence } from '@/lib/evidence-ingest';
 
-const RAW_DIR = '/home/z/my-project/data/corpus/raw';
+import { join } from 'path';
+const RAW_DIR = join(process.cwd(), 'data', 'corpus', 'raw');
 
 export async function GET() {
   try {

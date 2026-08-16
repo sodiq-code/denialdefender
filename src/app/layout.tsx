@@ -19,7 +19,7 @@ export const metadata: Metadata = {
   keywords: ["DenialDefender", "medical insurance", "denial appeal", "ADK", "AI agents", "evidence-based", "HITL"],
   authors: [{ name: "DenialDefender Team" }],
   icons: {
-    icon: "/favicon.ico",
+    icon: "/favicon.svg",
   },
   openGraph: {
     title: "DenialDefender — Evidence-Grounded Denial Appeal Operations",

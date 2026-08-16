@@ -1,10 +1,11 @@
 /**
  * Push Prisma schema DDL to Turso database
+ * Usage: TURSO_DB_URL=... TURSO_DB_TOKEN=... bun run infra/db/push-turso-schema.ts
  */
 import { createClient } from '@libsql/client';
 
-const TURSO_URL = 'libsql://vaultwatch-sodiq-code.aws-us-east-1.turso.io';
-const TURSO_TOKEN = 'eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3ODQ0MDEwNTAsImlkIjoiMDE5Zjc2OTQtNmYwMS03ZjQ5LWJhMjQtYjA0YzA5ZmJhNTgxIiwia2lkIjoiVXNuaFVISjh5OElHQnlwZG51ZUNkV1BBblFhZFBOazZDVHdBbXVQdWtiTSIsInJpZCI6ImZiOTdiYzBmLTBmNjktNGM4NS05MTZlLWU0MTk5ZTc5ODExNSJ9.H3O8mcZO41w_BZtEhKDezzxOUfxuCniQSOJGJyR_OGKik_JkXmKf_EafZei7K0f6-9oC6ordqqkBmEZrWnJdAw';
+const TURSO_URL = process.env.TURSO_DB_URL || '';
+const TURSO_TOKEN = process.env.TURSO_DB_TOKEN || '';
 
 const DDL_STATEMENTS = [
   // Tables

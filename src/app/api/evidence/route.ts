@@ -7,7 +7,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { resolveCitation, ingestRawEvidence, getCorpusStats, ingestPayerPolicies } from '@/lib/evidence-ingest';
 
-const RAW_DIR = '/home/z/my-project/data/corpus/raw';
+import { join } from 'path';
+const RAW_DIR = join(process.cwd(), 'data', 'corpus', 'raw');
 
 // GET /api/evidence?id=... — Resolve a citation to its source evidence
 export async function GET(request: NextRequest) {
