@@ -24,14 +24,11 @@ WORKDIR /app
 COPY package.json bun.lock ./
 COPY prisma ./prisma
 
-# Install bun for reproducible dependency installation (matches local dev)
-RUN npm install -g bun@latest
-
 # Set DATABASE_URL for prisma generate (postinstall hook)
 ENV DATABASE_URL=file:./prisma/dev.db
 
-# Install all dependencies (including devDependencies needed for build)
-RUN bun install --frozen-lockfile
+# Install all dependencies (using npm for better native module support)
+RUN npm install
 
 # ── Stage 2: Build ────────────────────────────────────────────────────────────
 FROM node:20-alpine AS builder
@@ -52,7 +49,7 @@ ENV NODE_ENV=production
 ENV DATABASE_URL=file:./prisma/dev.db
 
 # Push Prisma schema to SQLite then build Next.js
-RUN npx prisma db push --accept-data-loss && npx next build
+RUN npx prisma db push --accept-data-loss && npm run build
 
 # ── Stage 3: Production Runtime ──────────────────────────────────────────────
 FROM node:20-alpine AS runner
