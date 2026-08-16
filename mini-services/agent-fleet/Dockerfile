@@ -59,7 +59,7 @@ COPY agents/ ./agents/
 EXPOSE 8080
 
 # GCP environment variables (overridden at deploy time via Cloud Run env config)
-ENV GCP_PROJECT_ID=project-8a09278a-5593-4289-b2e
+ENV GCP_PROJECT_ID=denialdefender
 ENV GCP_REGION=us-central1
 ENV GEMINI_MODEL=gemini-3.5-flash
 

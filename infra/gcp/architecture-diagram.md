@@ -209,10 +209,10 @@ sequenceDiagram
 
 | Property | Value |
 |----------|-------|
-| **Project ID** | `project-8a09278a-5593-4289-b2e` |
+| **Project ID** | `denialdefender` |
 | **Region** | `europe-west1` |
 | **Firestore Location** | `eur3` (multi-region) |
-| **Service Account** | `denialdefender@project-8a09278a-5593-4289-b2e.iam.gserviceaccount.com` |
+| **Service Account** | `json-775@denialdefender.iam.gserviceaccount.com` |
 | **VPC Connector** | `dd-vpc-connector` (Cloud SQL access) |
 
 ## Deployment Commands

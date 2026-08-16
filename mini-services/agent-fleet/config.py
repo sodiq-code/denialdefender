@@ -10,7 +10,7 @@ import os
 # ─── Gemini / Google ADK Configuration ─────────────────────────────
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash")
-GCP_PROJECT_ID = os.getenv("GCP_PROJECT_ID", "project-8a09278a-5593-4289-b2e")
+GCP_PROJECT_ID = os.getenv("GCP_PROJECT_ID", "denialdefender")
 
 # ─── Dual-Backend LLM Configuration ────────────────────────────────
 # Force a specific backend: "gemini" (direct API) or "zai" (z-ai-web-dev-sdk)

@@ -18,7 +18,7 @@
 set -euo pipefail
 
 # ─── Configuration ──────────────────────────────────────────────────────────
-GCP_PROJECT_ID="project-8a09278a-5593-4289-b2e"
+GCP_PROJECT_ID="denialdefender"
 REGION="us-central1"
 ARTIFACT_REPO="denialdefender"
 MIN_INSTANCES=0

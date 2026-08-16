@@ -32,7 +32,7 @@ const SERVICE_VERSION = "1.0.0";
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY ?? "";
 const GEMINI_MODEL = process.env.GEMINI_MODEL ?? "gemini-3.5-flash";
 const MOCK_MODE = GEMINI_API_KEY === "";
-const GCP_PROJECT_ID = process.env.GCP_PROJECT_ID ?? "project-8a09278a-5593-4289-b2e";
+const GCP_PROJECT_ID = process.env.GCP_PROJECT_ID ?? "denialdefender";
 const MAX_REVISION_LOOPS = 3;
 const SUBPROCESS_TIMEOUT_MS = 60_000;
 

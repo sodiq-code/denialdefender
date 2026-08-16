@@ -5,7 +5,7 @@
 # Uses Next.js standalone output for minimal image size.
 #
 # Build:  docker build -t denialdefender-web .
-# Run:    docker run -p 3000:3000 -e GCP_PROJECT_ID=project-8a09278a-5593-4289-b2e denialdefender-web
+# Run:    docker run -p 3000:3000 -e GCP_PROJECT_ID=denialdefender denialdefender-web
 # ══════════════════════════════════════════════════════════════════════════════
 
 # ── Stage 1: Dependencies ─────────────────────────────────────────────────────
@@ -75,7 +75,7 @@ USER nextjs
 EXPOSE 3000
 
 # GCP environment variables (overridden at deploy time via Cloud Run env config)
-ENV GCP_PROJECT_ID=project-8a09278a-5593-4289-b2e
+ENV GCP_PROJECT_ID=denialdefender
 ENV GCP_REGION=europe-west1
 ENV FIRESTORE_LOCATION=eur3
 

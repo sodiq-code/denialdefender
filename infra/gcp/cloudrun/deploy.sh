@@ -18,14 +18,14 @@
 #   bash infra/gcp/cloudrun/deploy.sh --web-only   # Web service only
 #   bash infra/gcp/cloudrun/deploy.sh --agents-only # Agent fleet only
 #
-# Project: project-8a09278a-5593-4289-b2e
+# Project: denialdefender
 # Region:  europe-west1
 # ══════════════════════════════════════════════════════════════════════════════
 
 set -euo pipefail
 
 # ── Configuration ──────────────────────────────────────────────────────────────
-PROJECT_ID="project-8a09278a-5593-4289-b2e"
+PROJECT_ID="denialdefender"
 REGION="europe-west1"
 FIRESTORE_LOCATION="eur3"
 WEB_SERVICE="denialdefender-web"
@@ -192,11 +192,12 @@ if [[ "${DEPLOY_AGENTS}" == true ]]; then
     --set-env-vars "GCP_PROJECT_ID=${PROJECT_ID}" \
     --set-env-vars "GCP_REGION=${REGION}" \
     --set-env-vars "FIRESTORE_LOCATION=${FIRESTORE_LOCATION}" \
-    --set-env-vars "AGENT_PORT=3004" \
+    --set-env-vars "AGENT_FLEET_PORT=3004" \
     --set-env-vars "LOG_LEVEL=info" \
     --set-env-vars "GEMINI_MODEL=gemini-3.5-flash" \
     --set-env-vars "EMBEDDING_MODEL=text-embedding-004" \
     --set-env-vars "EMBEDDING_DIMENSIONS=768" \
+    --set-env-vars "GCP_PROJECT_NUMBER=315133452553" \
     --set-secrets "GEMINI_API_KEY=gemini-api-key:latest" \
     --set-secrets "DATABASE_URL=cloud-sql-connection-string:latest" \
     --set-secrets "PHI_GUARD_CONFIG=phi-guard-config:latest" \
@@ -219,7 +220,7 @@ if [[ "${DEPLOY_AGENTS}" == true ]]; then
   gcloud pubsub subscriptions create agent-tasks-push \
     --topic agent_tasks \
     --push-endpoint="${AGENT_URL}/pubsub/handle" \
-    --push-auth-service-account="denialdefender@${PROJECT_ID}.iam.gserviceaccount.com" \
+    --push-auth-service-account="json-775@${PROJECT_ID}.iam.gserviceaccount.com" \
     --project "${PROJECT_ID}" 2>/dev/null || warn "Subscription may already exist"
 
   log "Pub/Sub push subscription configured"

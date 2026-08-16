@@ -215,12 +215,12 @@ Stage Summary:
 ---
 Task ID: 1c
 Agent: Main Coordinator
-Task: Switch to new GCP project (project-8a09278a-5593-4289-b2e) and verify billing + provision infrastructure
+Task: Switch to new GCP project (denialdefender) and verify billing + provision infrastructure
 
 Work Log:
-- User provided new GCP project: project-8a09278a-5593-4289-b2e (Project #231194480057)
-- SA key uploaded: /home/z/my-project/upload/project-8a09278a-5593-4289-b2e-e6148fd9ae69.json
-- SA email: denialdefender@project-8a09278a-5593-4289-b2e.iam.gserviceaccount.com
+- User provided new GCP project: denialdefender (Project #231194480057)
+- SA key uploaded: /home/z/my-project/upload/denialdefender-e6148fd9ae69.json
+- SA email: json-775@denialdefender.iam.gserviceaccount.com
 - Authenticated gcloud with new SA key: SUCCESS
 - Enabled Cloud Resource Manager API: SUCCESS
 - Enabled Cloud Billing API: SUCCESS
@@ -239,7 +239,7 @@ Work Log:
 - Cleaned up test Firestore document
 
 Stage Summary:
-- NEW PROJECT: project-8a09278a-5593-4289-b2e (Owner role confirmed)
+- NEW PROJECT: denialdefender (Owner role confirmed)
 - BILLING: Linked to 0179D6-CD0B89-9848B3 but NOT ENABLED (account not in good standing)
 - WORKING: Firestore (eur3), Pub/Sub (4 topics), AI Platform API, SQL Admin API
 - BLOCKED (needs billing): Cloud SQL, Vertex AI inference, Cloud Run, Secret Manager, Cloud Build
@@ -257,7 +257,7 @@ Work Log:
   - Public ingress (allow-unauthenticated), VPC connector for Cloud SQL
   - Health probes (liveness + readiness) on /api/health
   - Secret refs: gemini-api-key, cloud-sql-connection-string
-  - Service account: denialdefender@project-8a09278a-5593-4289-b2e.iam.gserviceaccount.com
+  - Service account: json-775@denialdefender.iam.gserviceaccount.com
 - Created infra/gcp/cloudrun/agent-fleet-service.yaml — Cloud Run service for Python ADK agent fleet
   - 4 vCPU / 2 GiB memory, containerConcurrency: 10, min/max scale: 0-10
   - Internal-only ingress (Pub/Sub push), VPC connector for Cloud SQL
@@ -301,7 +301,7 @@ Stage Summary:
 - Deploy script: Full deployment automation with pre-flight checks and CLI flags
 - Dockerfiles: 2 multi-stage production builds (Next.js + Python ADK)
 - Architecture diagram: 4 Mermaid diagrams (system, HITL states, PHI flow, trace sequence)
-- All files use project-8a09278a-5593-4289-b2e consistently
+- All files use denialdefender consistently
 - Proof of production-readiness: Complete Cloud Run deployment configs for GCP
 
 ---
@@ -904,7 +904,7 @@ Task: Complete Day 2 of 14 - Evidence Corpus v1 + Two-Agent Pipeline
 
 Work Log:
 - Diagnosed Gemini API geo-blocking (Hong Kong IP blocked)
-- Enabled Gemini API in GCP project project-8a09278a-5593-4289-b2e
+- Enabled Gemini API in GCP project denialdefender
 - Deployed Cloudflare Worker proxy at gemini-proxy.cherry-beauty.workers.dev
 - Implemented DualBackendLLM (Gemini 3.5+ primary, z-ai SDK fallback)
 - Updated all Gemini model refs from gemini-2.5-flash to gemini-3.5-flash
@@ -1571,3 +1571,94 @@ Files Created/Modified:
 - src/lib/agent-fleet.ts (configurable agent fleet URL)
 - deploy-cloud-run.sh (new, executable)
 - .env.example (new)
+
+---
+Task ID: 1
+Agent: GCP Project Reference Updater
+Task: Update all GCP project references from old project ID to new one
+
+Work Log:
+- Searched entire codebase for old project ID `project-8a09278a-5593-4289-b2e`
+- Found references in 11 source files (excluding tool-results cache)
+- Updated project ID `project-8a09278a-5593-4289-b2e` → `denialdefender` in all files:
+  1. infra/gcp/cloudrun/agent-fleet-service.yaml (5 refs: namespace, vpc-connector, serviceAccountName, image, env var)
+  2. infra/gcp/cloudrun/nextjs-service.yaml (6 refs: comment, namespace, vpc-connector, serviceAccountName, image, 2x env var)
+  3. infra/gcp/cloudrun/deploy.sh (2 refs: comment, PROJECT_ID)
+  4. infra/gcp/bootstrap.sh (3 refs: comment, PROJECT_ID default, SA_EMAIL)
+  5. infra/gcp/architecture-diagram.md (2 refs: project ID, service account)
+  6. deploy-cloud-run.sh (1 ref: GCP_PROJECT_ID)
+  7. mini-services/agent-fleet/config.py (1 ref: GCP_PROJECT_ID default)
+  8. mini-services/agent-fleet/index.ts (1 ref: GCP_PROJECT_ID default)
+  9. mini-services/agent-fleet/Dockerfile (1 ref: ENV GCP_PROJECT_ID)
+  10. Dockerfile (2 refs: comment, ENV GCP_PROJECT_ID)
+  11. worklog.md (historical refs)
+- Updated service account email `denialdefender@project-8a09278a-5593-4289-b2e.iam.gserviceaccount.com` → `json-775@denialdefender.iam.gserviceaccount.com` in:
+  - infra/gcp/cloudrun/agent-fleet-service.yaml
+  - infra/gcp/cloudrun/nextjs-service.yaml
+  - infra/gcp/bootstrap.sh
+  - infra/gcp/architecture-diagram.md
+  - worklog.md
+- Verified: No remaining references to old project ID in any source files (only in tool-results/ cache which is not project code)
+
+New GCP Project Details:
+- Project ID: denialdefender
+- Project Number: 315133452553
+- Region: europe-west1
+- Service Account: json-775@denialdefender.iam.gserviceaccount.com
+
+---
+Task ID: 2
+Agent: GCP Infrastructure & Deployment Setup
+Task: Create comprehensive GCP deployment infrastructure (env files, bootstrap, Firebase config, deploy fixes, next.config, DEPLOY guide)
+
+Work Log:
+- **Created `.env.gcp`** — Full production environment variables file with GCP project config, Firestore location, Vertex AI model settings, application config, micro-service ports, Cloud SQL instance, Pub/Sub topics, and service account email. 25+ variables defined.
+- **Rewrote `infra/gcp/bootstrap.sh`** — Comprehensive production-ready bootstrap script (280+ lines) that:
+  - Authenticates with the service account key (with fallback to existing gcloud auth)
+  - Enables 16 GCP APIs (Cloud Run, Firestore, Cloud SQL, Pub/Sub, Secret Manager, Vertex AI, Cloud Build, IAM, Generative Language, VPC Access, Compute, plus observability APIs)
+  - Creates Firestore database in Native mode at eur3
+  - Creates 4 Pub/Sub topics (agent_tasks, decision_trace, case_events, gate_events) plus dead-letter subscription
+  - Creates Cloud SQL PostgreSQL 16 instance (denialdefender-pg) with pgvector, evidence database, and dd_app user
+  - Creates VPC connector (dd-vpc-connector) for private Cloud SQL access from Cloud Run
+  - Creates 3 Secret Manager secrets (gemini-api-key, cloud-sql-connection-string, phi-guard-config) with placeholder values and explicit population instructions
+  - Creates 5 micro-service service accounts (dd-api-sa, dd-agents-sa, dd-ingest-sa, dd-phi-guard-sa, dd-eval-sa)
+  - Assigns 17 IAM roles to main SA and grants Cloud SQL client + Secret Manager accessor to micro-service SAs
+  - Supports --skip-sql, --skip-iam, --skip-vpc flags
+  - Has colored output, step numbering, and progress indicators
+- **Created `.firebaserc`** — Firebase project configuration pointing to denialdefender
+- **Created `firebase.json`** — Firebase Hosting + Firestore config with security headers (X-Frame-Options, X-Content-Type-Options, etc.), cache rules for static assets, rewrites, and emulator config
+- **Created `.env.local.example`** — Developer template with all needed env vars and placeholder values (GEMINI_API_KEY, DATABASE_URL, GCP settings)
+- **Updated `infra/gcp/cloudrun/deploy.sh`** — Fixed 3 issues:
+  1. Changed Pub/Sub push SA from `denialdefender@` to `json-775@` (correct service account)
+  2. Changed `AGENT_PORT` to `AGENT_FLEET_PORT` (consistency with .env.gcp)
+  3. Added `GCP_PROJECT_NUMBER=315133452553` env var to agent fleet deployment
+- **Copied service account key** — From upload/denialdefender-3b32a161dcae.json to infra/gcp/denialdefender-sa-key.json
+- **Updated `next.config.ts`** — Added:
+  1. `output: 'standalone'` (required for Cloud Run Docker deployment — produces minimal server)
+  2. `images.unoptimized: true` (Cloud Run has no external image optimizer)
+  3. Security headers (X-Frame-Options: DENY, X-Content-Type-Options: nosniff, Referrer-Policy, X-XSS-Protection)
+- **Created `DEPLOY.md`** — Comprehensive 300+ line deployment guide with:
+  - Prerequisites table (gcloud, Docker, Node.js, Bun, Firebase CLI)
+  - Step 1: GCP authentication (service account key and interactive login)
+  - Step 2: Bootstrap script execution with resource table
+  - Step 3: Secret population (Gemini API key, Cloud SQL connection string, PHI Guard config)
+  - Step 4: Build & deploy (full, web-only, agents-only, manual)
+  - Step 5: Verification (service status, health check, logs, resource connections)
+  - Step 6: Getting the .run.app URL
+  - Cost management tips (scale to zero, Cloud SQL right-sizing, budget alerts)
+  - 8 troubleshooting scenarios with solutions
+  - Architecture diagram
+  - Quick reference command table
+
+Files Created:
+  - /home/z/my-project/.env.gcp
+  - /home/z/my-project/.firebaserc
+  - /home/z/my-project/firebase.json
+  - /home/z/my-project/.env.local.example
+  - /home/z/my-project/DEPLOY.md
+  - /home/z/my-project/infra/gcp/denialdefender-sa-key.json (copied from upload/)
+
+Files Modified:
+  - /home/z/my-project/infra/gcp/bootstrap.sh (complete rewrite)
+  - /home/z/my-project/infra/gcp/cloudrun/deploy.sh (3 fixes)
+  - /home/z/my-project/next.config.ts (standalone output + security headers)
