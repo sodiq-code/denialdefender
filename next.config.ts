@@ -6,10 +6,7 @@ const nextConfig: NextConfig = {
   // (Disabled for local dev to avoid standalone mode issues)
   // output: 'standalone',
 
-  typescript: {
-    ignoreBuildErrors: true,
-  },
-  reactStrictMode: false,
+  reactStrictMode: true,
 
   // Image optimization — disable default loader for Cloud Run (no external optimizer)
   images: {

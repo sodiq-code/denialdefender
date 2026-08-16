@@ -14,7 +14,7 @@ const CaseDashboard = dynamic(() => import('@/components/case-dashboard').then(m
 const TraceStreamTab = dynamic(() => import('@/components/trace-stream-tab').then(m => ({ default: m.TraceStreamTab })), { ssr: false, loading: () => <div className="p-8 text-center text-muted-foreground">Loading trace stream...</div> });
 const EvidenceCorpusTab = dynamic(() => import('@/components/evidence-corpus-tab').then(m => ({ default: m.EvidenceCorpusTab })), { ssr: false, loading: () => <div className="p-8 text-center text-muted-foreground">Loading evidence...</div> });
 const SixAgentPipelinePanel = dynamic(() => import('@/components/six-agent-pipeline-panel').then(m => ({ default: m.SixAgentPipelinePanel })), { ssr: false, loading: () => <div className="p-8 text-center text-muted-foreground">Loading pipeline...</div> });
-const Day11GovernancePanel = dynamic(() => import('@/components/day11-governance-panel'), { ssr: false, loading: () => <div className="p-8 text-center text-muted-foreground">Loading governance...</div> });
+const GovernancePanel = dynamic(() => import('@/components/governance-panel'), { ssr: false, loading: () => <div className="p-8 text-center text-muted-foreground">Loading governance...</div> });
 const PlatformStatusCard = dynamic(() => import('@/components/platform-status-card'), { ssr: false });
 import {
   Shield,
@@ -653,7 +653,7 @@ export default function Home() {
               </CardContent>
             </Card>
             
-              <Day11GovernancePanel />
+              <GovernancePanel />
             
             
               <PlatformStatusCard />

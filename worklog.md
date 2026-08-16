@@ -115,3 +115,37 @@ Stage Summary:
 - All 10 payers represented: UnitedHealthcare, Aetna, Cigna, Humana, Anthem BlueCross, etc.
 - Case detail API fully working — no more "Case not found" or 500 errors
 - Root causes fixed: (1) Turso not used in detail routes, (2) `references` SQL keyword, (3) JOIN issues with LibSQL
+
+---
+Task ID: cleanup-1
+Agent: Main
+Task: Clean up repository - remove garbage files, fix configs, organize structure
+
+Work Log:
+- Deleted 11 root-level PNG screenshots (~530KB)
+- Deleted 3 large text dump files (~990KB): grand_prize_extracted.txt, DenialDefender_Blueprint_Full_Text.txt, ultimate_extracted.txt
+- Deleted tool-results/ directory (16MB, 211 cached files)
+- Deleted download/ placeholder directory
+- Deleted screenshots/ directory (2.7MB, 31 files)
+- Cleaned upload/ directory - removed service account JSON keys (SECURITY), all PNGs and DOCX files
+- Deleted packages/shared-schema/ (completely unused package)
+- Deleted tests/ directory (3 build scripts that belonged in infra/)
+- Deleted 7 unused day-prefixed components (day6, day7, day8, day9, day10, day12, day13)
+- Renamed day11-governance-panel.tsx → governance-panel.tsx, updated all imports
+- Deleted 2 unused components: vertical-slice-panel.tsx, three-agent-pipeline-panel.tsx
+- Deleted 4 unused lib files: platform-registry.ts, platform-policies.ts, platform-memory.ts, db-lite.ts
+- Updated .gitignore to cover tool-results/, screenshots/, *.png, upload/, service account keys, db/*.db, agent-ctx/, text dumps, mini-services node_modules
+- Fixed package.json name: nextjs_tailwind_shadcn_ts → denialdefender (v1.0.0)
+- Fixed ESLint config: re-enabled essential rules (no-unused-vars warn, no-console warn, no-debugger warn, prefer-const warn, no-unreachable warn)
+- Fixed next.config.ts: removed ignoreBuildErrors: true, enabled reactStrictMode
+- Fixed tailwind.config.ts: added ./src/** to content paths for proper Tailwind scanning
+- Verified app runs correctly: 91 cases loaded, all tabs functional
+
+Stage Summary:
+- Removed ~20MB+ of garbage files and development artifacts
+- Eliminated security risk (service account JSON keys in upload/)
+- Project structure is now clean and standard
+- All configs properly tuned (ESLint warnings on, strict mode, Tailwind paths correct)
+- 15 well-named components remain (all day-prefixes removed)
+- 34 lib files remain (all unused ones removed)
+- App verified working in browser after all changes
