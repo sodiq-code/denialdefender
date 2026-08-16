@@ -15,13 +15,9 @@ export async function GET(
     if (isTurso) {
       const client = await getTursoClient();
 
-      // Fetch case with denial
+      // Fetch case row
       const caseResult = await client.execute({
-        sql: `SELECT c.id, c.patient_id, c.state, c.deadline, c.persona, c.created_at, c.updated_at,
-                     d.id as denial_id, d.payer, d.reason_code, d.category, d.denial_letter_text,
-                     d.confidence, d.structured_json, d.created_at as denial_created_at
-              FROM "Case" c LEFT JOIN "Denial" d ON d.case_id = c.id
-              WHERE c.id = ?`,
+        sql: 'SELECT id, patient_id, state, deadline, persona, created_at, updated_at FROM "Case" WHERE id = ?',
         args: [id],
       });
 
@@ -29,45 +25,51 @@ export async function GET(
         return NextResponse.json({ error: 'Case not found' }, { status: 404 });
       }
 
-      const row = caseResult.rows[0] as any;
+      const caseRow = caseResult.rows[0] as any;
+
+      // Fetch denial separately (avoids JOIN issues with LibSQL)
+      const denialResult = await client.execute({
+        sql: 'SELECT id, case_id, payer, reason_code, category, denial_letter_text, deadline, confidence, structured_json, created_at FROM "Denial" WHERE case_id = ?',
+        args: [id],
+      });
 
       // Fetch outcomes
       const outcomeResult = await client.execute({
-        sql: `SELECT id, verdict, level, recorded_at FROM "Outcome" WHERE case_id = ? ORDER BY recorded_at DESC`,
+        sql: 'SELECT id, verdict, level, recorded_at FROM "Outcome" WHERE case_id = ? ORDER BY recorded_at DESC',
         args: [id],
       });
 
       // Fetch traces
       const traceResult = await client.execute({
-        sql: `SELECT id, case_id, agent_name, step, status, details, references, timestamp
-              FROM "DecisionTraceEvent" WHERE case_id = ? ORDER BY timestamp DESC`,
+        sql: 'SELECT id, case_id, agent_name, step, status, details, references, timestamp FROM "DecisionTraceEvent" WHERE case_id = ? ORDER BY timestamp DESC',
         args: [id],
       });
 
       // Fetch gates
       const gateResult = await client.execute({
-        sql: `SELECT id, case_id, gate_number, status, reviewer_note, resolved_at, created_at
-              FROM "HitlGate" WHERE case_id = ? ORDER BY created_at DESC`,
+        sql: 'SELECT id, case_id, gate_number, status, reviewer_note, resolved_at, created_at FROM "HitlGate" WHERE case_id = ? ORDER BY created_at DESC',
         args: [id],
       });
 
+      const denialRow = denialResult.rows.length > 0 ? denialResult.rows[0] as any : null;
+
       const caseData = {
-        id: row.id,
-        patient_id: row.patient_id,
-        state: row.state,
-        deadline: row.deadline,
-        persona: row.persona,
-        created_at: row.created_at,
-        updated_at: row.updated_at,
-        denial: row.denial_id ? {
-          id: row.denial_id,
-          payer: row.payer,
-          reason_code: row.reason_code,
-          category: row.category,
-          denial_letter_text: row.denial_letter_text,
-          confidence: row.confidence,
-          structured_json: row.structured_json,
-          created_at: row.denial_created_at,
+        id: caseRow.id,
+        patient_id: caseRow.patient_id,
+        state: caseRow.state,
+        deadline: caseRow.deadline,
+        persona: caseRow.persona,
+        created_at: caseRow.created_at,
+        updated_at: caseRow.updated_at,
+        denial: denialRow ? {
+          id: denialRow.id,
+          payer: denialRow.payer,
+          reason_code: denialRow.reason_code,
+          category: denialRow.category,
+          denial_letter_text: denialRow.denial_letter_text,
+          confidence: denialRow.confidence,
+          structured_json: denialRow.structured_json,
+          created_at: denialRow.created_at,
         } : null,
         outcomes: outcomeResult.rows.map((o: any) => ({
           id: o.id,
@@ -116,9 +118,12 @@ export async function GET(
     }
 
     return NextResponse.json({ case: caseData });
-  } catch (error) {
-    console.error('[GET /api/cases/[id]] Error:', error);
-    return NextResponse.json({ error: 'Failed to fetch case' }, { status: 500 });
+  } catch (error: any) {
+    console.error('[GET /api/cases/[id]] Error:', error?.message || error);
+    return NextResponse.json(
+      { error: 'Failed to fetch case', detail: error?.message || String(error) },
+      { status: 500 }
+    );
   }
 }
 
@@ -140,7 +145,7 @@ export async function PATCH(
 
       // Verify case exists
       const existing = await client.execute({
-        sql: `SELECT id, patient_id, state, deadline, persona, created_at, updated_at FROM "Case" WHERE id = ?`,
+        sql: 'SELECT id FROM "Case" WHERE id = ?',
         args: [id],
       });
 
@@ -164,22 +169,25 @@ export async function PATCH(
         args,
       });
 
-      // Fetch updated case with relations
+      // Fetch updated case
       const caseResult = await client.execute({
-        sql: `SELECT c.id, c.patient_id, c.state, c.deadline, c.persona, c.created_at, c.updated_at,
-                     d.id as denial_id, d.payer, d.reason_code, d.category, d.denial_letter_text, d.confidence
-              FROM "Case" c LEFT JOIN "Denial" d ON d.case_id = c.id
-              WHERE c.id = ?`,
+        sql: 'SELECT id, patient_id, state, deadline, persona, created_at, updated_at FROM "Case" WHERE id = ?',
+        args: [id],
+      });
+      const denialResult = await client.execute({
+        sql: 'SELECT id, payer, reason_code, category, denial_letter_text, confidence FROM "Denial" WHERE case_id = ?',
         args: [id],
       });
 
       const row = caseResult.rows[0] as any;
+      const denialRow = denialResult.rows.length > 0 ? denialResult.rows[0] as any : null;
+
       return NextResponse.json({
         case: {
           ...row,
-          denial: row.denial_id ? {
-            id: row.denial_id, payer: row.payer, reason_code: row.reason_code,
-            category: row.category, denial_letter_text: row.denial_letter_text, confidence: row.confidence,
+          denial: denialRow ? {
+            id: denialRow.id, payer: denialRow.payer, reason_code: denialRow.reason_code,
+            category: denialRow.category, denial_letter_text: denialRow.denial_letter_text, confidence: denialRow.confidence,
           } : null,
         },
       });
@@ -204,8 +212,8 @@ export async function PATCH(
     });
 
     return NextResponse.json({ case: updatedCase });
-  } catch (error) {
-    console.error('[PATCH /api/cases/[id]] Error:', error);
-    return NextResponse.json({ error: 'Failed to update case' }, { status: 500 });
+  } catch (error: any) {
+    console.error('[PATCH /api/cases/[id]] Error:', error?.message || error);
+    return NextResponse.json({ error: 'Failed to update case', detail: error?.message || String(error) }, { status: 500 });
   }
 }
