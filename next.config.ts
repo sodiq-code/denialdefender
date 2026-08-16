@@ -3,7 +3,8 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   // Required for Cloud Run Docker deployment — produces a standalone server
   // that does not require the full node_modules directory
-  output: 'standalone',
+  // (Disabled for local dev to avoid standalone mode issues)
+  // output: 'standalone',
 
   typescript: {
     ignoreBuildErrors: true,
