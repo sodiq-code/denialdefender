@@ -1,0 +1,896 @@
+{
+    "component": "model_armor",
+    "entries": [
+        {
+            "id": "cmsv4ui36000rr9cwix4d6f5e",
+            "caseId": null,
+            "component": "model_armor",
+            "action": "block",
+            "agentName": null,
+            "verdict": "BLOCK",
+            "riskScore": 100,
+            "details": {
+                "contentSource": "external_content",
+                "contentHash": "5dcc1d00259471e5d1637c670963d2882bc2e7d1125789ee47839d2c13fab189",
+                "scanner": "regex",
+                "usedFallback": false,
+                "threatCount": 9,
+                "threatTypes": [
+                    "ignore_instruction",
+                    "role_switch",
+                    "data_exfil",
+                    "boundary_cross",
+                    "tool_poisoning",
+                    "indirect_manipulation",
+                    "output_manipulation"
+                ],
+                "threats": [
+                    {
+                        "type": "ignore_instruction",
+                        "severity": "critical",
+                        "position": 75
+                    },
+                    {
+                        "type": "role_switch",
+                        "severity": "critical",
+                        "position": 109
+                    },
+                    {
+                        "type": "data_exfil",
+                        "severity": "high",
+                        "position": 151
+                    },
+                    {
+                        "type": "data_exfil",
+                        "severity": "high",
+                        "position": 306
+                    },
+                    {
+                        "type": "boundary_cross",
+                        "severity": "high",
+                        "position": 555
+                    },
+                    {
+                        "type": "tool_poisoning",
+                        "severity": "high",
+                        "position": 584
+                    },
+                    {
+                        "type": "indirect_manipulation",
+                        "severity": "medium",
+                        "position": 632
+                    },
+                    {
+                        "type": "indirect_manipulation",
+                        "severity": "medium",
+                        "position": 658
+                    },
+                    {
+                        "type": "output_manipulation",
+                        "severity": "medium",
+                        "position": 676
+                    }
+                ],
+                "reason": "Adversarial content detected: 2 critical, 4 high-severity threats. Content blocked from agent processing."
+            },
+            "contentHash": "5dcc1d00259471e5d1637c670963d2882bc2e7d1125789ee47839d2c13fab189",
+            "timestamp": "2026-08-16T01:35:08.562Z"
+        },
+        {
+            "id": "cmsv4ui32000qr9cwgyo231m2",
+            "caseId": null,
+            "component": "model_armor",
+            "action": "allow",
+            "agentName": null,
+            "verdict": "ALLOW",
+            "riskScore": 0,
+            "details": {
+                "contentSource": "retrieved_policy",
+                "contentHash": "441967acdff29c06bf2cce8f249b287a17d4c879a45bf72826486b15a0347c72",
+                "scanner": "regex",
+                "usedFallback": false,
+                "threatCount": 0,
+                "threatTypes": [],
+                "threats": [],
+                "reason": "Content is clean. No adversarial patterns detected."
+            },
+            "contentHash": "441967acdff29c06bf2cce8f249b287a17d4c879a45bf72826486b15a0347c72",
+            "timestamp": "2026-08-16T01:35:08.558Z"
+        },
+        {
+            "id": "cmsv4t17d000nr9cw2tvoqf0x",
+            "caseId": "test-case-armor",
+            "component": "model_armor",
+            "action": "scan",
+            "agentName": null,
+            "verdict": "SANITIZE",
+            "riskScore": 60,
+            "details": {
+                "contentSource": "retrieved_evidence",
+                "contentHash": "746ae9e50c5c7a7eb9172128a91d2540ebd10ab4e45b1988bf8a35b9272af167",
+                "scanner": "regex",
+                "usedFallback": false,
+                "threatCount": 5,
+                "threatTypes": [
+                    "indirect_manipulation",
+                    "output_manipulation",
+                    "emotional_manipulation"
+                ],
+                "threats": [
+                    {
+                        "type": "indirect_manipulation",
+                        "severity": "medium",
+                        "position": 0
+                    },
+                    {
+                        "type": "indirect_manipulation",
+                        "severity": "medium",
+                        "position": 25
+                    },
+                    {
+                        "type": "output_manipulation",
+                        "severity": "medium",
+                        "position": 43
+                    },
+                    {
+                        "type": "output_manipulation",
+                        "severity": "medium",
+                        "position": 67
+                    },
+                    {
+                        "type": "emotional_manipulation",
+                        "severity": "medium",
+                        "position": 119
+                    }
+                ],
+                "reason": "Suspicious patterns detected: 5 medium-severity. Content sanitized before processing."
+            },
+            "contentHash": "746ae9e50c5c7a7eb9172128a91d2540ebd10ab4e45b1988bf8a35b9272af167",
+            "timestamp": "2026-08-16T01:34:00.026Z"
+        },
+        {
+            "id": "cmsv4t112000kr9cwxh15b49g",
+            "caseId": "test-case-armor",
+            "component": "model_armor",
+            "action": "block",
+            "agentName": null,
+            "verdict": "BLOCK",
+            "riskScore": 100,
+            "details": {
+                "contentSource": "external_content",
+                "contentHash": "9231ea1d2a348f18f3ce5c27cb440fcd3bc790d2909af798643c2ca6b69d3fb4",
+                "scanner": "regex",
+                "usedFallback": false,
+                "threatCount": 5,
+                "threatTypes": [
+                    "ignore_instruction",
+                    "role_switch",
+                    "data_exfil",
+                    "boundary_cross",
+                    "tool_poisoning"
+                ],
+                "threats": [
+                    {
+                        "type": "ignore_instruction",
+                        "severity": "critical",
+                        "position": 0
+                    },
+                    {
+                        "type": "role_switch",
+                        "severity": "critical",
+                        "position": 34
+                    },
+                    {
+                        "type": "data_exfil",
+                        "severity": "high",
+                        "position": 76
+                    },
+                    {
+                        "type": "boundary_cross",
+                        "severity": "high",
+                        "position": 102
+                    },
+                    {
+                        "type": "tool_poisoning",
+                        "severity": "high",
+                        "position": 131
+                    }
+                ],
+                "reason": "Adversarial content detected: 2 critical, 3 high-severity threats. Content blocked from agent processing."
+            },
+            "contentHash": "9231ea1d2a348f18f3ce5c27cb440fcd3bc790d2909af798643c2ca6b69d3fb4",
+            "timestamp": "2026-08-16T01:33:59.799Z"
+        },
+        {
+            "id": "cmsv4t0vo000hr9cwhqwxpcve",
+            "caseId": "test-case-armor",
+            "component": "model_armor",
+            "action": "allow",
+            "agentName": null,
+            "verdict": "ALLOW",
+            "riskScore": 0,
+            "details": {
+                "contentSource": "retrieved_policy",
+                "contentHash": "25b99d126ae67f689f9c4659936ca1861be6ec49d2bd060ffaeec7d5b541bf54",
+                "scanner": "regex",
+                "usedFallback": false,
+                "threatCount": 0,
+                "threatTypes": [],
+                "threats": [],
+                "reason": "Content is clean. No adversarial patterns detected."
+            },
+            "contentHash": "25b99d126ae67f689f9c4659936ca1861be6ec49d2bd060ffaeec7d5b541bf54",
+            "timestamp": "2026-08-16T01:33:59.604Z"
+        },
+        {
+            "id": "cmsv4sfo0000er9cwyhjd7iu4",
+            "caseId": "test-1",
+            "component": "model_armor",
+            "action": "block",
+            "agentName": null,
+            "verdict": "BLOCK",
+            "riskScore": 50,
+            "details": {
+                "contentSource": "external_content",
+                "contentHash": "2847bd141d1ca1b6d8f0f4badfde24547b96cbfa7c11f6fc6c2bedd05f057e52",
+                "scanner": "regex",
+                "usedFallback": false,
+                "threatCount": 1,
+                "threatTypes": [
+                    "ignore_instruction"
+                ],
+                "threats": [
+                    {
+                        "type": "ignore_instruction",
+                        "severity": "critical",
+                        "position": 0
+                    }
+                ],
+                "reason": "Adversarial content detected: 1 critical, 0 high-severity threats. Content blocked from agent processing."
+            },
+            "contentHash": "2847bd141d1ca1b6d8f0f4badfde24547b96cbfa7c11f6fc6c2bedd05f057e52",
+            "timestamp": "2026-08-16T01:33:32.112Z"
+        },
+        {
+            "id": "cmsv4s8aa000br9cwo7vr8edl",
+            "caseId": "test-case-armor",
+            "component": "model_armor",
+            "action": "scan",
+            "agentName": null,
+            "verdict": "SANITIZE",
+            "riskScore": 60,
+            "details": {
+                "contentSource": "external_content",
+                "contentHash": "e8f76e29946f538aa2b6b6d95ccdd61e3004cbe455efb3cfcd3af02fc151ab44",
+                "scanner": "regex",
+                "usedFallback": false,
+                "threatCount": 4,
+                "threatTypes": [
+                    "indirect_manipulation",
+                    "output_manipulation"
+                ],
+                "threats": [
+                    {
+                        "type": "indirect_manipulation",
+                        "severity": "medium",
+                        "position": 36
+                    },
+                    {
+                        "type": "indirect_manipulation",
+                        "severity": "medium",
+                        "position": 61
+                    },
+                    {
+                        "type": "output_manipulation",
+                        "severity": "medium",
+                        "position": 79
+                    },
+                    {
+                        "type": "output_manipulation",
+                        "severity": "medium",
+                        "position": 103
+                    }
+                ],
+                "reason": "Suspicious patterns detected: 4 medium-severity. Content sanitized before processing."
+            },
+            "contentHash": "e8f76e29946f538aa2b6b6d95ccdd61e3004cbe455efb3cfcd3af02fc151ab44",
+            "timestamp": "2026-08-16T01:33:22.546Z"
+        },
+        {
+            "id": "cmsv4s8540008r9cwi7uqnb2b",
+            "caseId": "test-case-armor",
+            "component": "model_armor",
+            "action": "block",
+            "agentName": null,
+            "verdict": "BLOCK",
+            "riskScore": 100,
+            "details": {
+                "contentSource": "external_content",
+                "contentHash": "9231ea1d2a348f18f3ce5c27cb440fcd3bc790d2909af798643c2ca6b69d3fb4",
+                "scanner": "regex",
+                "usedFallback": false,
+                "threatCount": 5,
+                "threatTypes": [
+                    "ignore_instruction",
+                    "role_switch",
+                    "data_exfil",
+                    "boundary_cross",
+                    "tool_poisoning"
+                ],
+                "threats": [
+                    {
+                        "type": "ignore_instruction",
+                        "severity": "critical",
+                        "position": 0
+                    },
+                    {
+                        "type": "role_switch",
+                        "severity": "critical",
+                        "position": 34
+                    },
+                    {
+                        "type": "data_exfil",
+                        "severity": "high",
+                        "position": 76
+                    },
+                    {
+                        "type": "boundary_cross",
+                        "severity": "high",
+                        "position": 102
+                    },
+                    {
+                        "type": "tool_poisoning",
+                        "severity": "high",
+                        "position": 131
+                    }
+                ],
+                "reason": "Adversarial content detected: 2 critical, 3 high-severity threats. Content blocked from agent processing."
+            },
+            "contentHash": "9231ea1d2a348f18f3ce5c27cb440fcd3bc790d2909af798643c2ca6b69d3fb4",
+            "timestamp": "2026-08-16T01:33:22.360Z"
+        },
+        {
+            "id": "cmsv4s7o90005r9cwv1l8cmcc",
+            "caseId": "test-case-armor",
+            "component": "model_armor",
+            "action": "allow",
+            "agentName": null,
+            "verdict": "ALLOW",
+            "riskScore": 0,
+            "details": {
+                "contentSource": "external_content",
+                "contentHash": "25b99d126ae67f689f9c4659936ca1861be6ec49d2bd060ffaeec7d5b541bf54",
+                "scanner": "regex",
+                "usedFallback": false,
+                "threatCount": 0,
+                "threatTypes": [],
+                "threats": [],
+                "reason": "Content is clean. No adversarial patterns detected."
+            },
+            "contentHash": "25b99d126ae67f689f9c4659936ca1861be6ec49d2bd060ffaeec7d5b541bf54",
+            "timestamp": "2026-08-16T01:33:21.754Z"
+        },
+        {
+            "id": "cmsumkvte0001r9m76mrgiuby",
+            "caseId": null,
+            "component": "model_armor",
+            "action": "block",
+            "agentName": null,
+            "verdict": "BLOCK",
+            "riskScore": 100,
+            "details": {
+                "contentSource": "external_content",
+                "contentHash": "5dcc1d00259471e5d1637c670963d2882bc2e7d1125789ee47839d2c13fab189",
+                "threatCount": 9,
+                "threatTypes": [
+                    "ignore_instruction",
+                    "role_switch",
+                    "data_exfil",
+                    "boundary_cross",
+                    "tool_poisoning",
+                    "indirect_manipulation",
+                    "output_manipulation"
+                ],
+                "threats": [
+                    {
+                        "type": "ignore_instruction",
+                        "severity": "critical",
+                        "position": 75
+                    },
+                    {
+                        "type": "role_switch",
+                        "severity": "critical",
+                        "position": 109
+                    },
+                    {
+                        "type": "data_exfil",
+                        "severity": "high",
+                        "position": 151
+                    },
+                    {
+                        "type": "data_exfil",
+                        "severity": "high",
+                        "position": 306
+                    },
+                    {
+                        "type": "boundary_cross",
+                        "severity": "high",
+                        "position": 555
+                    },
+                    {
+                        "type": "tool_poisoning",
+                        "severity": "high",
+                        "position": 584
+                    },
+                    {
+                        "type": "indirect_manipulation",
+                        "severity": "medium",
+                        "position": 632
+                    },
+                    {
+                        "type": "indirect_manipulation",
+                        "severity": "medium",
+                        "position": 658
+                    },
+                    {
+                        "type": "output_manipulation",
+                        "severity": "medium",
+                        "position": 676
+                    }
+                ],
+                "reason": "Adversarial content detected: 2 critical, 4 high-severity threats. Content blocked from agent processing."
+            },
+            "contentHash": "5dcc1d00259471e5d1637c670963d2882bc2e7d1125789ee47839d2c13fab189",
+            "timestamp": "2026-08-15T17:03:46.706Z"
+        },
+        {
+            "id": "cmsumkvtb0000r9m75jr5tvi0",
+            "caseId": null,
+            "component": "model_armor",
+            "action": "allow",
+            "agentName": null,
+            "verdict": "ALLOW",
+            "riskScore": 0,
+            "details": {
+                "contentSource": "retrieved_policy",
+                "contentHash": "441967acdff29c06bf2cce8f249b287a17d4c879a45bf72826486b15a0347c72",
+                "threatCount": 0,
+                "threatTypes": [],
+                "threats": [],
+                "reason": "Content is clean. No adversarial patterns detected."
+            },
+            "contentHash": "441967acdff29c06bf2cce8f249b287a17d4c879a45bf72826486b15a0347c72",
+            "timestamp": "2026-08-15T17:03:46.703Z"
+        },
+        {
+            "id": "cmsumjyu50001r9j3xmv9th3w",
+            "caseId": null,
+            "component": "model_armor",
+            "action": "block",
+            "agentName": null,
+            "verdict": "BLOCK",
+            "riskScore": 100,
+            "details": {
+                "contentSource": "external_content",
+                "contentHash": "5dcc1d00259471e5d1637c670963d2882bc2e7d1125789ee47839d2c13fab189",
+                "threatCount": 9,
+                "threatTypes": [
+                    "ignore_instruction",
+                    "role_switch",
+                    "data_exfil",
+                    "boundary_cross",
+                    "tool_poisoning",
+                    "indirect_manipulation",
+                    "output_manipulation"
+                ],
+                "threats": [
+                    {
+                        "type": "ignore_instruction",
+                        "severity": "critical",
+                        "position": 75
+                    },
+                    {
+                        "type": "role_switch",
+                        "severity": "critical",
+                        "position": 109
+                    },
+                    {
+                        "type": "data_exfil",
+                        "severity": "high",
+                        "position": 151
+                    },
+                    {
+                        "type": "data_exfil",
+                        "severity": "high",
+                        "position": 306
+                    },
+                    {
+                        "type": "boundary_cross",
+                        "severity": "high",
+                        "position": 555
+                    },
+                    {
+                        "type": "tool_poisoning",
+                        "severity": "high",
+                        "position": 584
+                    },
+                    {
+                        "type": "indirect_manipulation",
+                        "severity": "medium",
+                        "position": 632
+                    },
+                    {
+                        "type": "indirect_manipulation",
+                        "severity": "medium",
+                        "position": 658
+                    },
+                    {
+                        "type": "output_manipulation",
+                        "severity": "medium",
+                        "position": 676
+                    }
+                ],
+                "reason": "Adversarial content detected: 2 critical, 4 high-severity threats. Content blocked from agent processing."
+            },
+            "contentHash": "5dcc1d00259471e5d1637c670963d2882bc2e7d1125789ee47839d2c13fab189",
+            "timestamp": "2026-08-15T17:03:03.965Z"
+        },
+        {
+            "id": "cmsumjyu10000r9j3xp9lkhts",
+            "caseId": null,
+            "component": "model_armor",
+            "action": "allow",
+            "agentName": null,
+            "verdict": "ALLOW",
+            "riskScore": 0,
+            "details": {
+                "contentSource": "retrieved_policy",
+                "contentHash": "441967acdff29c06bf2cce8f249b287a17d4c879a45bf72826486b15a0347c72",
+                "threatCount": 0,
+                "threatTypes": [],
+                "threats": [],
+                "reason": "Content is clean. No adversarial patterns detected."
+            },
+            "contentHash": "441967acdff29c06bf2cce8f249b287a17d4c879a45bf72826486b15a0347c72",
+            "timestamp": "2026-08-15T17:03:03.962Z"
+        },
+        {
+            "id": "cmsum1zj60010r90hjm9t91xq",
+            "caseId": null,
+            "component": "model_armor",
+            "action": "block",
+            "agentName": null,
+            "verdict": "BLOCK",
+            "riskScore": 100,
+            "details": {
+                "contentSource": "external_content",
+                "contentHash": "5dcc1d00259471e5d1637c670963d2882bc2e7d1125789ee47839d2c13fab189",
+                "threatCount": 9,
+                "threatTypes": [
+                    "ignore_instruction",
+                    "role_switch",
+                    "data_exfil",
+                    "boundary_cross",
+                    "tool_poisoning",
+                    "indirect_manipulation",
+                    "output_manipulation"
+                ],
+                "threats": [
+                    {
+                        "type": "ignore_instruction",
+                        "severity": "critical",
+                        "position": 75
+                    },
+                    {
+                        "type": "role_switch",
+                        "severity": "critical",
+                        "position": 109
+                    },
+                    {
+                        "type": "data_exfil",
+                        "severity": "high",
+                        "position": 151
+                    },
+                    {
+                        "type": "data_exfil",
+                        "severity": "high",
+                        "position": 306
+                    },
+                    {
+                        "type": "boundary_cross",
+                        "severity": "high",
+                        "position": 555
+                    },
+                    {
+                        "type": "tool_poisoning",
+                        "severity": "high",
+                        "position": 584
+                    },
+                    {
+                        "type": "indirect_manipulation",
+                        "severity": "medium",
+                        "position": 632
+                    },
+                    {
+                        "type": "indirect_manipulation",
+                        "severity": "medium",
+                        "position": 658
+                    },
+                    {
+                        "type": "output_manipulation",
+                        "severity": "medium",
+                        "position": 676
+                    }
+                ],
+                "reason": "Adversarial content detected: 2 critical, 4 high-severity threats. Content blocked from agent processing."
+            },
+            "contentHash": "5dcc1d00259471e5d1637c670963d2882bc2e7d1125789ee47839d2c13fab189",
+            "timestamp": "2026-08-15T16:49:05.059Z"
+        },
+        {
+            "id": "cmsum1zj4000zr90h90ui3y86",
+            "caseId": null,
+            "component": "model_armor",
+            "action": "allow",
+            "agentName": null,
+            "verdict": "ALLOW",
+            "riskScore": 0,
+            "details": {
+                "contentSource": "retrieved_policy",
+                "contentHash": "441967acdff29c06bf2cce8f249b287a17d4c879a45bf72826486b15a0347c72",
+                "threatCount": 0,
+                "threatTypes": [],
+                "threats": [],
+                "reason": "Content is clean. No adversarial patterns detected."
+            },
+            "contentHash": "441967acdff29c06bf2cce8f249b287a17d4c879a45bf72826486b15a0347c72",
+            "timestamp": "2026-08-15T16:49:05.056Z"
+        },
+        {
+            "id": "cmsum1vv90001r90hxajg43p4",
+            "caseId": null,
+            "component": "model_armor",
+            "action": "block",
+            "agentName": null,
+            "verdict": "BLOCK",
+            "riskScore": 100,
+            "details": {
+                "contentSource": "external_content",
+                "contentHash": "01f296e7272d736230c986ea72557cd565712a4c7f77bfb66b5e47b44e962435",
+                "threatCount": 3,
+                "threatTypes": [
+                    "ignore_instruction",
+                    "role_switch",
+                    "boundary_cross"
+                ],
+                "threats": [
+                    {
+                        "type": "ignore_instruction",
+                        "severity": "critical",
+                        "position": 0
+                    },
+                    {
+                        "type": "role_switch",
+                        "severity": "critical",
+                        "position": 34
+                    },
+                    {
+                        "type": "boundary_cross",
+                        "severity": "high",
+                        "position": 67
+                    }
+                ],
+                "reason": "Adversarial content detected: 2 critical, 1 high-severity threats. Content blocked from agent processing."
+            },
+            "contentHash": "01f296e7272d736230c986ea72557cd565712a4c7f77bfb66b5e47b44e962435",
+            "timestamp": "2026-08-15T16:49:00.309Z"
+        },
+        {
+            "id": "cmsum1v0n0000r90ht7kxfmn8",
+            "caseId": null,
+            "component": "model_armor",
+            "action": "allow",
+            "agentName": null,
+            "verdict": "ALLOW",
+            "riskScore": 0,
+            "details": {
+                "contentSource": "retrieved_policy",
+                "contentHash": "fb4100db137bad3fab3228e968d8a4b9a2a8f9e9b2cbeb13d7c19e6778defd19",
+                "threatCount": 0,
+                "threatTypes": [],
+                "threats": [],
+                "reason": "Content is clean. No adversarial patterns detected."
+            },
+            "contentHash": "fb4100db137bad3fab3228e968d8a4b9a2a8f9e9b2cbeb13d7c19e6778defd19",
+            "timestamp": "2026-08-15T16:48:59.207Z"
+        },
+        {
+            "id": "cmsultb7m000fr9kwludugj9h",
+            "caseId": null,
+            "component": "model_armor",
+            "action": "block",
+            "agentName": null,
+            "verdict": "BLOCK",
+            "riskScore": 100,
+            "details": {
+                "contentSource": "external_content",
+                "contentHash": "5dcc1d00259471e5d1637c670963d2882bc2e7d1125789ee47839d2c13fab189",
+                "threatCount": 9,
+                "threatTypes": [
+                    "ignore_instruction",
+                    "role_switch",
+                    "data_exfil",
+                    "boundary_cross",
+                    "tool_poisoning",
+                    "indirect_manipulation",
+                    "output_manipulation"
+                ],
+                "threats": [
+                    {
+                        "type": "ignore_instruction",
+                        "severity": "critical",
+                        "position": 75
+                    },
+                    {
+                        "type": "role_switch",
+                        "severity": "critical",
+                        "position": 109
+                    },
+                    {
+                        "type": "data_exfil",
+                        "severity": "high",
+                        "position": 151
+                    },
+                    {
+                        "type": "data_exfil",
+                        "severity": "high",
+                        "position": 306
+                    },
+                    {
+                        "type": "boundary_cross",
+                        "severity": "high",
+                        "position": 555
+                    },
+                    {
+                        "type": "tool_poisoning",
+                        "severity": "high",
+                        "position": 584
+                    },
+                    {
+                        "type": "indirect_manipulation",
+                        "severity": "medium",
+                        "position": 632
+                    },
+                    {
+                        "type": "indirect_manipulation",
+                        "severity": "medium",
+                        "position": 658
+                    },
+                    {
+                        "type": "output_manipulation",
+                        "severity": "medium",
+                        "position": 676
+                    }
+                ],
+                "reason": "Adversarial content detected: 2 critical, 4 high-severity threats. Content blocked from agent processing."
+            },
+            "contentHash": "5dcc1d00259471e5d1637c670963d2882bc2e7d1125789ee47839d2c13fab189",
+            "timestamp": "2026-08-15T16:42:20.290Z"
+        },
+        {
+            "id": "cmsultb7f000er9kwyvp8q1wf",
+            "caseId": null,
+            "component": "model_armor",
+            "action": "allow",
+            "agentName": null,
+            "verdict": "ALLOW",
+            "riskScore": 0,
+            "details": {
+                "contentSource": "retrieved_policy",
+                "contentHash": "441967acdff29c06bf2cce8f249b287a17d4c879a45bf72826486b15a0347c72",
+                "threatCount": 0,
+                "threatTypes": [],
+                "threats": [],
+                "reason": "Content is clean. No adversarial patterns detected."
+            },
+            "contentHash": "441967acdff29c06bf2cce8f249b287a17d4c879a45bf72826486b15a0347c72",
+            "timestamp": "2026-08-15T16:42:20.283Z"
+        },
+        {
+            "id": "cmsult9jk0001r9kw3v5qgsla",
+            "caseId": null,
+            "component": "model_armor",
+            "action": "block",
+            "agentName": null,
+            "verdict": "BLOCK",
+            "riskScore": 100,
+            "details": {
+                "contentSource": "external_content",
+                "contentHash": "788693e5e906eedbad07cb1847d996fa9e594e5c81b1669ed663f3eebcfb809e",
+                "threatCount": 6,
+                "threatTypes": [
+                    "ignore_instruction",
+                    "role_switch",
+                    "boundary_cross",
+                    "tool_poisoning",
+                    "indirect_manipulation",
+                    "output_manipulation"
+                ],
+                "threats": [
+                    {
+                        "type": "ignore_instruction",
+                        "severity": "critical",
+                        "position": 0
+                    },
+                    {
+                        "type": "role_switch",
+                        "severity": "critical",
+                        "position": 34
+                    },
+                    {
+                        "type": "boundary_cross",
+                        "severity": "high",
+                        "position": 67
+                    },
+                    {
+                        "type": "tool_poisoning",
+                        "severity": "high",
+                        "position": 96
+                    },
+                    {
+                        "type": "indirect_manipulation",
+                        "severity": "medium",
+                        "position": 120
+                    },
+                    {
+                        "type": "output_manipulation",
+                        "severity": "medium",
+                        "position": 140
+                    }
+                ],
+                "reason": "Adversarial content detected: 2 critical, 2 high-severity threats. Content blocked from agent processing."
+            },
+            "contentHash": "788693e5e906eedbad07cb1847d996fa9e594e5c81b1669ed663f3eebcfb809e",
+            "timestamp": "2026-08-15T16:42:18.128Z"
+        },
+        {
+            "id": "cmsult9ho0000r9kwedzxloc1",
+            "caseId": null,
+            "component": "model_armor",
+            "action": "allow",
+            "agentName": null,
+            "verdict": "ALLOW",
+            "riskScore": 0,
+            "details": {
+                "contentSource": "retrieved_policy",
+                "contentHash": "1981a467ae6b5ba51031a6c11148ceb117a0eb4638ab1973ce9a4b74619c47ba",
+                "threatCount": 0,
+                "threatTypes": [],
+                "threats": [],
+                "reason": "Content is clean. No adversarial patterns detected."
+            },
+            "contentHash": "1981a467ae6b5ba51031a6c11148ceb117a0eb4638ab1973ce9a4b74619c47ba",
+            "timestamp": "2026-08-15T16:42:18.061Z"
+        },
+        {
+            "id": "cmsulrxa50000r9hzh2wn1vvs",
+            "caseId": null,
+            "component": "model_armor",
+            "action": "allow",
+            "agentName": null,
+            "verdict": "ALLOW",
+            "riskScore": 0,
+            "details": {
+                "contentSource": "retrieved_policy",
+                "contentHash": "7d47fe718a39ad8c5e2ed490f2e588396bcaec34dc7c1b37bc973123d477f897",
+                "threatCount": 0,
+                "threatTypes": [],
+                "threats": [],
+                "reason": "Content is clean. No adversarial patterns detected."
+            },
+            "contentHash": "7d47fe718a39ad8c5e2ed490f2e588396bcaec34dc7c1b37bc973123d477f897",
+            "timestamp": "2026-08-15T16:41:15.581Z"
+        }
+    ],
+    "count": 22
+}
