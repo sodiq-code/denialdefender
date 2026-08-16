@@ -10,7 +10,7 @@
 
 # ── Stage 1: Dependencies ─────────────────────────────────────────────────────
 FROM node:20-alpine AS deps
-RUN apk add --no-cache libc6-compat
+RUN apk add --no-cache libc6-compat python3 make g++
 
 # Install bun for package management
 RUN npm install -g bun@latest
@@ -26,7 +26,7 @@ RUN npm ci --omit=dev
 
 # ── Stage 2: Build ────────────────────────────────────────────────────────────
 FROM node:20-alpine AS builder
-RUN apk add --no-cache libc6-compat
+RUN apk add --no-cache libc6-compat python3 make g++
 
 WORKDIR /app
 
