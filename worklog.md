@@ -64,3 +64,27 @@ Stage Summary:
 - FIX: Pushed all code + added cloudbuild.yaml for auto-deployment on push
 - When deployed to Cloud Run with GCP_PROJECT_ID set, Firestore/Pub/Sub switch to Platform mode
 - All local components verified working with graceful fallback
+---
+Task ID: 1
+Agent: Main Agent
+Task: Investigate and fix "90+ cases → 6 cases" and "Case not found" issues
+
+Work Log:
+- Analyzed user screenshot showing "Case not found" modal on Cloud Run dashboard
+- Read all API routes under /api/cases/ and /api/evidence/
+- Discovered root cause: Case LIST endpoint (/api/cases) correctly uses Turso direct queries, but Case DETAIL endpoint (/api/cases/[id]) and all sub-endpoints still use Prisma which routes to empty local SQLite
+- This caused: List shows 6 cases from Turso ✓, but clicking any case queries empty SQLite → "Case not found" ✗
+- Rewrote /api/cases/[id]/route.ts with Turso direct query support (GET + PATCH)
+- Rewrote /api/cases/[id]/denial/route.ts with Turso direct query support (GET + POST)
+- Rewrote /api/cases/[id]/gates/route.ts with Turso direct query support (GET + POST)
+- Rewrote /api/cases/[id]/trace/route.ts with Turso direct query support (GET + POST)
+- Rewrote /api/evidence/route.ts with Turso direct query support (GET)
+- Verified lint passes with no errors
+- Tested locally: /api/cases and /api/cases/[id] both work correctly
+- Browser tested: Case detail panel opens with all data (denial, gates, traces, outcomes)
+- No "Case not found" error in local testing
+
+Stage Summary:
+- Fixed the "Case not found" bug by adding Turso direct query support to 5 API route files
+- Explained to user that 90+ cases were local dev data, 6 are persistent Turso data
+- User needs to push this code to GitHub to deploy the fix to Cloud Run
