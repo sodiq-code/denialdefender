@@ -1,21 +1,12 @@
 # ══════════════════════════════════════════════════════════════════════════════
 # DenialDefender — Auto-Deploy to Cloud Run on Push to Main
 # ══════════════════════════════════════════════════════════════════════════════
-# Triggers on every push to main branch.
-# Builds all 3 services and deploys them to Google Cloud Run.
+# Deploy order: agents + trace-stream FIRST → get their URLs → deploy web with URLs
 #
 # Setup:
 #   1. Add these secrets to your GitHub repo (Settings > Secrets):
 #      - GCP_PROJECT_ID: denialdefender
-#      - GCP_SA_KEY: Service account JSON key for json-775@denialdefender.iam.gserviceaccount.com
-#
-# The service account needs these roles:
-#   - roles/run.admin
-#   - roles/iam.serviceAccountUser
-#   - roles/artifactregistry.writer
-#   - roles/cloudbuild.builds.editor
-#   - roles/secretmanager.secretAccessor
-#   - roles/serviceusage.serviceUsageConsumer (to enable APIs)
+#      - GCP_SA_KEY: Service account JSON key
 # ══════════════════════════════════════════════════════════════════════════════
 
 name: Deploy to Cloud Run
@@ -23,7 +14,7 @@ name: Deploy to Cloud Run
 on:
   push:
     branches: [main]
-  workflow_dispatch: # Allow manual trigger from GitHub UI
+  workflow_dispatch:
 
 env:
   GCP_REGION: europe-west1
@@ -56,21 +47,12 @@ jobs:
           echo "━━━ Pre-flight: Checking billing status ━━━"
           BILLING_ENABLED=$(gcloud billing projects describe ${{ secrets.GCP_PROJECT_ID }} \
             --format="value(billingEnabled)" 2>/dev/null || echo "false")
-          # gcloud returns "True"/"False" (capital T) — convert to lowercase for bash comparison
           BILLING_ENABLED="${BILLING_ENABLED,,}"
           echo "  Billing enabled: ${BILLING_ENABLED}"
           
           if [ "${BILLING_ENABLED}" != "true" ]; then
             echo ""
             echo "❌ BILLING IS NOT ENABLED!"
-            echo ""
-            echo "  To fix this:"
-            echo "  1. Open: https://console.cloud.google.com/billing?project=${{ secrets.GCP_PROJECT_ID }}"
-            echo "  2. Click 'Link a billing account' or reopen the existing one"
-            echo "  3. If your billing account is closed, create a new one at:"
-            echo "     https://console.cloud.google.com/billing/create"
-            echo "  4. Re-run this workflow after billing is enabled"
-            echo ""
             exit 1
           fi
           echo "✅ Billing is enabled"
@@ -112,15 +94,11 @@ jobs:
             fi
           done
           
-          # Critical APIs that MUST be enabled
           CRITICAL=("artifactregistry.googleapis.com" "run.googleapis.com" "secretmanager.googleapis.com")
           for api in "${CRITICAL[@]}"; do
             if [[ " ${FAILED_APIS[*]} " =~ " ${api} " ]]; then
               echo ""
               echo "❌ CRITICAL API ${api} failed to enable!"
-              echo "   This usually means billing is not fully active yet."
-              echo "   Wait a few minutes and re-run, or check:"
-              echo "   https://console.cloud.google.com/apis/library?project=${{ secrets.GCP_PROJECT_ID }}"
               exit 1
             fi
           done
@@ -147,6 +125,7 @@ jobs:
         run: |
           gcloud auth configure-docker ${{ env.GCP_REGION }}-docker.pkg.dev --quiet
 
+      # ── Build all 3 images ─────────────────────────────────────────────────
       - name: Build & Push Web Service
         run: |
           docker build -t ${{ env.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.AR_REPO }}/denialdefender-web:${{ github.sha }} \
@@ -170,28 +149,7 @@ jobs:
           docker push ${{ env.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.AR_REPO }}/trace-stream:${{ github.sha }}
           docker push ${{ env.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.AR_REPO }}/trace-stream:latest
 
-      - name: Deploy Web Service
-        run: |
-          gcloud run deploy denialdefender-web \
-            --image=${{ env.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.AR_REPO }}/denialdefender-web:${{ github.sha }} \
-            --region=${{ env.GCP_REGION }} \
-            --platform=managed \
-            --allow-unauthenticated \
-            --cpu=2 --memory=1Gi \
-            --min-instances=0 --max-instances=4 \
-            --concurrency=80 --timeout=300 \
-            --service-account=json-775@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com \
-            --set-env-vars=NODE_ENV=production \
-            --set-env-vars=DATABASE_URL=file:/tmp/production.db \
-            --set-env-vars=GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }} \
-            --set-env-vars=GCP_REGION=${{ env.GCP_REGION }} \
-            --set-env-vars=FIRESTORE_LOCATION=eur3 \
-            --set-env-vars=NEXT_PUBLIC_GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }} \
-            --set-env-vars=NEXT_PUBLIC_APP_NAME=DenialDefender \
-            --set-env-vars=MEMORY_BANK_STORE=vertex_ai \
-            --set-secrets=GEMINI_API_KEY=gemini-api-key-1:latest \
-            --quiet
-
+      # ── Deploy backend services FIRST (agents + trace-stream) ──────────────
       - name: Deploy Agent Fleet
         run: |
           gcloud run deploy denialdefender-agents \
@@ -230,13 +188,53 @@ jobs:
             --set-env-vars=GCP_REGION=${{ env.GCP_REGION }} \
             --quiet
 
+      # ── Get service URLs for web service env vars ─────────────────────────
+      - name: Get Service URLs
+        id: service-urls
+        run: |
+          AGENTS_URL=$(gcloud run services describe denialdefender-agents \
+            --region=${{ env.GCP_REGION }} --format='value(status.url)')
+          TRACE_URL=$(gcloud run services describe denialdefender-trace-stream \
+            --region=${{ env.GCP_REGION }} --format='value(status.url)')
+          
+          echo "agents-url=${AGENTS_URL}" >> $GITHUB_OUTPUT
+          echo "trace-url=${TRACE_URL}" >> $GITHUB_OUTPUT
+          echo "✅ Agent Fleet URL: ${AGENTS_URL}"
+          echo "✅ Trace Stream URL: ${TRACE_URL}"
+
+      # ── Deploy web service LAST with service URLs ─────────────────────────
+      - name: Deploy Web Service
+        run: |
+          gcloud run deploy denialdefender-web \
+            --image=${{ env.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.AR_REPO }}/denialdefender-web:${{ github.sha }} \
+            --region=${{ env.GCP_REGION }} \
+            --platform=managed \
+            --allow-unauthenticated \
+            --cpu=2 --memory=1Gi \
+            --min-instances=0 --max-instances=4 \
+            --concurrency=80 --timeout=300 \
+            --service-account=json-775@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com \
+            --set-env-vars=NODE_ENV=production \
+            --set-env-vars=DATABASE_URL=file:/tmp/production.db \
+            --set-env-vars=GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }} \
+            --set-env-vars=GCP_REGION=${{ env.GCP_REGION }} \
+            --set-env-vars=FIRESTORE_LOCATION=eur3 \
+            --set-env-vars=AGENT_FLEET_URL=${{ steps.service-urls.outputs.agents-url }} \
+            --set-env-vars=NEXT_PUBLIC_TRACE_STREAM_URL=${{ steps.service-urls.outputs.trace-url }} \
+            --set-env-vars=NEXT_PUBLIC_GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }} \
+            --set-env-vars=NEXT_PUBLIC_APP_NAME=DenialDefender \
+            --set-env-vars=MEMORY_BANK_STORE=vertex_ai \
+            --set-secrets=GEMINI_API_KEY=gemini-api-key-1:latest \
+            --quiet
+
       - name: Verify Deployment
         run: |
           WEB_URL=$(gcloud run services describe denialdefender-web \
             --region=${{ env.GCP_REGION }} --format='value(status.url)')
           echo "✅ Web URL: $WEB_URL"
-          echo "Health check..."
-          sleep 5
+          echo "✅ Agent Fleet URL: ${{ steps.service-urls.outputs.agents-url }}"
+          echo "✅ Trace Stream URL: ${{ steps.service-urls.outputs.trace-url }}"
+          echo ""
+          echo "Health checks..."
+          sleep 10
           curl -sf "$WEB_URL/api/health" && echo " ✓ Web healthy" || echo " ⚠️ Web may need warm-up time"
-          echo "GCP status check..."
-          curl -sf "$WEB_URL/api/agents/gcp/status" | python3 -m json.tool || echo "GCP status check failed (may need warm-up)"

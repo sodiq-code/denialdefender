@@ -14,6 +14,6 @@ export async function GET() {
     agentFleetUrl: process.env.AGENT_FLEET_URL || '',
     gcpProjectId: process.env.GCP_PROJECT_ID || '',
     gcpRegion: process.env.GCP_REGION || '',
-    isCloudRun: (process.env.NEXT_PUBLIC_TRACE_STREAM_URL || '') !== '',
+    isCloudRun: (process.env.NEXT_PUBLIC_TRACE_STREAM_URL || process.env.AGENT_FLEET_URL || '') !== '',
   });
 }
