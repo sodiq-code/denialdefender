@@ -2,16 +2,12 @@
 # DenialDefender — Next.js Production Dockerfile
 # ══════════════════════════════════════════════════════════════════════════════
 # Multi-stage build optimized for Cloud Run deployment.
-# Uses Next.js standalone output for minimal image size.
+# Uses full Next.js build (non-standalone) for maximum compatibility.
 #
 # Build:  docker build -t denialdefender-web .
 # Run:    docker run -p 8080:8080 -e GCP_PROJECT_ID=denialdefender denialdefender-web
 #
-# Cloud Run injects PORT=8080 by default. The standalone Next.js server
-# respects the PORT environment variable automatically.
-#
-# Note: The agent-fleet service has its own Dockerfile at
-#       mini-services/agent-fleet/Dockerfile and is deployed separately.
+# Cloud Run injects PORT=8080 by default.
 # ══════════════════════════════════════════════════════════════════════════════
 
 # ── Stage 1: Dependencies ─────────────────────────────────────────────────────
@@ -43,7 +39,7 @@ COPY . .
 # Generate Prisma client
 RUN npx prisma generate
 
-# Build Next.js (uses standalone output mode via next.config.ts)
+# Build Next.js
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
 ENV DATABASE_URL=file:./prisma/dev.db
@@ -53,28 +49,29 @@ RUN npx prisma db push --accept-data-loss && npm run build
 
 # ── Stage 3: Production Runtime ──────────────────────────────────────────────
 FROM node:20-alpine AS runner
-RUN apk add --no-cache libc6-compat
+RUN apk add --no-cache libc6-compat python3 make g++
 
 WORKDIR /app
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
-# Cloud Run injects PORT=8080 by default; standalone server.js respects it
 ENV PORT=8080
 
 # Create non-root user for security
 RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 nextjs
 
-# Copy standalone Next.js server (minimal footprint)
-COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
-COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+# Copy full Next.js build output
+COPY --from=builder --chown=nextjs:nodejs /app/.next ./.next
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
+COPY --from=builder --chown=nextjs:nodejs /app/package.json ./package.json
+COPY --from=builder --chown=nextjs:nodejs /app/next.config.ts ./next.config.ts
+
+# Copy node_modules (needed for non-standalone mode)
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules ./node_modules
 
 # Copy Prisma schema and generated client (needed at runtime for DB queries)
 COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/.prisma ./node_modules/.prisma
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/@prisma ./node_modules/@prisma
 
 # Copy database file if using SQLite locally
 COPY --from=builder --chown=nextjs:nodejs /app/db ./db
@@ -93,5 +90,5 @@ ENV FIRESTORE_LOCATION=eur3
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
   CMD wget --no-verbose --tries=1 --spider http://localhost:${PORT:-8080}/api/health || exit 1
 
-# Start Next.js standalone server (respects PORT env var)
-CMD ["node", "server.js"]
+# Start Next.js server (respects PORT env var)
+CMD ["npx", "next", "start"]
