@@ -3,18 +3,44 @@ import { NextRequest, NextResponse } from 'next/server';
 /**
  * Proxy route for agent fleet API calls.
  *
- * Forwards requests from /api/agents/* to the agent fleet service at http://localhost:3004/*
- * This provides a cleaner internal API and better error handling than exposing the port pattern.
- *
- * Examples:
- *   GET  /api/agents/health          → http://localhost:3004/health
- *   POST /api/agents/triage          → http://localhost:3004/agents/triage
- *   POST /api/agents/evidence        → http://localhost:3004/agents/evidence
- *   POST /api/agents/workflow/run    → http://localhost:3004/workflow/run
- *   GET  /api/agents/gcp/status      → http://localhost:3004/gcp/status
+ * Forwards requests from /api/agents/* to the agent fleet service.
+ * On Cloud Run, includes an Identity Token for service-to-service auth.
  */
 
 const AGENT_FLEET_URL = process.env.AGENT_FLEET_URL || 'http://localhost:3004';
+const IS_CLOUD_RUN = AGENT_FLEET_URL.includes('.run.app');
+
+// Cloud Run Identity Token cache
+let cachedIdToken: string | null = null;
+let cachedIdTokenExpiry = 0;
+
+async function getIdentityToken(): Promise<string | null> {
+  if (!IS_CLOUD_RUN) return null;
+
+  const now = Date.now();
+  if (cachedIdToken && now < cachedIdTokenExpiry) {
+    return cachedIdToken;
+  }
+
+  try {
+    const metaUrl = `http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/identity?audience=${AGENT_FLEET_URL}`;
+    const metaResp = await fetch(metaUrl, {
+      headers: { 'Metadata-Flavor': 'Google' },
+      signal: AbortSignal.timeout(3000),
+    });
+
+    if (metaResp.ok) {
+      const token = await metaResp.text();
+      cachedIdToken = token;
+      cachedIdTokenExpiry = now + 50 * 60 * 1000;
+      return token;
+    }
+  } catch {
+    // Not on Cloud Run
+  }
+
+  return null;
+}
 
 export async function GET(
   request: NextRequest,
@@ -38,7 +64,6 @@ async function proxyRequest(
     const { path } = await params;
     const pathStr = path.join('/');
 
-    // Special mapping for health and gcp/status
     let targetPath: string;
     if (pathStr === 'health') {
       targetPath = '/health';
@@ -49,32 +74,31 @@ async function proxyRequest(
     } else if (pathStr.startsWith('workflow/status/')) {
       targetPath = `/${pathStr}`;
     } else {
-      // Agent endpoints: /api/agents/triage → /agents/triage
       targetPath = `/agents/${pathStr}`;
     }
 
     const targetUrl = `${AGENT_FLEET_URL}${targetPath}`;
 
-    // Build headers
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     };
 
-    // Build fetch options
+    const idToken = await getIdentityToken();
+    if (idToken) {
+      headers['Authorization'] = `Bearer ${idToken}`;
+    }
+
     const fetchOptions: RequestInit = {
       method: request.method,
       headers,
-      signal: AbortSignal.timeout(120000), // 2-minute timeout for workflow
+      signal: AbortSignal.timeout(120000),
     };
 
-    // Forward request body for POST requests
     if (request.method === 'POST') {
       fetchOptions.body = await request.text();
     }
 
     const response = await fetch(targetUrl, fetchOptions);
-
-    // Forward the response
     const responseBody = await response.text();
 
     return new NextResponse(responseBody, {
