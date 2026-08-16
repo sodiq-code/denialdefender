@@ -14,6 +14,69 @@ import { runInlineWorkflow } from "./workflow-engine";
 const AGENT_FLEET_URL = process.env.AGENT_FLEET_URL || 'http://localhost:3004';
 const AGENT_FLEET_TIMEOUT_MS = 5_000;
 
+// ─── Cloud Run Authentication ────────────────────────────────────────
+// When running on Cloud Run, internal services require an Identity Token
+// in the Authorization header for service-to-service authentication.
+
+let cachedIdToken: string | null = null;
+let cachedIdTokenExpiry = 0;
+
+/**
+ * Get an OIDC Identity Token for authenticating to other Cloud Run services.
+ * On Cloud Run: uses the metadata server to get a token for the target audience.
+ * Locally: returns null (no auth needed for localhost).
+ */
+async function getIdToken(): Promise<string | null> {
+  // If not on Cloud Run, no auth needed
+  if (!process.env.AGENT_FLEET_URL?.includes('.run.app')) {
+    return null;
+  }
+
+  // Use cached token if still valid (tokens last ~1 hour, refresh at 50 min)
+  const now = Date.now();
+  if (cachedIdToken && now < cachedIdTokenExpiry) {
+    return cachedIdToken;
+  }
+
+  try {
+    // Get identity token from Cloud Run metadata server
+    const metaUrl = `http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/identity?audience=${AGENT_FLEET_URL}`;
+    const metaResp = await fetch(metaUrl, {
+      headers: { 'Metadata-Flavor': 'Google' },
+      signal: AbortSignal.timeout(2000),
+    });
+
+    if (metaResp.ok) {
+      const token = await metaResp.text();
+      // Cache for 50 minutes (tokens expire at 1 hour)
+      cachedIdToken = token;
+      cachedIdTokenExpiry = now + 50 * 60 * 1000;
+      return token;
+    }
+  } catch {
+    // Not on Cloud Run or metadata server unavailable
+  }
+
+  return null;
+}
+
+/**
+ * Make an authenticated fetch to the agent fleet service.
+ * Includes Identity Token on Cloud Run, no auth locally.
+ */
+async function agentFleetFetch(url: string, options: RequestInit = {}): Promise<Response> {
+  const idToken = await getIdToken();
+  const headers: Record<string, string> = {
+    ...(options.headers as Record<string, string> || {}),
+  };
+
+  if (idToken) {
+    headers['Authorization'] = `Bearer ${idToken}`;
+  }
+
+  return fetch(url, { ...options, headers });
+}
+
 // ─── Types ────────────────────────────────────────────────────────
 
 export interface DenialInput {
@@ -241,7 +304,7 @@ export interface GcpStatus {
  */
 async function isServiceReachable(): Promise<boolean> {
   try {
-    const res = await fetch(`${AGENT_FLEET_URL}/health`, {
+    const res = await agentFleetFetch(`${AGENT_FLEET_URL}/health`, {
       signal: AbortSignal.timeout(AGENT_FLEET_TIMEOUT_MS),
     });
     return res.ok;
@@ -261,7 +324,7 @@ async function isServiceReachable(): Promise<boolean> {
  */
 export async function runWorkflow(request: WorkflowRequest): Promise<WorkflowResult> {
   try {
-    const res = await fetch(`${AGENT_FLEET_URL}/workflow/run`, {
+    const res = await agentFleetFetch(`${AGENT_FLEET_URL}/workflow/run`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(request),
@@ -296,7 +359,7 @@ export async function runWorkflow(request: WorkflowRequest): Promise<WorkflowRes
  */
 export async function getAgentFleetHealth(): Promise<AgentFleetHealth> {
   try {
-    const res = await fetch(`${AGENT_FLEET_URL}/health`, {
+    const res = await agentFleetFetch(`${AGENT_FLEET_URL}/health`, {
       signal: AbortSignal.timeout(AGENT_FLEET_TIMEOUT_MS),
     });
 
@@ -336,7 +399,7 @@ export async function getAgentFleetHealth(): Promise<AgentFleetHealth> {
  */
 export async function runTriage(denial: DenialInput): Promise<{ agent: string; status: string; data: TriageResult }> {
   try {
-    const res = await fetch(`${AGENT_FLEET_URL}/agents/triage`, {
+    const res = await agentFleetFetch(`${AGENT_FLEET_URL}/agents/triage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(denial),
@@ -372,7 +435,7 @@ export async function runTriage(denial: DenialInput): Promise<{ agent: string; s
  */
 export async function getGcpStatus(): Promise<GcpStatus> {
   try {
-    const res = await fetch(`${AGENT_FLEET_URL}/gcp/status`, {
+    const res = await agentFleetFetch(`${AGENT_FLEET_URL}/gcp/status`, {
       signal: AbortSignal.timeout(10_000),
     });
 
@@ -410,7 +473,7 @@ export async function getWorkflowStatus(caseId: string): Promise<{
   updated_at: string;
 } | null> {
   try {
-    const res = await fetch(`${AGENT_FLEET_URL}/workflow/status/${caseId}`, {
+    const res = await agentFleetFetch(`${AGENT_FLEET_URL}/workflow/status/${caseId}`, {
       signal: AbortSignal.timeout(AGENT_FLEET_TIMEOUT_MS),
     });
 
