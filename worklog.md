@@ -88,3 +88,30 @@ Stage Summary:
 - Fixed the "Case not found" bug by adding Turso direct query support to 5 API route files
 - Explained to user that 90+ cases were local dev data, 6 are persistent Turso data
 - User needs to push this code to GitHub to deploy the fix to Cloud Run
+---
+Task ID: 2
+Agent: Main Agent
+Task: Deploy and seed all 90+ blueprint cases into Turso, fix Case not found bug
+
+Work Log:
+- Found 91 cases in local SQLite database (db/custom.db) with 81 denials
+- Created /api/seed endpoint to generate and store synthetic cases into Turso
+- Seeded 90 synthetic cases + 4 milestone cases into Turso (100 total)
+- Discovered SQL bug: `references` is a reserved keyword in LibSQL — caused SQL_PARSE_ERROR
+- Fixed by quoting as `"references"` in all SQL queries in /api/cases/[id]/route.ts and trace/route.ts
+- Also removed JOIN from case detail query — split into separate simple queries for LibSQL compatibility
+- Added error `detail` field to case detail API for debugging
+- Fixed seed endpoint force-clear to be resilient to missing tables
+- Verified all APIs working on Cloud Run:
+  - /api/cases → returns 100 cases with denials
+  - /api/cases/[id] → returns full case detail with denial, traces, gates
+  - /api/cases/[id]/gates → returns HITL gates
+  - /api/cases/[id]/trace → returns decision traces
+  - /api/cases/[id]/denial → returns denial info
+  - /api/seed → shows database status (100 cases, 95 denials, 90 traces, 90 gates)
+
+Stage Summary:
+- 100 cases now in Turso persistent database (was 6, now 100)
+- All 10 payers represented: UnitedHealthcare, Aetna, Cigna, Humana, Anthem BlueCross, etc.
+- Case detail API fully working — no more "Case not found" or 500 errors
+- Root causes fixed: (1) Turso not used in detail routes, (2) `references` SQL keyword, (3) JOIN issues with LibSQL
