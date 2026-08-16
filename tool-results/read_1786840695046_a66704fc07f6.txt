@@ -1,0 +1,401 @@
+     1→     1→Google employees judging Google hackathons spot shallow integration instantly. The 4-min video must show real Cloud Run deployment, real ADK orchestration, real GEAP component use. DenialDefender's reasoning-trace panel signals deep engineering.
+     2→     2→Ambition / scope
+     3→     3→HIGH
+     4→     4→SalesShortcut's 34 agents set the ambition bar; judges reward "most ambitious ADK use we've seen" framing. DenialDefender's 8 agents + all 7 GEAP components + all 3 bonus models is ambitious without being reckless.
+     5→     5→Polish (demo reliability)
+     6→     6→HIGH
+     7→     7→Colin Lowenberg: "Mock everything you can... Remove every place the demo could stall" [C-10]. Klaviyo: "AI can generate syntactically perfect code in seconds, but the bottleneck shifts entirely to verification." DenialDefender rehearses 10+ times with deterministic fallback.
+     8→     8→Originality
+     9→     9→HIGH
+    10→    10→Anti-pattern warning: "AI-generated names all sound the same ('AgentFlow,' 'TaskPilot,' 'NexusAI')" [A-8]. DenialDefender's name is human, distinctive, alliterative, and literal. The appeal-letter use case is genuinely underserved in agentic AI.
+    11→    11→Ecosystem relevance
+    12→    12→HIGH
+    13→    13→Submission must visibly embody Google's "agentic Gemini era" narrative. DenialDefender's transition from "patient uploads denial" to "agent fleet drafts winning appeal" is exactly the chatbot → agent transition Google is selling.
+    14→    14→Demo reliability
+    15→    15→CRITICAL
+    16→    16→Jan-Niklas Wortmann (JetBrains judge): "shipping a good demo matters more than having the most reliable, highest-quality code. A hackathon rewards the working demo, not the clean architecture nobody sees" [C-10]. Demo must not stall, must show live execution, must show GCP deployment proof.
+    17→    17→Founder / team credibility
+    18→    18→MEDIUM
+    19→    19→Unravel's builder is a cancer geneticist — instant domain credibility [C-2]. STRATEGIC HYPOTHESIS: judges reward demonstrated domain expertise because it de-risks the "is this a real problem?" question. DenialDefender's team should include or consult a medical billing specialist or patient advocate.
+    20→    20→Investment / commercial potential
+    21→    21→MEDIUM
+    22→    22→Grand Prize picks projects with breadth of impact any judge can viscerally feel; Startup Excellence prize signals Google's investor lens. DenialDefender's $200B+ medical billing industry + B2C wedge + B2B expansion is investable.
+    23→    23→Emotional impact
+    24→    24→MEDIUM-HIGH
+    25→    25→GuruMitra's "48+ teacher survey," Klaviyo's "3am PagerDuty," SurgAgent's "retained surgical items injure patients" — winners tell stories that make judges feel something. DenialDefender's "this person is fighting cancer, the insurance company denied their claim, the agent fights back" is viscerally emotional.
+    26→    26→Storytelling
+    27→    27→HIGH
+    28→    28→Tiffany Jachja: "Design your demo arc like a story, not a walkthrough" [C-12]. Pitch structure: Hook → Problem → Demo with wow moment → Tech stack → Differentiator → Impact. DenialDefender's pitch is written before code is shipped.
+    29→    29→Defensibility
+    30→    30→MEDIUM
+    31→    31→Judges (especially with Google investor lens) reward defensible moats. DenialDefender's Outcome Learning Agent creates a data moat: more cases → better outcome learning → higher success rates → more users → more cases.
+    32→    32→
+    33→    33→## Synthesis
+    34→    34→
+    35→    35→The explicit rubric and implicit dynamics reinforce each other on one axis: the demo's wow moment must be unmistakable, live, and unedited. They diverge on a second axis: the rubric weights Innovation at 40% (problem severity + autonomy + Unlikely Hero mandate), while implicit dynamics weight Polish, Memorability, and Demo Reliability effectively at CRITICAL. The implication is that DenialDefender must optimize for both — pick a problem with maximum visceral Innovation score AND rehearse the demo until it cannot fail. The 4-minute constraint is unforgiving: every second must serve either the problem, the wow, or the tech-stack proof. We allocate seconds in the demo script (Section 11 of the full blueprint) to satisfy both layers simultaneously.
+    36→    36→
+    37→    37→# 7. Competitive Landscape
+    38→    38→
+    39→    39→Phase D's competitor prediction model extrapolates from 19 prior hackathons and 30+ verified winners to forecast the category distribution of All Things Agentic submissions [D-4]. The model assumes ~1,000-2,000 submissions (extrapolating from Rapid Agent's 1,426 [C-3] and ADK Hackathon's 477 [C-4]) and predicts saturation per category per track. The strategic implication for DenialDefender is that we should compete in the least-saturated high-quality category — operational Unlikely Hero fleets in healthcare — and engineer maximum differentiation from the saturated adjacent categories.
+    40→    40→
+    41→    41→## Predicted Competitor Saturation Per Track
+    42→    42→
+    43→    43→Category
+    44→    44→Track
+    45→    45→Saturation %
+    46→    46→Expected Quality
+    47→    47→Judging Fatigue
+    48→    48→Differentiation Opportunity
+    49→    49→Winning Threshold
+    50→    50→Email / inbox triage assistant
+    51→    51→1
+    52→    52→15%
+    53→    53→Low (single-agent wrapper)
+    54→    54→HIGH
+    55→    55→None — Phase C anti-pattern #1
+    56→    56→Cannot win
+    57→    57→Calendar / meeting assistant
+    58→    58→1
+    59→    59→10%
+    60→    60→Low
+    61→    61→HIGH
+    62→    62→None
+    63→    63→Cannot win
+    64→    64→Trip / travel planner
+    65→    65→1
+    66→    66→8%
+    67→    67→Low
+    68→    68→HIGH
+    69→    69→None — every Google hackathon has these
+    70→    70→Cannot win
+    71→    71→Personal RAG chatbot (notes, journals)
+    72→    72→1
+    73→    73→8%
+    74→    74→Low
+    75→    75→HIGH
+    76→    76→None — Track-mismatch (not action-taking)
+    77→    77→Cannot win
+    78→    78→Habit tracker / productivity coach
+    79→    79→1
+    80→    80→7%
+    81→    81→Low
+    82→    82→HIGH
+    83→    83→None
+    84→    84→Cannot win
+    85→    85→Coding / dev productivity
+    86→    86→1
+    87→    87→7%
+    88→    88→Medium
+    89→    89→MEDIUM
+    90→    90→Weak — not BYOF personal
+    91→    91→Track prize possible
+    92→    92→Personal finance / budgeting
+    93→    93→1
+    94→    94→5%
+    95→    95→Medium
+    96→    96→MEDIUM
+    97→    97→Strong if real action (pay bills, file taxes)
+    98→    98→Track prize possible
+    99→    99→BYOF visceral-pain agent (medical, family, insurance, immigration)
+   100→   100→1
+   101→   101→4%
+   102→   102→HIGH
+   103→   103→LOW
+   104→   104→STRONG — exactly the mandate
+   105→   105→Track prize + Grand Prize contender
+   106→   106→Multi-source document gathering agent
+   107→   107→1
+   108→   108→3%
+   109→   109→Medium-High
+   110→   110→LOW
+   111→   111→Strong
+   112→   112→Track prize contender
+   113→   113→Static RAG chatbot over internal docs
+   114→   114→2
+   115→   115→25%
+   116→   116→Low
+   117→   117→CRITICAL
+   118→   118→None — Track-mismatch (not evolving)
+   119→   119→Cannot win
+   120→   120→Research assistant over arXiv / Wikipedia
+   121→   121→2
+   122→   122→12%
+   123→   123→Low
+   124→   124→HIGH
+   125→   125→None — saturated
+   126→   126→Cannot win
+   127→   127→Meeting note summarizer + memory
+   128→   128→2
+   129→   129→10%
+   130→   130→Low
+   131→   131→HIGH
+   132→   132→None — not "evolving"
+   133→   133→Cannot win
+   134→   134→Code documentation / codebase Q&amp;A
+   135→   135→2
+   136→   136→8%
+   137→   137→Medium
+   138→   138→MEDIUM
+   139→   139→Weak — developer-focused
+   140→   140→Track prize possible
+   141→   141→Evolving regulatory compliance tracker
+   142→   142→2
+   143→   143→2%
+   144→   144→HIGH
+   145→   145→LOW
+   146→   146→STRONG — exactly the mandate
+   147→   147→Track prize + Grand Prize contender
+   148→   148→Threat intel / SecOps evolving knowledge
+   149→   149→2
+   150→   150→2%
+   151→   151→HIGH
+   152→   152→LOW
+   153→   153→STRONG
+   154→   154→Track prize + Grand Prize contender
+   155→   155→Customer-support agent fleet
+   156→   156→3
+   157→   157→15%
+   158→   158→Low-Medium
+   159→   159→HIGH
+   160→   160→None — saturated
+   161→   161→Cannot win
+   162→   162→Sales / SDR fleet
+   163→   163→3
+   164→   164→10%
+   165→   165→Medium
+   166→   166→HIGH
+   167→   167→None — violates Unlikely Hero
+   168→   168→Cannot win
+   169→   169→Multi-agent dashboard (no real enterprise integration)
+   170→   170→3
+   171→   171→12%
+   172→   172→Low
+   173→   173→HIGH
+   174→   174→None — "PhD in distributed systems" anti-pattern
+   175→   175→Cannot win
+   176→   176→Coding agent fleet
+   177→   177→3
+   178→   178→6%
+   179→   179→Medium
+   180→   180→MEDIUM
+   181→   181→None — developer-focused, violates Unlikely Hero
+   182→   182→Cannot win
+   183→   183→Unlikely Hero operational fleet (EHS, claims, lab, procurement, compliance, medical billing)
+   184→   184→3
+   185→   185→5%
+   186→   186→HIGH
+   187→   187→LOW
+   188→   188→STRONG — exactly the mandate
+   189→   189→Track prize + Grand Prize contender
+   190→   190→
+   191→   191→## Where the Undersaturated Opportunities Are
+   192→   192→
+   193→   193→The undersaturated high-quality opportunities cluster in three places: (a) Track 1 BYOF visceral-pain agents (4% saturation) — medical prior-auth/appeals, family admin coordination, health insurance benefits navigation; (b) Track 2 evolving-knowledge engines (2-5% saturation) — regulatory compliance, threat intel, healthcare guidelines, tax code; (c) Track 3 Unlikely Hero operational fleets (5% saturation) — EHS, claims adjusting, procurement, compliance, medical billing. Across all three tracks, the most-saturated categories (email/calendar agents, static RAG chatbots, customer-support fleets) will collectively produce ~50-65% of submissions that fail to meet the hidden mandates — they will be eliminated at Stage One or scored low at Stage Two. The judges will be fatigued by these categories and will reward projects that visibly break the pattern.
+   194→   194→
+   195→   195→## DenialDefender's Strategic Position
+   196→   196→
+   197→   197→DenialDefender is positioned in the 5% Track 3 Unlikely Hero operational fleet category — specifically, the Medical Billing Specialist Fleet, which is Phase D's #5 Track 3 candidate (32/35) [D-2]. Critically, DenialDefender is also a Track 1 BYOF visceral-pain agent (medical prior-auth + appeal letter writing is Phase D's #1 Track 1 candidate at 33/35) [D-1] AND a Track 2 evolving-knowledge engine (payer policy + regulation + appeal success patterns mutate continuously) [D-3]. This three-mandate coverage is the single strongest Grand Prize play identified in Phase D's cross-cutting opportunity analysis [D-5]. No other submission in the predicted competitive landscape is likely to attempt all three mandates simultaneously — most competitors will pick one track and engineer to it, missing the cross-mandate leverage that produces a Grand Prize winner.
+   198→   198→
+   199→   199→## Differentiation From Adjacent Categories
+   200→   200→
+   201→   201→DenialDefender is differentiated from adjacent saturated categories on five axes: (1) it is multi-agent (8 distinct agents, not a chatbot wrapper); (2) it acts on real external systems (payer policy retrieval, regulation lookup, appeal letter generation) rather than just chatting; (3) it has explicit HITL (Quality Review Agent + approval gate) rather than autonomous-only; (4) it shows reasoning transparency (GEAP Observability panel) rather than black-box outputs; (5) it serves an Unlikely Hero (medical billing specialist) rather than an executive, developer, or marketer. The combined differentiation is structural — competitors would need to re-architect to match it, not add features. The 5% saturation estimate implies roughly 50-100 Track 3 submissions will be in the Unlikely Hero category; DenialDefender's three-mandate coverage, deep GEAP integration, and healthcare-domain credibility should place it in the top 1-3 of that subset, which is the Grand Prize finalist zone.
+   202→   202→
+   203→   203→# 8. Ecosystem Opportunity Map
+   204→   204→
+   205→   205→Phase D mapped the agentic-AI ecosystem as of August 2026 across five dimensions: existing consumer agents (ChatGPT, Claude, Gemini Spark, Copilot, Perplexity, Meta AI, Apple Intelligence, Alexa+), enterprise agent platforms (LangGraph Platform, CrewAI Enterprise, AutoGen, Copilot Studio, Salesforce Agentforce, ServiceNow Now Assist, Google GEAP, AWS Bedrock Agents, Workday, SAP Joule, Oracle, IBM watsonx Orchestrate), vertical agents (Harvey, Hippocratic AI, Hebbia, Cursor, Elicit, Intercom Fin, 11x.ai, Khanmigo), open-source frameworks (LangGraph, CrewAI, AutoGen, LlamaIndex, Haystack, Magentic-One, OpenAI Agents SDK, ADK 2.0, Antigravity SDK, Claude Agent SDK, Letta, Pydantic AI, Smolagents, AWS Strands), and capability state (long-horizon planning, tool use, computer use, browser use, voice, memory, multi-agent coordination, self-correction, reasoning transparency, HITL UX, cost control, security, identity) [D-6].
+   206→   206→
+   207→   207→## Cross-Cutting Ecosystem Gaps (EVIDENCE-BASED INFERENCE)
+   208→   208→
+   209→   209→The most important finding from Phase D's ecosystem scan is that operational verticals are nearly untouched by commercial agent products. EHS, lab ops, claims adjusting, inventory planning, facilities, procurement, compliance, medical billing — these are the Unlikely Hero roles, and no commercial agent product targets them as primary persona [D-2]. Patient-side and consumer-side verticals are similarly untouched: patient advocacy, appeals, benefits navigation — medical AI is clinician-facing only (Hippocratic AI, Abridge, Suki, Notable, Nuance DAX all serve clinicians, not patients) [D-6]. Field-worker verticals (construction project engineers, utility field techs, telecom installers, agricultural managers) and government / public-sector verticals (urban planners, court clerks, EHS officers on the gov side, school administrators, public works managers) are similarly untouched. The combined gap is structural: enterprise platforms are vertical-platform-locked (Salesforce → CRM, ServiceNow → ITSM, Workday → HR, SAP → ERP), so no platform owns the operational backbone roles that span systems of record.
+   210→   210→
+   211→   211→## Capability Gaps That Matter
+   212→   212→
+   213→   213→Three capability gaps directly enable DenialDefender: (1) No agent reliably completes 30+ minute real-world tasks — every demo'd "long-horizon" agent either succeeds on cherry-picked cases or fails silently. DenialDefender's Deadline Tracker Agent + multi-stage appeal pipeline (internal → external → state DOI) explicitly runs across days and weeks, using GEAP Agent Runtime's 7-day continuous execution capability [B-5]. (2) Persistent evolving knowledge is not a commodity — every RAG demo uses a static snapshot; agents that maintain evolving knowledge (regulations, payer policies, appeal success patterns) require infrastructure (cron, change detection, conflict resolution) that no consumer agent has. DenialDefender's Outcome Learning Agent + Memory Bank + payer policy corpus is engineered for exactly this. (3) Operational governance is checkbox, not substrate — Model Armor, Agent Identity, Agent Gateway exist but most demos don't use them; first-mover demos that do will look enterprise-grade. DenialDefender uses all 7 GEAP components deeply, not as checkboxes.
+   214→   214→
+   215→   215→## Per-Track Opportunity Scoring (Phase D Synthesis)
+   216→   216→
+   217→   217→Phase D scored 75 opportunity candidates across the three tracks on a 7-dimension rubric (Problem Severity, User Urgency, Technical Feasibility with Google stack, Demo Potential, Differentiation, Sponsor Relevance, Commercial Potential; max 35) [D-7]. Top 5 per track:
+   218→   218→Rank
+   219→   219→Track 1 (BYOF)
+   220→   220→Score
+   221→   221→Track 2 (Evolving Knowledge)
+   222→   222→Score
+   223→   223→Track 3 (Unlikely Hero Fleet)
+   224→   224→Score
+   225→   225→1
+   226→   226→Medical prior-auth + appeal letter writing
+   227→   227→33
+   228→   228→Regulatory compliance change management
+   229→   229→32
+   230→   230→EHS Officer Fleet
+   231→   231→33
+   232→   232→2
+   233→   233→Family admin coordination
+   234→   234→31
+   235→   235→Cybersecurity threat intelligence
+   236→   236→32
+   237→   237→Claims Adjuster Fleet
+   238→   238→33
+   239→   239→3
+   240→   240→Health insurance benefits navigation
+   241→   241→31
+   242→   242→Healthcare treatment guidelines + drug interaction evolution
+   243→   243→31
+   244→   244→Procurement Coordinator Fleet
+   245→   245→33
+   246→   246→4
+   247→   247→Subscription audit + cancellation
+   248→   248→30
+   249→   249→Tax code changes
+   250→   250→31
+   251→   251→Compliance Analyst KYC/AML Fleet
+   252→   252→32
+   253→   253→5
+   254→   254→Bill negotiation
+   255→   255→29
+   256→   256→Open-source package ecosystem monitor
+   257→   257→31
+   258→   258→Medical Billing Specialist Fleet
+   259→   259→32
+   260→   260→
+   261→   261→## Cross-Cutting Grand Prize Plays
+   262→   262→
+   263→   263→Phase D identified 10 cross-cutting opportunities that hit 2 or 3 track mandates simultaneously — the strongest Grand Prize plays because the Grand Prize is single-winner and combining mandates increases the probability of being the most "complete" submission [D-5]. The top 5 cross-cutting plays:
+   264→   264→#
+   265→   265→Cross-Cutting Concept
+   266→   266→Tracks Hit
+   267→   267→Why It Wins Grand Prize
+   268→   268→1
+   269→   269→Personal Insurance Appeals Agent → Clinic Billing Office Fleet (start as BYOF personal pain, extend to multi-agent clinic billing fleet, with evolving payer-policy knowledge)
+   270→   270→T1 + T2 + T3
+   271→   271→All 3 mandates; visceral pain; multi-agent necessity; evolving knowledge; $200B+ medical billing industry; B2C wedge → B2B expansion
+   272→   272→2
+   273→   273→Personal Chronic-Care Advocate → Care-Team Coordination Fleet
+   274→   274→T1 + T2 + T3
+   275→   275→All 3 mandates; visceral pain; high-stakes; Veo for med-instruction videos
+   276→   276→3
+   277→   277→Personal Immigration Case Agent → Immigration Attorney Office Fleet
+   278→   278→T1 + T2 + T3
+   279→   279→All 3 mandates; high-stakes; evolving knowledge; underserved vertical
+   280→   280→4
+   281→   281→Personal Tax Document Gathering → Accounting Firm Fleet
+   282→   282→T1 + T2 + T3
+   283→   283→All 3 mandates; universal pain; huge commercial
+   284→   284→5
+   285→   285→Personal Estate Settlement Agent → Probate Court Fleet
+   286→   286→T1 + T2 + T3
+   287→   287→All 3 mandates; underserved; emotional stakes
+   288→   288→
+   289→   289→## Why #1 — DenialDefender — Is the Strategic Choice
+   290→   290→
+   291→   291→DenialDefender (cross-cutting play #1) is the strategic choice for four converging reasons. First, it is the only cross-cutting play where the personal pain (Track 1 BYOF) is universal — 1 in 7 insured Americans face claim denials annually [D-1] — and the operational fleet (Track 3 Unlikely Hero) is in a $200B+ industry with no commercial agent competitor. Second, the evolving knowledge dimension (Track 2) is structural, not bolted on: payer policies, the ACA, No Surprises Act, Mental Health Parity Act, and state-level patient protection laws all mutate continuously, and appeal success patterns per payer per denial-type are genuinely learnable. Third, the multi-agent necessity is unarguable: parsing denial letters (multimodal), retrieving payer policy + law (retrieval), assembling medical-necessity evidence (clinical context), drafting appeals (structured output), validating (independent review), tracking deadlines (temporal), and learning from outcomes (analytics) are 8 genuinely distinct functions — removing any breaks the value chain. Fourth, the demo writes itself: a real (de-identified) denial letter in → a complete citation-backed appeal letter out in 90 seconds, with every agent's reasoning visible — this is the Unravel "multi-output artifact" pattern and the SurgAgent "reasoning trace" pattern combined, the two most-cited differentiators in Phase C forensics [C-2, C-5].
+   292→   292→
+   293→   293→# 9. 50+ Opportunity Concepts
+   294→   294→
+   295→   295→The following 52 concepts expand Phase D's 75 scored candidates into the wider possibility space the war-room considered before locking DenialDefender. Each is a 1-2 line description. Concepts are grouped by primary track and numbered 1-52. Compact format; no padding.
+   296→   296→
+   297→   297→## Track 1 — The Taskmaster (BYOF personal friction)
+   298→   298→
+   299→   299→1. Medical prior-auth + appeal letter writing — Patient-side agent that drafts, cites, and tracks medical insurance appeals. (DenialDefender's Track 1 framing.)
+   300→   300→2. Family admin coordination — Kids' school forms, doctor appts, permission slips, sports physicals, carpool scheduling — one agent for the household ops.
+   301→   301→3. Health insurance benefits navigation — In-network lookup, prior auth, cost estimate, claim status — multi-agent across the benefits maze.
+   302→   302→4. Subscription audit + cancellation — Find all subscriptions, cancel unused, negotiate bills — "live cancellation call" demo.
+   303→   303→5. Tax document gathering + organizer — 1099s, W-2s, charitable receipts, K-1s, medical expense receipts — multi-source document gathering.
+   304→   304→6. Move / relocation admin — Address changes, utilities setup, lease transition, school enrollment, mail forwarding — multi-step visible wow.
+   305→   305→7. Bill negotiation — Internet, cable, phone, insurance — Gemini Live voice agent calls retention line.
+   306→   306→8. Home maintenance scheduler — HVAC filters, gutter cleaning, smoke alarm batteries, termite inspection — reminder+book+confirm pattern.
+   307→   307→9. Pet care admin — Vet appts, vaccines, meds, insurance, boarding.
+   308→   308→10. Job application tracking + cover letter personalization — Multi-job pipeline, ATS tailoring, interview scheduling, follow-up.
+   309→   309→11. Wedding / event planning admin — RSVP tracking, vendor coordination, dietary collection, seating, payments.
+   310→   310→12. DMV / RMV appointment booking — Chase open slots, prepare docs, reminder.
+   311→   311→13. Government benefits eligibility + application — SNAP, WIC, Medicaid, UI, Social Security — complex forms, social-impact high.
+   312→   312→14. Warranty registration + claim filing — Appliances, electronics, vehicles — receipt+manual+claim coordination.
+   313→   313→15. Travel planning + itinerary management — Multi-source flight/hotel/activity, real-time disruption handling (saturated).
+   314→   314→16. Personal document organization — Insurance, taxes, warranties, medical records, contracts — OCR + classify + index.
+   315→   315→17. Online shopping price tracking + return management — Track drops, file returns, print labels (saturated).
+   316→   316→18. Email inbox triage + follow-up reminders — Categorize, draft replies, surface forgotten threads (saturated, anti-pattern).
+   317→   317→19. Calendar negotiation + meeting prep — Find times across timezones, prep briefs (saturated).
+   318→   318→20. Estate / end-of-life admin — Executor duties, probate, beneficiary claims, asset inventory — high-stakes, underserved.
+   319→   319→21. Chronic-illness self-management — Symptom tracking, med adherence, flare detection, care-team coordination.
+   320→   320→22. Immigration case management — Visa renewals, document gathering, deadline tracking, attorney coordination.
+   321→   321→23. Side-hustle / freelance admin — Invoicing, expense tracking, quarterly taxes, client onboarding.
+   322→   322→24. Aging-parent care coordination — Sibling coordination, doctor appts, med management, benefits.
+   323→   323→25. Personal knowledge base (life wiki) — Everything you've ever learned, decided, bought, owned, been prescribed.
+   324→   324→
+   325→   325→## Track 2 — The Collaborative Partner (evolving knowledge)
+   326→   326→
+   327→   327→1. Regulatory compliance change management — FINRA, HIPAA, GDPR, FDA, OSHA, EPA — track changes, summarize impact, route to affected teams.
+   328→   328→2. Cybersecurity threat intelligence — CVE feed, IOC stream, attacker TTPs, vendor advisories — synthesize per-org relevance.
+   329→   329→3. Healthcare treatment guidelines + drug interaction evolution — FDA label changes, new guidelines, withdrawn drugs, new interactions.
+   330→   330→4. Tax code changes — Federal, state, international — track changes, summarize impact, route to filers/accountants.
+   331→   331→5. Legal case law tracker — Recent decisions affecting practice areas — summarize, route to attorneys.
+   332→   332→6. AI model landscape tracker — SOTA per task, new releases, deprecations, pricing changes, capability shifts (meta-relevant).
+   333→   333→7. Open-source package ecosystem monitor — Deprecations, security advisories, license changes, breaking changes.
+   334→   334→8. Market intelligence for SMBs — Competitor moves, M&amp;A, pricing changes, supplier news — per-company digest.
+   335→   335→9. Climate / sustainability reporting standards tracker — CSRD, SEC climate rule, GRI, ISSB — track changes.
+   336→   336→10. Immigration policy / visa bulletin tracker — USCIS, DOS, DOL — track changes, per-case relevance.
+   337→   337→11. Scientific research literature tracker — Per-research-question, new preprints + publications, citation graph evolution.
+   338→   338→12. Hobby community knowledge engine — TTRPG errata, competitive-game meta, board-game rules disputes, sports analytics.
+   339→   339→13. Procurement / supply-chain intelligence — Supplier risk, tariff changes, component shortages, country-of-origin regs.
+   340→   340→14. Cryptocurrency / digital-asset regulation tracker — SEC actions, global frameworks, enforcement actions.
+   341→   341→15. Local-government ordinance tracker — Zoning, permits, business licensing — per-municipality diff + impact.
+   342→   342→16. Personal health record + evolving care plan — Your diagnoses, meds, lab trends, care-team notes — evolving over years.
+   343→   343→17. Grants / funding-opportunity tracker — Federal, foundation, corporate — per-organization eligibility + deadline.
+   344→   344→18. Internal org policy / handbook evolution — HR policy changes, security policy, expense policy — per-employee impact digest.
+   345→   345→19. Payer policy + appeal success pattern evolution — Insurance payer medical policies, state/federal patient protection laws, appeal win-rate patterns per denial-type (DenialDefender's Track 2 component).
+   346→   346→
+   347→   347→## Track 3 — The Fortified Enterprise Fleet (Unlikely Hero operational fleet)
+   348→   348→
+   349→   349→1. EHS Officer Fleet — Safety incident intake + OSHA 300 / EPA filings + safety training records + audit prep.
+   350→   350→2. Claims Adjuster Fleet — Claim triage + document gathering (police report, medical, photos) + fraud heuristics + settlement calc.
+   351→   351→3. Procurement Coordinator Fleet — Vendor onboarding + PO tracking + invoice reconciliation + contract renewal alerts.
+   352→   352→4. Compliance Analyst KYC/AML Fleet — Customer onboarding + sanctions/PEP screening + SAR drafting + regulatory change mgmt.
+   353→   353→5. Lab Manager Fleet — Equipment calibration + sample tracking + protocol compliance + IRB submissions.
+   354→   354→6. Medical Billing Specialist Fleet — Claim scrubbing + denial mgmt + appeal letters + payer policy tracking + patient collections (DenialDefender's Track 3 framing).
+   355→   355→7. Construction Project Engineer Fleet — RFI management + submittal logs + change orders + punch lists + safety reports.
+   356→   356→8. Food Safety Manager Fleet — HACCP logs + audit prep + temperature monitoring + supplier verification + recall management.
+   357→   357→
+   358→   358→## Cross-Cutting Grand Prize Plays (hit 2-3 track mandates simultaneously)
+   359→   359→
+   360→   360→1. DenialDefender (LOCKED) — Personal Insurance Appeals Agent → Clinic Billing Office Fleet, with evolving payer-policy + appeal success knowledge. Hits T1 + T2 + T3. (This is the locked project; all 50 sections of the blueprint describe this concept.)
+   361→   361→2. Personal Chronic-Care Advocate → Care-Team Coordination Fleet — Personal pain → multi-agent clinic fleet with evolving clinical guidelines + Veo for med-instruction videos. Hits T1 + T2 + T3.
+   362→   362→3. Personal Immigration Case Agent → Immigration Attorney Office Fleet — Personal pain → multi-agent legal-ops fleet with evolving immigration policy. Hits T1 + T2 + T3.
+   363→   363→4. Personal Tax Document Gathering → Accounting Firm Fleet — Personal pain → multi-agent tax-prep fleet with evolving tax-code knowledge. Hits T1 + T2 + T3.
+   364→   364→5. Personal Estate Settlement Agent → Probate Court Fleet — Personal pain → multi-agent court-ops fleet with evolving probate law. Hits T1 + T2 + T3.
+   365→   365→6. EHS Officer Fleet with personal BYOF angle — "I was the EHS officer who got fined for missing a filing." Hits T1 + T3.
+   366→   366→7. Compliance Analyst Fleet with SMB BYOF angle — "I'm a small-business owner who got fined for KYC miss." Hits T1 + T3.
+   367→   367→8. Procurement Coordinator Fleet with SMB BYOF angle — "I lost a vendor over a missed PO." Hits T1 + T3.
+   368→   368→9. Regulatory Compliance Knowledge Engine + personal regulatory impact digest — Track 2 winner extended with Track 1 personal angle for solopreneurs. Hits T1 + T2.
+   369→   369→10. Cybersecurity Threat Intel Engine + personal threat digest — Track 2 winner extended with Track 1 personal angle for solopreneurs. Hits T1 + T2.
+   370→   370→
+   371→   371→## Ecosystem-Infrastructure Concepts (not for the hackathon; long-term ecosystem plays)
+   372→   372→
+   373→   373→1. A2A Agent Marketplace — Registry of A2A-exposed agents built with ADK that other agents can call ("App Store for agents").
+   374→   374→2. MCP Tool Catalog — Registry of vetted, signed MCP servers ("Docker Hub for agent tools").
+   375→   375→3. Agent Identity CA — Certificate authority for Agent Identity ("Let's Encrypt for agents").
+   376→   376→4. Agent Action Ledger — OpenTelemetry-based audit log with cryptographic provenance ("practical blockchain for agent actions").
+   377→   377→5. Multi-Agent Budget Enforcer — Sidecar that enforces token budgets across multi-agent fleets.
+   378→   378→6. Agent Memory Standard — Standard for cross-vendor persistent agent memory built on GEAP Memory Bank API ("OAuth for agent memory").
+   379→   379→(Note: 68 concepts listed above; the brief's minimum was 50. Concepts 1-52 are single-track; 53-62 are cross-cutting Grand Prize plays; 63-68 are ecosystem-infrastructure long-term plays. The next section's elimination rounds operate on concepts 1-62.)
+   380→   380→
+   381→   381→# 10. Elimination Rounds
+   382→   382→
+   383→   383→Four elimination rounds filter the 62 opportunity concepts down to a Top 20. Each round applies a distinct filter, with 1-line rationale per cut. Concepts that survive all four rounds become the Top 20 shortlist for deeper evaluation in Section 11.
+   384→   384→
+   385→   385→## Round 1: Strategic Fit (Does it satisfy ≥1 hidden mandate?)
+   386→   386→
+   387→   387→Filter: Concept must hit at least one of {BYOF visceral personal pain, Evolving Knowledge, Unlikely Hero operational role, Multi-agent necessity}. Concepts that are single-agent, static-knowledge, or executive/developer/marketer-focused are cut.
+   388→   388→Survive Round 1 (44 concepts): 1, 2, 3, 4, 5, 6, 7, 11, 12, 13, 16, 20, 21, 22, 23, 24, 25 (Track 1, minus saturated 8/9/10/14/15/17/18/19); 26, 27, 28, 29, 30, 32, 33, 34, 35, 38, 39, 40, 41, 42, 43, 44 (Track 2, minus saturated 31/36/37); 45, 46, 47, 48, 49, 50, 51, 52 (all Track 3); 53-62 (all cross-cutting).
+   389→   389→Cut in Round 1 (18 concepts):
+   390→   390→•  8 (Home maintenance scheduler) — too low-severity, not visceral.
+   391→   391→•  9 (Pet care admin) — narrow, low urgency.
+   392→   392→•  10 (Job application tracking) — saturated, not visceral enough.
+   393→   393→•  14 (Warranty registration) — low severity, low urgency.
+   394→   394→•  15 (Travel planning) — saturated, every Google hackathon has these.
+   395→   395→•  17 (Online shopping price tracking) — saturated, commodity feature.
+   396→   396→•  18 (Email inbox triage) — Phase C anti-pattern #1, single-agent wrapper.
+   397→   397→•  19 (Calendar negotiation) — Phase C anti-pattern #1, saturated.
+   398→   398→•  31 (AI model landscape tracker) — meta-relevant but low user urgency outside AI circles.
+   399→   399→•  36 (Scientific research literature tracker) — saturated, academic-only.
+   400→   400→•  37 (Hobby community knowledge engine) — low severity, weak commercial.
+   401→   401→

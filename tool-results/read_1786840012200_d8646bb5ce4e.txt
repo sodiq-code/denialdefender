@@ -1,0 +1,502 @@
+  1501→citations. Gate: the slice completes reliably five times in a row. This
+  1502→gate is the most important early checkpoint --- if it cannot be made
+  1503→reliable, the entire multi-agent plan is at risk and scope must be cut
+  1504→before Day 4.
+  1505→
+  1506→**26. Days 4--6 --- Agents, Provenance, Decision Trace**
+  1507→
+  1508→**Day 4 (Aug 18) --- Agents 1--3: Advocate, Triage, Policy Research**
+  1509→
+  1510→Split the monolith into the first three agents under ADK. Patient
+  1511→Advocate owns empathetic intake and case framing. Denial Triage owns the
+  1512→multimodal parse and the structured denial JSON (payer, reason code,
+  1513→category, deadline, confidence). Policy Research owns retrieval over the
+  1514→corpus and clause selection. Provenance cards now render from real
+  1515→retrievals, not placeholders. Deliverable: triage produces a denial JSON
+  1516→that a human can confirm at Gate 1, and Policy Research returns three
+  1517→clause-cited candidates. Gate: HITL Gate 1 (confirm denial) works and
+  1518→blocks the pipeline until confirmed.
+  1519→
+  1520→**Day 5 (Aug 19) --- Agents 4--6: Evidence, Drafting, Quality Review**
+  1521→
+  1522→Evidence Assembly matches clinical evidence to the denial reason and
+  1523→deduplicates against Policy Research output. Letter Drafting composes
+  1524→the evidence-backed appeal draft with inline citations. Quality Review
+  1525→runs the adversarial battery from Table 15.1 and refuses to pass the
+  1526→draft until every condition holds. Deliverable: a draft that passes
+  1527→Quality Review with 5/5 citations verified and zero unsupported claims.
+  1528→Gate: Quality Review blocks a deliberately-broken draft (a test case
+  1529→with a fake citation) --- if it does not block, the gate fails and the
+  1530→adversarial battery is tightened before Day 6.
+  1531→
+  1532→**Day 6 (Aug 20) --- Decision trace + HITL Gate 2 + UI stream**
+  1533→
+  1534→Each agent emits structured DecisionTraceEvents to Pub/Sub on step
+  1535→completion; the api service persists them to Firestore and streams them
+  1536→to the UI over WebSocket. HITL Gate 2 (approve or edit the appeal) is
+  1537→implemented between verified and submitted. The UI now shows the live
+  1538→decision-trace stream from Figure 14.1 and a clickable provenance card
+  1539→per citation. Deliverable: a case runs end-to-end with a live trace and
+  1540→both HITL gates functional. Gate: the full eight-agent workflow
+  1541→(Compliance & Deadline agent stubbed only in its outcome-learning hooks)
+  1542→completes a case reliably; the trace is auditable.
+  1543→
+  1544→**27. Days 7--9 --- Outcome-Learning Experiment & Adversarial Review**
+  1545→
+  1546→**Day 7 (Aug 21) --- Outcome Learning harness v1**
+  1547→
+  1548→Build the eval service. Define the ten held-out cases under
+  1549→data/cases/held_out/. Implement the before-scoring run: top-1 accuracy,
+  1550→top-3 accuracy, citation grounding, argument selection, appeal quality.
+  1551→Pin temperature to zero for eval runs. Build the outcome-ingestion path:
+  1552→an outcome record updates procedural-evidence weights in Memory Bank
+  1553→(with a Firestore fallback if Memory Bank is unstable). Deliverable: a
+  1554→before-scores snapshot for the ten held-out cases, checked into the
+  1555→repo. Gate: the snapshot is deterministic --- running it twice produces
+  1556→identical scores.
+  1557→
+  1558→**Day 8 (Aug 22) --- Before/after experiment + ablation**
+  1559→
+  1560→Ingest fifty outcome records (public appeal-decision material +
+  1561→synthetic controlled cases --- never "50 fake wins"). Update weights.
+  1562→Re-score the same ten held-out cases. Produce the before/after delta
+  1563→table. Run the agent-ablation topologies (single, 3-agent, 5-agent,
+  1564→8-agent) on the same ten cases and produce the ablation table (Table
+  1565→7.1). Deliverable: both killer tables exist as real numbers. Gate: the
+  1566→before/after table is honest --- if the delta is negative on any metric,
+  1567→that is reported, not hidden. A measured non-improvement is more
+  1568→credible than an inflated claim (Principle 5).
+  1569→
+  1570→**Day 9 (Aug 23) --- Two-case behavioral demo**
+  1571→
+  1572→Construct the live two-case demonstration. Case 1 runs to a LOSS; the
+  1573→system updates procedural evidence. Case 2 (same payer, related denial)
+  1574→runs with a visibly different argument ranking, and the agent explains
+  1575→the change. Wire the before/after metric display so it shows the real
+  1576→measured delta. Deliverable: the second-case behavioral moment works
+  1577→live. Gate: the ranking change is attributable to the recorded outcomes
+  1578→(verified by reading the Memory Bank weight delta), not a hardcoded
+  1579→reorder. This is the single biggest strategic change from the blueprint
+  1580→as written (Section 13) --- its gate is non-negotiable.
+  1581→
+  1582→**28. Days 10--12 --- Governance, PHI Guard, NPI, Polish**
+  1583→
+  1584→**Day 10 (Aug 24) --- PHI Guard**
+  1585→
+  1586→Build the phi-guard service as the front gate. The classifier runs
+  1587→before any agent invocation; a block guarantees zero model calls and is
+  1588→logged. Construct a deliberately sensitive test document. Deliverable:
+  1589→the PHI Guard demo moment --- synthetic case → allow; sensitive document
+  1590→→ block with "no model invocation." Gate: a block is provably a
+  1591→no-invocation event (verified in the decision trace and the audit log).
+  1592→
+  1593→**Day 25 (Aug 25) --- Governance: Model Armor, Identity, Observability**
+  1594→
+  1595→Wire Model Armor as the second layer inside the agent fleet for
+  1596→prompt-injection and jailbreak defense on retrieved content. Configure
+  1597→Agent Identity so each agent\'s permissions are scoped (Quality Review
+  1598→cannot write appeals; Letter Drafting cannot ingest outcomes). Sink the
+  1599→decision-trace Pub/Sub stream into Agent Observability so every case is
+  1600→queryable end-to-end. Deliverable: the governance vertex of the triad
+  1601→(Figure 5.1) is complete. Gate: an audit query can reconstruct a full
+  1602→case from trace events alone.
+  1603→
+  1604→**Day 12 (Aug 26) --- NPI lookup, Gemma classifier, polish, UX**
+  1605→
+  1606→Integrate the NPI Registry REST API for provider validation when a case
+  1607→contains a provider. Add the Gemma-based local citation classifier as
+  1608→the on-device credibility story (kept in the narrative; Veo and Lyria
+  1609→added as optional artifacts only if the bonus is confirmed). Polish the
+  1610→UX: provenance cards, decision-trace stream, HITL gates, the two-case
+  1611→moment, the PHI Guard banners. Run the phrase-correction grep (Table
+  1612→17.1) across the repo and Devpost draft. Deliverable: the product looks
+  1613→finished. Gate: the three forbidden phrases are absent everywhere; NPI
+  1614→lookup produces a real provider record.
+  1615→
+  1616→**29. Day 13 --- Demo Lock, Dry Runs, Domain Validation**
+  1617→
+  1618→Day 13 is the day the submission stops growing and starts proving. The
+  1619→demo is frozen; no new features are added. The team runs the full
+  1620→two-act demo live, on the demo laptop, over the expected network, ten
+  1621→times. Each run is timed and any failure is logged. In parallel, the
+  1622→medical billing / RCM specialist (recruited no later than Day 3 ---
+  1623→Section 6 of the doctrine) reviews the denial taxonomy, the evidence
+  1624→workflow, the appeal structure, the deadline workflow, the terminology,
+  1625→the human-approval boundaries, and two-to-three generated appeals; their
+  1626→three concrete changes are logged as a "Domain Validation" artifact.
+  1627→Deliverable: 10/10 reliable demo runs and a logged domain-validation
+  1628→record. Gate: the 10x test passes; if it does not, cut the lowest-tier
+  1629→item and retest --- do not proceed to Day 14 with a flaky demo.
+  1630→
+  1631→> **Domain validation as a product feature** Do not merely list the
+  1632→> advisor in the README. Ship a "Domain Validation" panel: reviewed by a
+  1633→> medical billing specialist; validated (denial taxonomy, appeal
+  1634→> workflow, evidence requirements, deadline handling); changed (the
+  1635→> three concrete edits). "We didn\'t invent this workflow --- a
+  1636→> specialist reviewed it and changed these three things" is domain
+  1637→> credibility no competitor can fake in 14 days.
+  1638→
+  1639→**30. Day 14 --- Final Dry Runs, Video, Submission Buffer**
+  1640→
+  1641→Record the demo video (the 90-second core plus the extended technical
+  1642→cut). Finalize the Devpost description with the doctrine, the
+  1643→architecture, the measured results (ablation + before/after), the
+  1644→domain-validation panel, and the claims-discipline language. Run three
+  1645→more full dry runs to confirm Day 13 reliability holds. Submit no later
+  1646→than Aug 30, keeping Aug 31 as a hard contingency buffer for last-minute
+  1647→portal issues. Deliverable: a submitted, reliable, measured,
+  1648→domain-validated entry. Gate: submission confirmed on Devpost; the repo
+  1649→is public and the GCP proof-of-deployment URL is in the description.
+  1650→
+  1651→**31. Daily Discipline --- Standups, Risk Gates, Stopping Rules**
+  1652→
+  1653→A 14-day build with this many moving parts fails not from lack of talent
+  1654→but from lack of discipline. Three practices keep the build honest: a
+  1655→morning standup that confirms the day\'s gate, an evening standup that
+  1656→confirms the gate passed or a scope-cut was made, and a live-updating
+  1657→risk register that tracks every open issue against a day number. The
+  1658→stopping rule is explicit: if by end of Day 9 the vertical slice is not
+  1659→reliable and the outcome-learning experiment has not produced an honest
+  1660→before/after table, the team reduces scope to the Tier-S list (Section
+  1661→38) and ships the most undeniable narrow version rather than gambling
+  1662→the submission on a wider, unreliable one. The blueprint\'s fallback
+  1663→discipline is correct here: if the core cannot be made reliable, reduce
+  1664→scope rather than gamble.
+  1665→
+  1666→*Table 31.1 --- Daily discipline. The stopping rule on Day 9 is the
+  1667→submission\'s safety net.*
+  1668→
+  1669→  -----------------------------------------------------------------------
+  1670→  **Practice**            **When**                **Output**
+  1671→  ----------------------- ----------------------- -----------------------
+  1672→  Morning standup         09:00                   Day\'s goal + gate +
+  1673→                                                  owner confirmations
+  1674→
+  1675→  Evening standup         17:00                   Gate passed? If not,
+  1676→                                                  what was cut?
+  1677→
+  1678→  Risk register update    End of day              Open issues mapped to
+  1679→                                                  day numbers + owners
+  1680→
+  1681→  Stopping-rule check     End of Day 9            Reliable slice + honest
+  1682→                                                  metrics, or reduce to
+  1683→                                                  Tier-S
+  1684→
+  1685→  Demo-reliability run    Day 13, 14              10x (Day 13), 3x (Day
+  1686→                                                  14) on demo laptop
+  1687→  -----------------------------------------------------------------------
+  1688→
+  1689→**PART VI**
+  1690→
+  1691→**Demo & Submission**
+  1692→
+  1693→**32. The Two-Act Demo --- Second-by-Second Script**
+  1694→
+  1695→The blueprint\'s four-minute script is too busy --- it tries to
+  1696→demonstrate denial, triage, policy, evidence, letter, quality, HITL,
+  1697→deadlines, learning, a clinic dashboard, and the Google stack, which
+  1698→leaves no time for any single moment to land. The corrected demo is a
+  1699→sharper two-act structure: Act I fights the denial (the primary wow),
+  1700→Act II learns from the outcome (the secondary wow), and only the final
+  1701→twenty seconds survey the architecture. The script below is timed to the
+  1702→second and is the single document the operator rehearses to ten-for-ten
+  1703→reliability on Day 13.
+  1704→
+  1705→*Table 32.1 --- The two-act demo, second-by-second. Act I (0:00--2:30)
+  1706→fights the denial; Act II (2:30--3:20) learns from the outcome; the
+  1707→final 40 seconds survey architecture and close.*
+  1708→
+  1709→  -----------------------------------------------------------------------
+  1710→  **Time**                **Beat**                **What the audience
+  1711→                                                  sees**
+  1712→  ----------------------- ----------------------- -----------------------
+  1713→  0:00--0:10              Hook                    Black screen: "Your
+  1714→                                                  insurance claim was
+  1715→                                                  denied." Then: "What if
+  1716→                                                  an agent could build
+  1717→                                                  the evidence-backed
+  1718→                                                  appeal in 90 seconds?"
+  1719→
+  1720→  0:10--0:25              Upload                  Drag synthetic denial;
+  1721→                                                  banner: "Synthetic case
+  1722→                                                  • No PHI"; triage
+  1723→                                                  begins
+  1724→
+  1725→  0:25--0:55              Decision trace          Payer identified ·
+  1726→                                                  denial type · deadline
+  1727→                                                  · confidence 96%
+  1728→
+  1729→  0:55--1:00              HITL Gate 1             Human confirms:
+  1730→                                                  "Autonomous doesn\'t
+  1731→                                                  mean unsupervised."
+  1732→
+  1733→  1:00--1:40              Policy + evidence       Public-source
+  1734→                                                  provenance: CMS/payer →
+  1735→                                                  clause → evidence
+  1736→
+  1737→  1:40--2:05              Appeal appears          Draft renders;
+  1738→                                                  citations are clickable
+  1739→                                                  provenance cards
+  1740→
+  1741→  2:05--2:20              Quality Review          5 citations → 5
+  1742→                                                  verified; 0 unsupported
+  1743→                                                  claims; deadline
+  1744→                                                  verified; required
+  1745→                                                  sections complete
+  1746→
+  1747→  2:20--2:30              HITL Gate 2             Human approves: "The
+  1748→                                                  agent never submits
+  1749→                                                  without you."
+  1750→
+  1751→  2:30--3:20              Act II: learning        Case 1 LOSS → weight
+  1752→                                                  update → Case 2 ranking
+  1753→                                                  changes; agent explains
+  1754→                                                  why; "Top-3 retrieval:
+  1755→                                                  60% → 80%" (only if
+  1756→                                                  measured)
+  1757→
+  1758→  3:20--3:40              PHI Guard               Sensitive upload →
+  1759→                                                  "Potential PHI detected
+  1760→                                                  --- model invocation
+  1761→                                                  blocked"
+  1762→
+  1763→  3:40--4:00              Architecture + close    Gemini → ADK → GEAP →
+  1764→                                                  Cloud Run → Firestore →
+  1765→                                                  pgvector → Pub/Sub;
+  1766→                                                  close: "DenialDefender
+  1767→                                                  doesn\'t replace the
+  1768→                                                  human. It replaces the
+  1769→                                                  hours of work around
+  1770→                                                  the human."
+  1771→  -----------------------------------------------------------------------
+  1772→
+  1773→> **Demo discipline** Act I is the primary wow --- the 90-second
+  1774→> transformation. Act II is the secondary wow --- observable learning.
+  1775→> Only the final twenty seconds survey the stack, because "look how many
+  1776→> Google products we used" is not a wow. The PHI Guard moment
+  1777→> (3:20--3:40) is the security wow and must be truthful: a block means
+  1778→> no model invocation, provable in the trace.
+  1779→
+  1780→**33. The Second-Case Behavioral Moment**
+  1781→
+  1782→This is the strongest single recommendation in the entire document and
+  1783→the moment the demo must not omit. Showing "outcome → weight changed" is
+  1784→weak; showing Case 1 (argument order A, B, C; outcome LOSS) followed by
+  1785→Case 2 (same payer, related denial; argument order now C, A, B) with the
+  1786→agent explaining "this ranking changed because two previous validated
+  1787→outcomes favored Argument C" is actual observable learning. A judge
+  1788→understands it instantly, and it is materially harder to fake than a
+  1789→green animation because the ranking must be attributable to a real
+  1790→weight delta in Memory Bank. Before/after metric is shown only if it was
+  1791→measured; an unmeasured number is never displayed on screen, because a
+  1792→single fabricated number collapses the credibility of every other number
+  1793→in the submission.
+  1794→
+  1795→**34. Three Forbidden Phrases --- Claims Discipline**
+  1796→
+  1797→Three phrases must disappear from every artifact: "every agent\'s
+  1798→reasoning visible," "winning appeal," and "HIPAA does not apply." They
+  1799→are replaced by "decision trace," "evidence-backed appeal draft," and
+  1800→"prototype intentionally processes no PHI" respectively (Table 17.1).
+  1801→The discipline is enforced by a pre-submission grep of the repository
+  1802→and the Devpost copy on Day 12 and again on Day 14. These three changes
+  1803→materially improve credibility at zero engineering cost, because they
+  1804→replace overclaims with scoped, defensible statements that an attacker
+  1805→cannot refute without arguing against an explicit scope.
+  1806→
+  1807→**35. Devpost & Repository Hygiene**
+  1808→
+  1809→The Devpost description should spend its space on what happens
+  1810→technically, not on business projections. The blueprint\'s market-size,
+  1811→ARR, seed-round, and Year-5-incumbent projections are useful internally
+  1812→but are not what the rubric rewards; keep the business thesis to one
+  1813→concise section. The bulk of the description should cover the triad
+  1814→architecture, the eight-agent necessity (with the ablation table), the
+  1815→measured outcome-learning results, the PHI Guard, the provenance system,
+  1816→and the domain-validation panel. The repository is public and clean: a
+  1817→README that opens with the doctrine, an architecture diagram, a
+  1818→reproducible eval command (make eval) that regenerates the metrics
+  1819→tables, and a proof-of-deployment Cloud Run URL. Every claim in the
+  1820→Devpost copy is either measured, scoped, or removed.
+  1821→
+  1822→*Table 35.1 --- Devpost hygiene. Spend the space on what happens
+  1823→technically; keep business to one section.*
+  1824→
+  1825→  ------------------------------------------------------------------------
+  1826→  **Devpost section**     **Must contain**        **Must not contain**
+  1827→  ----------------------- ----------------------- ------------------------
+  1828→  Problem                 Denial/appeal           Inflated market TAM
+  1829→                          statistics + the \<1%   
+  1830→                          appealed gap            
+  1831→
+  1832→  Solution                Triad + 90-second       "AI lawyer" framing
+  1833→                          transformation          
+  1834→
+  1835→  Architecture            Triad diagram +         A box-per-Google-product
+  1836→                          ablation table          parade
+  1837→
+  1838→  Learning                Measured before/after   "weight 0.42 → 0.48"
+  1839→                          table                   alone
+  1840→
+  1841→  Security                PHI Guard + Model       "HIPAA does not apply"
+  1842→                          Armor + Identity +      
+  1843→                          Observability           
+  1844→
+  1845→  Domain                  Domain-validation panel An advisor name in the
+  1846→                          with 3 logged changes   README only
+  1847→
+  1848→  Business                One concise section     ARR/seed/Year-5
+  1849→                                                  projections
+  1850→
+  1851→  Reproducibility         make eval + Cloud Run   Stubbed integrations
+  1852→                          URL                     presented as live
+  1853→  ------------------------------------------------------------------------
+  1854→
+  1855→**PART VII**
+  1856→
+  1857→**Risk, Counterarguments & Final Verdict**
+  1858→
+  1859→**36. Counterarguments & Responses (Steelmanned)**
+  1860→
+  1861→A strong submission pre-empts its own objections. Five counterarguments
+  1862→are steelmanned below --- each is made as strong as possible before the
+  1863→response is given, so that the responses survive a skeptical judge
+  1864→rather than a friendly one. The pattern for each is: state the objection
+  1865→at full strength, concede what is true, define the limits, and explain
+  1866→why the doctrine in Part I still holds.
+  1867→
+  1868→**Counterargument 1 --- Synthetic cases mean the system is unproven on
+  1869→real denials.**
+  1870→
+  1871→Steel-man: a demo on synthetic data does not prove the system works on
+  1872→real payer letters, so the operational-utility claim is unsupported.
+  1873→Concession: the cases are indeed synthetic, and the system is not
+  1874→claimed to be production-validated. Limit and response: the
+  1875→institutional knowledge is not synthetic --- it is sourced from CMS and
+  1876→payer public material, versioned and hashed, with provenance cards the
+  1877→judge can verify. The Triage agent classifies against CMS\'s published
+  1878→denial-reason statements, not free text. The domain-validation panel
+  1879→records a specialist\'s concrete changes. So the claim is scoped:
+  1880→evidence-backed appeal draft on synthetic cases grounded in real public
+  1881→evidence, not proven on real denials. The doctrine holds because the
+  1882→scope is explicit and defensible, not overclaimed.
+  1883→
+  1884→**Counterargument 2 --- Eight agents is over-engineered; three would
+  1885→do.**
+  1886→
+  1887→Steel-man: most denial-appeal work is triage, draft, review, so eight
+  1888→agents is theater. Concession: a three-agent pipeline can produce a
+  1889→draft. Limit and response: the ablation table (Section 7) is measured,
+  1890→not asserted, and is designed to show that each removed agent
+  1891→reintroduces a measurable failure --- collapsing Policy Research and
+  1892→Evidence Assembly destroys the citation/clinical-evidence distinction;
+  1893→removing Quality Review reintroduces unsupported claims the compliance
+  1894→story cannot tolerate. The count is justified by measurement; if the
+  1895→ablation does not show a marginal lift per agent, the doctrine requires
+  1896→reporting the honest result, and the agent is a candidate for
+  1897→Kill-Your-Darlings. The doctrine holds because the necessity argument is
+  1898→empirical, not rhetorical.
+  1899→
+  1900→**Counterargument 3 --- The outcome-learning result could be a measured
+  1901→negative.**
+  1902→
+  1903→Steel-man: if fifty outcomes do not move top-3 retrieval by 20 percent,
+  1904→the headline agentic claim fails. Concession: this is a real risk and
+  1905→the experiment might not flatter the system. Limit and response:
+  1906→Principle 5 (honest negative results are acceptable) is explicit that a
+  1907→measured non-improvement is reported, not hidden --- and a credible
+  1908→negative result with a sound experiment is far stronger than an inflated
+  1909→positive claim a judge can debunk in thirty seconds. Even a modest
+  1910→positive delta, honestly measured and shown live across two cases, is a
+  1911→stronger agentic artifact than any animation. The doctrine holds because
+  1912→credibility is the objective, not a specific number.
+  1913→
+  1914→**Counterargument 4 --- The Google stack is still too broad; something
+  1915→will be stubbed.**
+  1916→
+  1917→Steel-man: even the trimmed stack (Table 12.1) is a lot for 14 days, and
+  1918→a stubbed integration is worse than none. Concession: the risk is real;
+  1919→some optional components may not survive. Limit and response: the stack
+  1920→is tiered, and every component below the Core and Governance tiers is
+  1921→conditional on a gate that asks whether it strengthens the narrative
+  1922→without compromising the demo. The blueprint\'s own Gate 2 rule (if a
+  1923→GEAP component has to be stubbed, trim it and document why) is applied
+  1924→ruthlessly, and the demo never depends on a component that is not
+  1925→reliably working. The doctrine holds because reliability outranks labels
+  1926→(Principle 4).
+  1927→
+  1928→**Counterargument 5 --- No real payer integration means this is not
+  1929→operational.**
+  1930→
+  1931→Steel-man: without a real payer channel, the system cannot actually
+  1932→submit an appeal, so operational-utility is theoretical. Concession: the
+  1933→system does not submit to payers, by design. Limit and response: the
+  1934→blueprint\'s kill-your-darlings list (no payer portals, fax, email, EHR,
+  1935→live scraping, real PHI, blockchain, Kubernetes) is accepted in full,
+  1936→because the cost of a flaky payer integration in a 14-day demo exceeds
+  1937→its value. The operational utility is the human\'s: a 6-hour ordeal
+  1938→becomes a 90-second draft with verifiable evidence, which the human then
+  1939→submits through the existing channel. The NPI Registry is the one
+  1940→legitimate external lookup that proves the system can act on real public
+  1941→data. The doctrine holds because the value proposition is human
+  1942→throughput, not autonomous submission.
+  1943→
+  1944→**37. Risk Register & Decision Gates**
+  1945→
+  1946→The risks below are the ones most likely to derail the submission. Each
+  1947→is paired with a mitigation and a decision gate --- the day by which the
+  1948→risk must be resolved or trigger a scope reduction. Gates are
+  1949→non-negotiable: a gate that fails is a scope-cut trigger, never a reason
+  1950→to push a fragile feature into the demo.
+  1951→
+  1952→*Table 37.1 --- Risk register. Each risk has a day-numbered gate; a
+  1953→failed gate is a scope-cut trigger.*
+  1954→
+  1955→  -------------------------------------------------------------------------------------
+  1956→  **Risk**           **Likelihood**   **Impact**     **Mitigation**      **Gate**
+  1957→  ------------------ ---------------- -------------- ------------------- --------------
+  1958→  Vertical slice not Medium           Critical       Cut to single-agent Day 3
+  1959→  reliable by Day 3                                  slice; defer        
+  1960→                                                     multi-agent         
+  1961→
+  1962→  Outcome-learning   Medium           High           Report honestly;    Day 9
+  1963→  delta is                                           lead with two-case  
+  1964→  flat/negative                                      behavioral change   
+  1965→
+  1966→  Ablation does not  Medium           High           Report honestly;    Day 8
+  1967→  show per-agent                                     re-examine agent    
+  1968→  lift                                               boundaries          
+  1969→
+  1970→  PHI Guard          Medium           Medium         Operator confirm    Day 10
+  1971→  false-positives on                                 path; flagged in    
+  1972→  demo case                                          trace               
+  1973→
+  1974→  Memory Bank        Medium           Medium         Firestore fallback  Day 7
+  1975→  instability                                        for weights         
+  1976→
+  1977→  Demo fails live at Low              Critical       Cached-rollback +   Day 13
+  1978→  venue                                              static-fallback     
+  1979→                                                     paths               
+  1980→
+  1981→  Domain expert      Medium           High           Recruit by Day 3;   Day 3
+  1982→  unavailable                                        fallback to         
+  1983→                                                     documented taxonomy 
+  1984→
+  1985→  Bonus (Veo/Lyria)  Medium           Low            Drop bonus; keep    Day 12
+  1986→  not available as                                   Gemma narrative     
+  1987→  stated                                             only                
+  1988→  -------------------------------------------------------------------------------------
+  1989→
+  1990→**38. Priority Tiering --- Tier S / A / B / C**
+  1991→
+  1992→When time is short --- and in a 14-day build it always is --- the
+  1993→priority tiering below governs what is built first and what is cut
+  1994→first. Tier S is non-negotiable and maps directly to the thirteen
+  1995→inviolable principles; Tier A strengthens the submission but the demo
+  1996→can survive without it; Tier B is conditional on the bonus and on time;
+  1997→Tier C is explicitly not built. The stopping rule (Section 31) reduces
+  1998→scope to Tier S if Day 9 reliability is not achieved.
+  1999→
+  2000→*Table 38.1 --- Priority tiering. Tier S is the submission; Tier A
+
+[showing lines 1501-2000 of 2252; use offset=2001 with limit to continue reading]

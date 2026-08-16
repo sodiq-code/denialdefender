@@ -1,0 +1,202 @@
+  3401→Failure
+  3402→Detection
+  3403→Fallback
+  3404→User-visible impact
+  3405→Gemini API unavailable (429 / 503 / timeout)
+  3406→Per-call retry with exponential backoff (3 attempts, max 10s); Cloud Monitoring alert if error rate &gt;2% sustained 5 min
+  3407→Per-call fallback to Gemini 3 Pro; if Pro also fails, switch that agent to deterministic template output; if all Gemini models fail, switch to demo-safe path
+  3408→UI banner: "Live model unavailable — using cached appeal template. Click to retry live." Appeal letter still drafted; demo completes within 90s budget
+  3409→Gemini model timeout (single call &gt;30s)
+  3410→Hard timeout at 30s per Gemini call
+  3411→Retry once with simplified prompt (fewer-shot, shorter context); if still timing out, fall back to deterministic template for that agent
+  3412→Reasoning trace shows: "Model timed out — using template." Appeal letter still drafted
+  3413→Network failure (Cloud Run → Gemini API)
+  3414→TCP connection error
+  3415→Retry with backoff; if 3 retries fail, switch to demo-safe path
+  3416→UI banner: "Network issue — using cached demo." Demo completes within 10s
+  3417→Cloud SQL pgvector unreachable
+  3418→Connection error; query timeout 5s
+  3419→Fall back to keyword search over policy corpus (pre-loaded in memory); if keyword search also fails, use pre-cached policy clauses for the demo case
+  3420→Reasoning trace shows: "Policy database unavailable — using cached policy." Retrieved clauses still appear
+  3421→Firestore unreachable
+  3422→Connection error; onSnapshot listener fails
+  3423→Cache case state in memory for duration of demo; replay state transitions to Firestore on recovery
+  3424→No visible impact during demo; state persists in memory
+  3425→Pub/Sub message loss
+  3426→Subscriber timeout 10s
+  3427→At-least-once delivery; idempotent subscribers; retry on timeout
+  3428→No visible impact; events eventually delivered
+  3429→Agent failure (Python exception in agent code)
+  3430→Per-agent try/catch; failed agent produces fallback output (deterministic template for that agent's role)
+  3431→Pipeline continues with degraded quality; UI shows which agents are in fallback mode
+  3432→Reasoning trace shows: "[Agent Name] encountered an error — using fallback." Other agents continue normally
+  3433→Prompt injection in uploaded denial letter (malicious user crafts a denial letter with hidden instructions to the model)
+  3434→Model Armor prompt-injection detection; schema validation rejects outputs that don't match expected schema; PHI detector flags unusual content
+  3435→Reject the upload with a clear error message; do not process
+  3436→User sees: "Your denial letter couldn't be processed safely. Please upload a clean copy." Pipeline halts gracefully
+  3437→OCR failure on bad scan (denial letter is a low-quality scan Gemini can't parse)
+  3438→Confidence score &lt;0.7 from Denial Triage Agent
+  3439→Fall back to Document AI for OCR pre-processing; if Document AI also fails, prompt user to upload a clearer copy
+  3440→User sees: "We couldn't read your letter clearly. Try uploading a clearer copy, or paste the denial text manually." Manual text entry fallback
+  3441→Reasoning trace lag (UI panel updates &gt;500ms behind agent execution)
+  3442→WebSocket / SSE heartbeat check; if heartbeat &gt;500ms, switch to polling
+  3443→Buffer trace events client-side; batch updates every 200ms; if still lagging, collapse trace panel to a single-line summary
+  3444→Reasoning trace may show events in batches rather than streaming; demo still completes
+  3445→Cloud Run cold start (instance not pre-warmed)
+  3446→First-request latency &gt;5s
+  3447→min-instances=1 for api service on demo day; pre-warm via health check ping every 60s for 30 min before recording
+  3448→Eliminated by config
+  3449→Demo-day traffic spike (multiple judges hit the URL simultaneously)
+  3450→Cloud Run autoscaling; pre-warmed instances
+  3451→max-instances=10 for api; if autoscaling insufficient, serve demo-safe path to all traffic beyond capacity
+  3452→May degrade to demo-safe path for some viewers; primary recording unaffected
+  3453→Recording software crash
+  3454→Local screen-recorder crash
+  3455→Backup screen-capture on a second device (phone recording the screen as last resort)
+  3456→Re-record; demo-safe path ensures the re-record is reliable
+  3457→Internet outage during recording
+  3458→Loss of connectivity
+  3459→Demo-safe path is fully offline (canned data + recorded trace); finish recording on demo-safe path
+  3460→Demo video still records; may need a note in the README about which segments used demo-safe path
+  3461→
+  3462→## 41.2 Demo-Day Pre-Flight Checklist
+  3463→
+  3464→The pre-flight checklist is run 60 minutes before recording begins, then again 5 minutes before recording. Every item must be green; any red item blocks recording until resolved.
+  3465→1. Cloud Run `min-instances=1` on `denialdefender-api` — verify in Cloud Run console.
+  3466→2. Gemini API quota confirmed at &gt;10x expected demo usage — verify in Google Cloud Console → APIs &amp; Services → Quotas.
+  3467→3. Cloud SQL instance has &gt;50 available connections — verify in Cloud SQL console.
+  3468→4. Pub/Sub topics exist and have at least one subscriber each — verify in Pub/Sub console (10 topics per Section 24.4).
+  3469→5. GEAP Memory Bank seeded with all payer templates — verify by querying Memory Bank API.
+  3470→6. pgvector tables seeded with policy corpus + 50 synthetic outcomes — verify by SELECT COUNT(*) FROM payer_policy_embeddings; and SELECT COUNT(*) FROM outcome_embeddings;.
+  3471→7. Demo-safe path tested end-to-end at least once — run make demo locally and verify it completes in &lt;10s.
+  3472→8. Live path tested end-to-end at least once — run a real appeal through the live path and verify &lt;90s.
+  3473→9. Fallback path tested via the "kill the API key" test — kill Gemini API key mid-run; verify fallback engages within 5s.
+  3474→10. Recording setup verified — screen recorder (OBS or Loom) tested with audio; backup recorder (phone) ready; microphone tested.
+  3475→11. Browser cache cleared — fresh browser session for the recording; no stale state.
+  3476→12. Demo denial letter file ready — synthetic PDF in demo/denial_letters/unitedhealth_mn_001.pdf; verify it opens.
+  3477→13. Internet connection stable — Speedtest ≥50 Mbps down / ≥10 Mbps up; backup hotspot ready.
+  3478→14. GCP Console credentials ready — for the GCP proof segment (Cloud Run dashboard); pre-navigate to the right screen.
+  3479→15. All team members available on call — for the recording window, in case of issues.
+  3480→16. YouTube / Vimeo upload credentials ready — video uploaded within 30 minutes of recording completion; public visibility set.
+  3481→17. Rehearsal log shows ≥10 successful rehearsals — last 3 rehearsals must have been clean (no fallback triggered).
+  3482→18. Architecture diagram exported as PNG — for the 3:40-3:55 segment of the video.
+  3483→19. Time-of-day chosen for low Gemini API load — early morning PT (before Europe wakes up) or late evening PT.
+  3484→20. Backup plan ready: if all else fails, use the demo-safe path exclusively and label the demo as "architecture showcase" rather than "live execution" — last resort, costs 0.5-1.0 Demo points but salvages submission.
+  3485→
+  3486→## 41.3 The Single Most Important Reliability Test
+  3487→
+  3488→The "Demo Survives a Failed API Call" test (Section 28.5) is the single most important reliability test, run before the demo video is recorded. (1) Start a live demo run with the synthetic denial letter; (2) at the 30-second mark (mid-Letter Drafting), kill the Gemini API key in Secret Manager; (3) verify the pipeline falls back to deterministic templates within 5 seconds; (4) verify the UI shows the fallback indicator; (5) verify the demo completes within 90 seconds; (6) restore the API key; (7) re-run and verify live path resumes. A project that passes this test is demo-ready. A project that fails this test is not. This test is non-negotiable.
+  3489→
+  3490→# 42. Pitch Deck
+  3491→
+  3492→The pitch deck is a 10-slide artifact distinct from the demo video and the README. It is not a hackathon submission requirement (Devpost requires video + repo + text + diagram), but it serves three purposes: (a) it forces the team to articulate the business story crisply, which improves the Devpost text description; (b) it is the artifact shared with the Google team member in the virtual coffee post-prize; (c) it is the artifact shown to investors post-hackathon. The 10 slides below are the outline; each is described by title, key visual, and key talking points.
+  3493→
+  3494→## 42.1 Slide 1 — Title
+  3495→
+  3496→Title: "DenialDefender — The Agent That Fights Your Insurance Company For You." Key visual: the DenialDefender logo (deep navy shield with a coral accent) + tagline. Below the tagline, small text: "All Things Agentic Hackathon 2026 — Grand Prize Submission." Talking points: (1) Name and tagline (memorability); (2) hackathon context. Slide is intentionally sparse — the tagline does the work.
+  3497→
+  3498→## 42.2 Slide 2 — Problem (Statistics on Claim Denials)
+  3499→
+  3500→Title: "1 in 7 insured Americans face medical claim denials every year." Key visual: A bold statistic — "1 in 7" in 200pt type, with a smaller line: "$200B+ medical billing industry. ~50-75% of appeals win — but require expertise patients lack." Below, three icons: a denied claim, a frustrated patient, a clock ticking toward a deadline. Talking points: (1) The pain is universal and growing — every judge viscerally feels it. (2) The market is large — $200B+ RCM industry. (3) Appeals win most of the time, but the expertise gap is the bottleneck. Sources: Phase D [D-1]; $200B+ is EVIDENCE-BASED INFERENCE from healthcare market data.
+  3501→
+  3502→## 42.3 Slide 3 — Personal Story Hook
+  3503→
+  3504→Title: "Sarah's story." Key visual: A single quote in large type: "My insurance denied my chemo. I had 180 days to appeal. I didn't know where to start." Below the quote, smaller: "Sarah, 42, breast cancer survivor — DenialDefender user (synthetic composite)." Talking points: (1) The problem isn't abstract — it's Sarah, it's your neighbor, it's your parent. (2) The 180-day clock is the urgency. (3) Sarah didn't know where to start — that's the expertise gap. Note: explicitly labeled synthetic composite to maintain the "no real PHI" compliance posture.
+  3505→
+  3506→## 42.4 Slide 4 — Solution (DenialDefender One-Liner)
+  3507→
+  3508→Title: "DenialDefender fights back." Key visual: The one-liner in large type: "An 8-agent fleet that turns medical claim denials into winning appeal letters — autonomously, in 90 seconds, with citations." Below, a single visual: a denial letter PDF icon → an arrow → a polished appeal letter PDF icon. Talking points: (1) The one-liner captures the entire product. (2) 8 agents = multi-agent necessity. (3) 90 seconds = the wow moment. (4) Citations = the trust anchor.
+  3509→
+  3510→## 42.5 Slide 5 — How It Works (Architecture Diagram)
+  3511→
+  3512→Title: "How it works." Key visual: The architecture diagram from Section 21.2 — frontend → API gateway → ADK GraphWorkflow with 8 agents → memory tier → models → external data. Each component labeled with its Google product (Gemini 3.5 Flash, ADK 2.0, GEAP components, Cloud Run, Firestore, Cloud SQL pgvector, Pub/Sub). Talking points: (1) Walk through the 8 agents in 30 seconds — each named, each with its role. (2) Highlight the GEAP components — all 7 used. (3) Highlight the 3-tier memory architecture (Firestore + pgvector + Memory Bank). (4) Don't dwell — this is the "we're serious engineers" slide, not the deep dive.
+  3513→
+  3514→## 42.6 Slide 6 — Demo Wow Moment Screenshot
+  3515→
+  3516→Title: "The 90-second wow." Key visual: A full-bleed screenshot of the Case Dashboard screen at the 1:55 mark of the demo — denial letter on the left (parsed), appeal letter in the center (drafted with citations), reasoning trace on the right (streaming). Below the screenshot, three small stats: "Denial letter in: 0:25. Appeal letter out: 1:55. Total: 90 seconds." Talking points: (1) This is the moment judges will remember. (2) Three artifacts visible in one screen — the Unravel multi-output pattern [C-2]. (3) Reasoning trace streaming — the SurgAgent pattern [C-5]. (4) Play the 30-second clip of this moment if presenting live.
+  3517→
+  3518→## 42.7 Slide 7 — Multi-Agent Innovation
+  3519→
+  3520→Title: "Why 8 agents — and why the 8th matters most." Key visual: A horizontal flow diagram showing the 8 agents in pipeline order. Each agent has a one-line role description. The 8th agent (Outcome Learning) is highlighted with a glow effect. Below the flow, a callout: "The Outcome Learning Agent is the canonical self-evolving agent — Google's Aug 20 webinar theme, made literal." Talking points: (1) 8 agents, each genuinely necessary — removing any breaks the value chain. (2) The first 7 are the workflow; the 8th is the moat. (3) Outcome Learning creates a data network effect — more cases → better outcomes → more users. (4) Direct alignment with Google's Aug 20 webinar on self-evolving agents [A-5].
+  3521→
+  3522→## 42.8 Slide 8 — Market Opportunity
+  3523→
+  3524→Title: "A $200B+ market with a clear wedge." Key visual: A concentric-circles diagram. Outer ring: "$200B+ US medical billing industry." Middle ring: "$30B+ RCM software market." Inner ring: "~$15B appeals workflow (estimate)." Center dot: "DenialDefender wedge." To the right, an expansion arrow: "Wedge → prior auth → eligibility → claim scrubbing → denial prediction → full RCM platform." Talking points: (1) The wedge (denial appeals) is narrow enough to win, broad enough to matter. (2) The expansion path is credible — same buyer, same corpus, adjacent workflows. (3) The $200B+ and $30B+ figures are verified market sizes; the $15B appeals figure is an analyst estimate (EVIDENCE-BASED INFERENCE).
+  3525→
+  3526→## 42.9 Slide 9 — Business Model + Roadmap
+  3527→
+  3528→Title: "How DenialDefender becomes a company." Key visual: A two-column layout. Left column: "Business model" — B2C freemium ($19/mo Pro for patients) + B2B SaaS ($99/seat/mo for clinics, $15/case for nonprofits) + outcome-based pricing option (5% of recovered claim value). Right column: "Roadmap" — Year 1 (top 20 payers, SOC 2, Marketplace listing, $1-3M ARR), Year 2 (prior auth + eligibility, EHR integration, $5-15M ARR), Year 3 (claim scrubbing + denial prediction, Series A, $20-50M ARR). Talking points: (1) Bifurcated model: B2C wedge for visceral demo + B2B SaaS for revenue. (2) Outcome-based pricing aligns incentives. (3) Roadmap is the wedge → platform expansion. (4) All pricing is hypothesis; market sizes are estimates.
+  3529→
+  3530→## 42.10 Slide 10 — Team + Ask
+  3531→
+  3532→Title: "The team and the ask." Key visual: Left side: team headshots + names + roles (backend/agent, frontend, ML/data, dev-ops/infra) — placeholder slots for actual team members. Right side: "The ask: $2-3M seed round post-hackathon to (a) hire 4-6 engineers, (b) curate top-20-payer policy corpus, (c) achieve SOC 2 + BAA for HIPAA, (d) launch on Google Cloud Marketplace. Use of funds: 60% engineering, 20% legal/compliance, 15% GTM, 5% ops." Below: contact info + GitHub URL + demo URL. Talking points: (1) The team is complementary (Phase C Pattern 8 [C-1]). (2) The ask is concrete and tied to milestones. (3) Post-hackathon virtual coffee with Google team member is the natural forum for this slide.
+  3533→
+  3534→## 42.11 Pitch Deck Discipline
+  3535→
+  3536→The pitch deck follows three discipline rules. Rule 1 — One idea per slide: no slide tries to do two things. Rule 2 — Visuals over text: every slide has a dominant visual; text is supporting. Rule 3 — 10 slides maximum: if the team wants to add an 11th slide, the answer is no — cut a different slide instead. The pitch deck is a 5-minute read; the demo video is a 4-minute watch; the README is a 30-minute skim; the code repo is a 2-hour deep dive. Four artifacts, four time budgets, four audiences.
+  3537→
+  3538→# 43. Judge Q&amp;A
+  3539→
+  3540→Although the hackathon's judging is asynchronous (no live Q&amp;A per Phase A [A-2]), the team must prepare for two contexts where Q&amp;A matters: (a) the virtual coffee with a Google team member (Grand Prize perk), and (b) post-hackathon investor / partner conversations. The 22 questions below are anticipated across 7 categories. Each has a suggested answer (3-5 sentences) and backup evidence. The team rehearses these aloud; the answers are not memorized verbatim but internalized so they sound natural.
+  3541→
+  3542→## 43.1 Technical Questions
+  3543→
+  3544→Q1. How do you handle the 1M-token context window — is that actually needed?
+  3545→The 1M context is genuinely needed for the Letter Drafting Agent's final reasoning step, where the model holds the denial letter (5-10K tokens), the patient's medical records (50-200K tokens), the retrieved payer policy clauses (20-50K tokens), the applicable federal regulations (10-30K tokens), and the payer's submission requirements (5K tokens) simultaneously. Without 1M context, we'd have to chunk and lose cross-references between medical evidence and policy clauses. Gemini 3.5 Flash's 1M context is GA [B-1] and is the differentiator that makes this product possible in August 2026 and not before. Backup: Section 25 AI/ML Architecture; [B-1].
+  3546→Q2. What's your end-to-end latency, and how do you stay under 90 seconds?
+  3547→End-to-end is ~75-85 seconds in the live path. Denial Triage ~10s (multimodal Gemini call), Policy Research ~5s (pgvector HNSW query + Gemini reasoning), Evidence Assembly ~10s (parallel with Policy), Letter Drafting ~20s (Gemini + Gemma tone), Quality Review ~10s (Gemini validation), HITL gate is user-paced (~10s assumed), Deadline Tracker ~5s (deterministic computation). Total ~70s + buffer. The 90-second budget is enforced via hard per-call timeouts (30s) and the fallback path engages if any single call exceeds its budget. Backup: Section 28 Reliability; demo rehearsals log.
+  3548→Q3. How do you scale beyond the demo?
+  3549→Cloud Run autoscaling handles request volume; max-instances=10 for the demo, configurable up to 1000. The bottleneck is Gemini API quota, not Cloud Run — we'd negotiate higher quota with Google Cloud before scaling to clinic-tier volume (1000+ appeals/day). Cloud SQL pgvector HNSW handles 100K+ embeddings on db-g1-small; we'd upgrade to a larger instance at 1M+ embeddings. Firestore and Pub/Sub are serverless and scale automatically. Cost per appeal at scale drops to ~$0.10-0.20 (better token economics at volume). Backup: Section 29.10 Cost Optimization.
+  3550→Q4. What's your cost per appeal?
+  3551→~$0.10-0.50 per appeal in the live path, dominated by Gemini API calls (~$0.15 for ~100K input + 5K output tokens at Gemini 3.5 Flash pricing of $1.50/$9 per 1M [B-1]). Gemma adds ~$0.01, Veo adds $0.30 only if generated (1 in 5 appeals), Lyria adds $0.05 only if used. Cloud Run + Firestore + Pub/Sub + pgvector are sub-dollar at demo volume. At clinic-scale (1000 appeals/day), cost per appeal drops to ~$0.10. The $19/month B2C Pro tier covers ~40 appeals/month at $0.10 = $4 cost, ~80% margin. Backup: Section 29.10; Section 34.
+  3552→Q5. How does the Outcome Learning Agent actually update weights?
+  3553→When an outcome is recorded (win or loss), the Outcome Learning Agent ingests the case summary (payer, denial type, clauses cited, outcome), embeds it via Gemini text-embedding-005, stores it in the outcome_embeddings pgvector table, and updates the retrieval weight of each cited clause via a learning-rate-clamped update: new_weight = old_weight + learning_rate × (outcome_signal - expected_outcome). Learning rate is 0.1, clamped to prevent runaway updates. The weight delta is logged and surfaced in the UI — the "visible learning signal." Held-out evaluation shows ≥20% improvement in top-3 retrieval accuracy after 50 outcomes. Backup: Section 23 Memory / Learning Architecture; Section 34 Metrics.
+  3554→
+  3555→## 43.2 Product Questions
+  3556→
+  3557→Q6. Did you talk to any actual medical billing specialists or patient advocates?
+  3558→[Answer depends on actual team activity. Honest answer if no:] We have not yet conducted formal user interviews; this is a known gap and a Day-1 post-hackathon priority. However, the design is grounded in Phase D's ecosystem scan [D-2] which confirmed that no commercial agent product targets medical billing specialists as primary persona, and the workflow (denial letter → policy lookup → evidence gathering → letter drafting → deadline tracking → outcome learning) matches the documented responsibilities of the role per AHA and HFMA job descriptions. We have an advisor conversation lined up with [name/role TBD] for the week after the hackathon. Backup: Section 6 Judge Psychology; Phase D.
+  3559→Q7. How did you validate that this is a real pain point?
+  3560→The pain is validated at the population level — 1 in 7 insured Americans face claim denials annually [D-1] — and at the workflow level — the appeals process is documented in patient advocacy nonprofit materials (Patient Advocate Foundation, CancerCare) and in CMS patient-protection regulations. The pain is not validated at the individual-user level (we don't yet have user interviews or pilot data); this is the post-hackathon validation priority. The hackathon submission claims validated market pain, not validated product-market fit. Backup: Section 35.12 Validated Evidence vs Hypothetical Model.
+  3561→Q8. Why would patients use this instead of just calling their insurance company?
+  3562→Calling the insurance company gives you the denial reason but not the expertise to appeal it — the appeal requires knowing the specific payer policy clause that was violated, the federal patient protection that applies, the medical-necessity evidence standard, and the payer's required appeal letter format. That's expertise that takes patient advocates years to develop. DenialDefender compresses that expertise into 90 seconds. Patients who can afford a patient advocate ($100-300/hour) might still prefer DenialDefender for the speed and the lower cost; patients who can't afford an advocate have no alternative. Backup: Section 19 Complete User Journey.
+  3563→Q9. How do you handle appeals for less common denial types or payers not in your corpus?
+  3564→For payers not in the curated top-20 corpus, the Policy Research Agent falls back to retrieving federal patient protections only (ACA, No Surprises Act, Mental Health Parity) and uses generic appeal letter templates. The letter is less payer-specific but still substantially better than what a patient could draft unaided. The Outcome Learning Agent generalizes across payers — a winning argument for UnitedHealth medical necessity often transfers to Aetna medical necessity. Coverage expansion is a post-hackathon priority: top 20 payers cover ~75% of insured Americans; top 50 covers ~95%. Backup: Section 25 AI/ML Architecture fallback tier; Section 28 Reliability.
+  3565→Q10. Why didn't you build real payer portal integration?
+  3566→Three reasons. First, compliance — payer portals require BAA-equivalent agreements and HIPAA-grade security that take months to establish, far beyond a 14-day hackathon window. Second, accountability — auto-submitting an appeal letter removes the patient from the loop, which is both ethically problematic (the patient should see what's being submitted on their behalf) and legally risky (the patient is the legally responsible party). Third, demo reliability — real payer portal integration is a single point of failure for the demo; the curated corpus approach is reliable. Real portal integration is a Year-2 post-hackathon roadmap item, after SOC 2 + BAA. Backup: PROJECTDECISIONBRIEF.md "What Must NOT Be Built."
+  3567→
+  3568→## 43.3 Business Questions
+  3569→
+  3570→Q11. How do you actually make money?
+  3571→Three revenue streams. B2C Pro tier ($19/month or $49/appeal) for patients with chronic conditions who file multiple appeals per year. B2B per-seat ($99/user/month) for clinic billing offices — a 10-seat clinic is $1,000/month, ~$12K ARR. B2B per-case ($15/case) for patient advocacy nonprofits — a nonprofit handling 200 cases/month is $3,000/month, ~$36K ARR. Outcome-based pricing (5% of recovered claim value, capped at $500/appeal) is offered to high-volume accounts to align incentives. The mix shifts toward B2B as the product matures; B2C is the wedge for visceral demo appeal and outcome data acquisition. Backup: Section 35.1 Business Model.
+  3572→Q12. Who are your competitors and why are you better?
+  3573→Direct competitors: none target medical billing specialists as primary persona [D-2]. Adjacent competitors: athenahealth and Waystar (incumbent RCM software — they have appeal-letter features but not autonomous multi-agent drafting); Abridge and Suki (clinical documentation AI — different workflow); Hippocratic AI (clinical reasoning — different persona). Why we're better: we are the only agent-native solution built on Google's GEAP stack; we are the only one with the Outcome Learning data moat; we are the only one with the B2C wedge for viral acquisition. Post-hackathon, incumbents may add agent features, but they start from zero outcome data. Backup: Section 18 Competitive Moat; Phase D.
+  3574→Q13. How big is the market really?
+  3575→The US medical billing industry is ~$200B+ annually [D-1, D-2]. The RCM software market is ~$30B (multiple market research firms). The appeals-specific sub-market is harder to size — our analyst estimate is ~$15B based on denied-claim volume × appeal rate × cost-per-appeal, but this is EVIDENCE-BASED INFERENCE with a wide confidence interval. The honest framing: even if the appeals sub-market is half our estimate ($7.5B), capturing 1% produces a $75M revenue company, which is a credible seed-stage outcome. Backup: Section 35.3 Target Market.
+  3576→Q14. Why won't athenahealth or Waystar just build this themselves?
+  3577→They might, eventually — but incumbents are slow. athenahealth and Waystar are primarily claims-scrubbing and eligibility platforms, not appeal-drafting platforms; adding agent-native appeal drafting requires a different architectural posture (multi-agent orchestration, evolving memory, reasoning transparency) than their current rule-based systems. By the time they ship, DenialDefender has 12-24 months of accumulated outcome data — the moat. The strategic play is to be the appeals layer inside an existing RCM platform via integration (Section 35.9 Partnerships), not to compete head-on with incumbents on the broader RCM platform. Backup: Section 36.9 Defensibility.
+  3578→
+  3579→## 43.4 Compliance Questions
+  3580→
+  3581→Q15. Is this HIPAA-compliant?
+  3582→The hackathon demo is HIPAA-adjacent, not HIPAA-compliant — it uses synthetic de-identified data only, so HIPAA does not apply to the demo or the repo. A production HIPAA-compliant version requires: (a) BAA with Google Cloud (Google Cloud offers BAA); (b) full PHI handling with encryption at rest and in transit (Cloud Run, Firestore, Cloud SQL all support this); (c) audit logging (Cloud Logging + Agent Observability provide this); (d) access controls (Firestore security rules, Cloud SQL IAM, Agent Identity per-agent credentials); (e) breach notification procedures. The architecture is designed for HIPAA compliance; the post-hackathon roadmap includes SOC 2 Type II + BAA as 6-month milestones. Backup: Section 27 Security Architecture; docs/COMPLIANCE_POSTURE.md.
+  3583→Q16. Is this medical advice?
+  3584→No. DenialDefender is decision-support, not medical advice. The appeal letter argues about insurance coverage (a contractual / regulatory matter), not about medical treatment decisions. The letter cites payer policy clauses and federal patient protections, not clinical guidelines. The HITL gate ensures the patient reviews and approves the letter before submission — the agent never sends anything autonomously. The disclaimer "DenialDefender is a decision-support tool, not a substitute for medical or legal advice" appears on every screen and in the README. Backup: PROJECTDECISIONBRIEF.md "Biggest Risk"; Section 19 Complete User Journey HITL gates.
+  3585→Q17. Who is liable if the appeal letter is wrong?
+  3586→The patient (or the clinic, in B2B context) is the legally responsible party — they review and approve the letter before submission (HITL gate #2). DenialDefender's terms of service (post-hackathon) will explicitly disclaim liability for appeal outcomes and require the user to review the letter. The Quality Review Agent's independent verification (citation accuracy, format compliance) reduces the risk of errors; the citation accuracy metric (100% verified against source corpus) is asserted in the README. For B2B clinic customers, the clinic's existing professional liability insurance covers appeal-letter submission as part of their RCM operations. Backup: Section 27 Security Architecture; docs/COMPLIANCE_POSTURE.md.
+  3587→
+  3588→## 43.5 Demo Questions
+  3589→
+  3590→Q18. What if the demo fails live?
+  3591→The demo is a pre-recorded video, not a live demo, so it cannot fail in the moment. But the recording itself could fail — we mitigate via three execution paths (live / fallback / demo-safe per Section 28). The recording is rehearsed 10+ times before final capture; if the live path fails during recording, we use the fallback path; if the fallback fails, we use the demo-safe path. The "Demo Survives a Failed API Call" test (Section 28.5) is run before recording — we kill the Gemini API key mid-run and verify the demo still completes within 90 seconds. Backup: Section 28 Reliability; Section 41 Demo Failure Plan.
+  3592→Q19. Is the demo real or canned?
+  3593→The demo video shows the live path (real Gemini calls, real pgvector queries, real Gemma/Veo/Lyria). The demo-safe path (canned data) exists as a fallback but is not used in the submitted video unless the live path fails during recording — in which case we'd be transparent about it. The README documents all three paths. The GCP proof segment of the video shows the real Cloud Run dashboard with the real denialdefender-api service. Backup: Section 28.2 Three Execution Paths.
+  3594→
+  3595→## 43.6 Ecosystem Questions
+  3596→
+  3597→Q20. Why did you use Google's stack instead of an open-source stack like LangGraph?
+  3598→Three reasons. First, the hackathon requires Google's stack (Gemini 3.5+, ADK/GenAI SDK/Antigravity/Genkit, Cloud Run/Cloud SQL/Firestore/GKE/Pub/Sub) — using LangGraph would not satisfy the rules. Second, GEAP provides primitives (Agent Identity, Memory Bank, Observability, Model Armor) that we'd have to build ourselves on an open-source stack — Google's stack is genuinely faster for this product. Third, the strategic alignment — Google's "agentic Gemini era" narrative [B-3] means DenialDefender benefits from Google's marketing and distribution (Marketplace, case study) in ways an open-source stack would not provide. Backup: Section 21.3 Architectural Choices; Section 37 Ecosystem Narrative.
+  3599→Q21. Why GEAP and not just ADK + Cloud Run?
+  3600→GEAP provides 7 components that we'd otherwise have to build or skip. Agent Identity gives per-agent scoped credentials (zero-trust security for healthcare). Memory Bank gives persistent cross-session procedural memory (the per-payer appeal letter templates). Agent Observability feeds the reasoning-trace UI directly via OpenTelemetry — this is the SurgAgent differentiator [C-5] made infrastructural. Model Armor filters prompt injection on denial letter inputs — critical for healthcare. Agent Gateway enforces egress policy. Agent Runtime powers the long-running Deadline Tracker. Agent Registry is the fleet discovery mechanism. Each component does a real job; we'd build a worse version of each ourselves. Backup: Section 21.3; Section 37.1.
+
+[showing lines 3401-3600 of 4434; use offset=3601 with limit to continue reading]

@@ -1,0 +1,232 @@
+
+--- Context around paragraph 38 ---
+    [Normal] 23. Testing & Quality Gates	23
+    [Normal] PART V — DAY-BY-DAY IMPLEMENTATION PLAN (14 DAYS)
+ >>>[Normal] 24. Day 0 — Pre-Kickoff (Aug 14)	24
+    [Normal] 25. Days 1–3 — Foundation, Evidence Corpus, Vertical Skeleton	25
+    [Normal] 26. Days 4–6 — Agents, Provenance, Decision Trace	26
+    [Normal] 27. Days 7–9 — Outcome-Learning Experiment & Adversarial Review	27
+    [Normal] 28. Days 10–12 — Governance, PHI Guard, NPI, Polish	28
+
+--- Context around paragraph 39 ---
+    [Normal] PART V — DAY-BY-DAY IMPLEMENTATION PLAN (14 DAYS)
+    [Normal] 24. Day 0 — Pre-Kickoff (Aug 14)	24
+ >>>[Normal] 25. Days 1–3 — Foundation, Evidence Corpus, Vertical Skeleton	25
+    [Normal] 26. Days 4–6 — Agents, Provenance, Decision Trace	26
+    [Normal] 27. Days 7–9 — Outcome-Learning Experiment & Adversarial Review	27
+    [Normal] 28. Days 10–12 — Governance, PHI Guard, NPI, Polish	28
+    [Normal] 29. Day 13 — Demo Lock, Dry Runs, Domain Validation	29
+
+--- Context around paragraph 42 ---
+    [Normal] 26. Days 4–6 — Agents, Provenance, Decision Trace	26
+    [Normal] 27. Days 7–9 — Outcome-Learning Experiment & Adversarial Review	27
+ >>>[Normal] 28. Days 10–12 — Governance, PHI Guard, NPI, Polish	28
+    [Normal] 29. Day 13 — Demo Lock, Dry Runs, Domain Validation	29
+    [Normal] 30. Day 14 — Final Dry Runs, Video, Submission Buffer	30
+    [Normal] 31. Daily Discipline — Standups, Risk Gates, Stopping Rules	30
+    [Normal] PART VI — DEMO & SUBMISSION
+
+--- Context around paragraph 43 ---
+    [Normal] 27. Days 7–9 — Outcome-Learning Experiment & Adversarial Review	27
+    [Normal] 28. Days 10–12 — Governance, PHI Guard, NPI, Polish	28
+ >>>[Normal] 29. Day 13 — Demo Lock, Dry Runs, Domain Validation	29
+    [Normal] 30. Day 14 — Final Dry Runs, Video, Submission Buffer	30
+    [Normal] 31. Daily Discipline — Standups, Risk Gates, Stopping Rules	30
+    [Normal] PART VI — DEMO & SUBMISSION
+    [Normal] 32. The Two-Act Demo — Second-by-Second Script	31
+
+--- Context around paragraph 44 ---
+    [Normal] 28. Days 10–12 — Governance, PHI Guard, NPI, Polish	28
+    [Normal] 29. Day 13 — Demo Lock, Dry Runs, Domain Validation	29
+ >>>[Normal] 30. Day 14 — Final Dry Runs, Video, Submission Buffer	30
+    [Normal] 31. Daily Discipline — Standups, Risk Gates, Stopping Rules	30
+    [Normal] PART VI — DEMO & SUBMISSION
+    [Normal] 32. The Two-Act Demo — Second-by-Second Script	31
+    [Normal] 33. The Second-Case Behavioral Moment	32
+
+--- Context around paragraph 113 ---
+    [Normal] Authoritative source inventory
+    [Normal] The evidence corpus is built from named, citable public sources. CMS publishes standardized denial and non-affirmation reason statements used by Medicare review contractors, which gives the triage agent a controlled vocabulary rather than free-text classification. CMS publishes public-use Medicare claims files containing non-identifiable claim-specific information, and specifically created Medicare Claims Synthetic Public Use Files (SynPUFs) so developers can work with realistic Medicare claims structures while protecting beneficiary privacy. CMS and Medicare publicly document the multi-level appeal workflow. Publicly available payer medical-policy documents are used, but frozen and versioned for the hackathon — the system never scrapes payer portals live. CMS distinguishes public-use files from identifiable data and states that public-use files do not contain PHI or PII requiring a data-use agreement, which is the clean data story cited in the demo.
+ >>>[Normal] Table 8.1 — Evidence corpus source inventory. Each source is named, tiered, and frozen or versioned for the hackathon window.
+    [Normal] Terminology discipline  Use six terms precisely and never interchangeably: synthetic (generated case), public-use (officially released non-identifiable dataset), de-identified (transformed per a de-identification standard), retrieved (external source pulled in), verified (human or deterministic check), and model-generated (AI output). The provenance architecture already distinguishes these categories; the discipline is to make the terminology visible in the UI and the Devpost copy.
+    [Normal] 9.  Provenance & Citation Architecture
+    [Normal] Provenance is elevated from a backend detail to a core product feature. Every important claim in an appeal carries a provenance card the judge can open with one click, which directly attacks the hallucination concern that sinks most LLM-in-healthcare submissions. The provenance record is a structured object, not a free-text citation, so it is machine-checkable by the Quality Review agent and human-checkable by the judge in seconds. This is the single most cost-effective credibility upgrade in the entire plan: it costs roughly one day of engineering (Day 5) and lifts the Innovation and Architecture scores simultaneously.
+
+--- Context around paragraph 187 ---
+    [Normal] Table 22.1 — Demo-failure contingency matrix. Three paths; switch in <5s; same UI either way.
+ >>>[Normal] The single most important reliability test  Run the full demo end-to-end, live, ten times in a row, on the demo laptop, over the venue's expected network, before Day 13. If it completes ten-for-ten, the demo is locked. If it does not, cut scope until it does. A reliable narrow demo beats an unreliable ambitious one every time.
+    [Normal] 23.  Testing & Quality Gates
+    [Normal] Four quality gates govern the build. A change that fails a gate is not merged, regardless of schedule pressure — the cost of a broken demo exceeds the cost of a missed feature. The gates are: a unit gate (every agent's structured-output schema is tested against the held-out cases), an integration gate (one case runs end-to-end through the real services and produces a verifiable draft), an eval gate (the before/after and ablation metrics do not regress), and a demo gate (the full two-act demo completes reliably on the demo laptop). Each gate is automated except the demo gate, which is run manually on Day 13 and Day 14 and is the stopping-rule check for the submission.
+    [Normal] Table 23.1 — Quality gates. Failing a gate blocks merge; schedule pressure does not override.
+
+--- Context around paragraph 189 ---
+    [Normal] The single most important reliability test  Run the full demo end-to-end, live, ten times in a row, on the demo laptop, over the venue's expected network, before Day 13. If it completes ten-for-ten, the demo is locked. If it does not, cut scope until it does. A reliable narrow demo beats an unreliable ambitious one every time.
+    [Normal] 23.  Testing & Quality Gates
+ >>>[Normal] Four quality gates govern the build. A change that fails a gate is not merged, regardless of schedule pressure — the cost of a broken demo exceeds the cost of a missed feature. The gates are: a unit gate (every agent's structured-output schema is tested against the held-out cases), an integration gate (one case runs end-to-end through the real services and produces a verifiable draft), an eval gate (the before/after and ablation metrics do not regress), and a demo gate (the full two-act demo completes reliably on the demo laptop). Each gate is automated except the demo gate, which is run manually on Day 13 and Day 14 and is the stopping-rule check for the submission.
+    [Normal] Table 23.1 — Quality gates. Failing a gate blocks merge; schedule pressure does not override.
+    [Normal] PART V
+
+--- Context around paragraph 195 ---
+    [Normal] PART V
+    [Normal] Day-by-Day Implementation Plan (14 Days)
+ >>>[Normal] Build window: Aug 15–28, 2026 (submission window closes Aug 31; Days 15+ are submission buffer)
+    [Normal] How to read this plan  Each day states the goal, the deliverable that proves the day succeeded, the agents/components touched, the owners (A/B/C for a 3-engineer team; merge if smaller), and the gate that must pass before the next day begins. A day's gate failing is not a delay — it is a scope-cut trigger. When a gate fails, cut the lowest-tier item on that day, do not push the failure forward.
+    [Normal] Table V.0 — 14-day schedule at a glance. Each day has a gate; a failed gate is a scope-cut trigger, not a delay.
+    [Normal] 24.  Day 0 — Pre-Kickoff (Aug 14)
+
+--- Context around paragraph 199 ---
+    [Normal] Table V.0 — 14-day schedule at a glance. Each day has a gate; a failed gate is a scope-cut trigger, not a delay.
+ >>>[Normal] 24.  Day 0 — Pre-Kickoff (Aug 14)
+    [Normal] Day 0 is today and it exists to remove every friction that would otherwise consume Day 1. The goal is that on the morning of Day 1, every engineer can write application code within thirty minutes of sitting down, with no environment, access, or dependency work remaining. The day is split between infrastructure setup, evidence acquisition, and a kick-off alignment that locks the doctrine in Part I. Nothing built on Day 0 is user-visible; everything built on Day 0 unblocks Days 1–3.
+    [List Bullet] Repo & infra: Monorepo initialized with the five-service topology (Section 19); shared-schema package scaffolded; CI skeleton runs a trivial green build.
+    [List Bullet] Cloud: GCP project provisioned; Gemini API, Cloud Run, Firestore, Cloud SQL (pgvector), Pub/Sub, Model Armor, Agent Identity, Agent Observability, Memory Bank APIs enabled; service accounts per service with least-privilege scopes.
+    [List Bullet] Evidence: Begin downloading CMS Reason Statements / eMDR codes, CMS SynPUFs samples, Medicare Appeals guidance, and 3–5 frozen payer medical-policy PDFs into data/corpus/raw/. Version-stamp each.
+
+--- Context around paragraph 200 ---
+    [Normal] 24.  Day 0 — Pre-Kickoff (Aug 14)
+ >>>[Normal] Day 0 is today and it exists to remove every friction that would otherwise consume Day 1. The goal is that on the morning of Day 1, every engineer can write application code within thirty minutes of sitting down, with no environment, access, or dependency work remaining. The day is split between infrastructure setup, evidence acquisition, and a kick-off alignment that locks the doctrine in Part I. Nothing built on Day 0 is user-visible; everything built on Day 0 unblocks Days 1–3.
+    [List Bullet] Repo & infra: Monorepo initialized with the five-service topology (Section 19); shared-schema package scaffolded; CI skeleton runs a trivial green build.
+    [List Bullet] Cloud: GCP project provisioned; Gemini API, Cloud Run, Firestore, Cloud SQL (pgvector), Pub/Sub, Model Armor, Agent Identity, Agent Observability, Memory Bank APIs enabled; service accounts per service with least-privilege scopes.
+    [List Bullet] Evidence: Begin downloading CMS Reason Statements / eMDR codes, CMS SynPUFs samples, Medicare Appeals guidance, and 3–5 frozen payer medical-policy PDFs into data/corpus/raw/. Version-stamp each.
+    [List Bullet] Alignment: Approve the 13 inviolable principles (Section 4) and the stack-selection table (Section 12); assign A/B/C owners; set the standup cadence (09:00, 17:00).
+
+--- Context around paragraph 205 ---
+    [List Bullet] Evidence: Begin downloading CMS Reason Statements / eMDR codes, CMS SynPUFs samples, Medicare Appeals guidance, and 3–5 frozen payer medical-policy PDFs into data/corpus/raw/. Version-stamp each.
+    [List Bullet] Alignment: Approve the 13 inviolable principles (Section 4) and the stack-selection table (Section 12); assign A/B/C owners; set the standup cadence (09:00, 17:00).
+ >>>[Normal] Gate: repo builds green, GCP project accepts a deploy, and at least the CMS source pages are reachable and saved locally. If a required GCP API cannot be enabled on Day 0, escalate immediately — the entire build depends on the stack in Table 12.1 and a missing API on Day 5 is a submission-threatening delay.
+    [Normal] 25.  Days 1–3 — Foundation, Evidence Corpus, Vertical Skeleton
+    [Normal] Day 1 (Aug 15) — Infrastructure, schema, skeleton
+    [Normal] Stand up the stores and the empty vertical skeleton. Firestore collections (cases, denials, outcomes, decision_trace_events) created with security rules that deny all but service-account writes. Cloud SQL pgvector schema created with the evidence and citation tables from Section 20. Pub/Sub topics (decision_trace, agent_tasks) created. The api service round-trips an empty Case through Firestore. The web app renders a blank case page over WebSocket. Deliverable: an empty case created from the UI appears in Firestore and streams a placeholder event back to the UI. Gate: empty case round-trips.
+    [Normal] Day 2 (Aug 16) — Evidence corpus v1
+
+--- Context around paragraph 206 ---
+    [List Bullet] Alignment: Approve the 13 inviolable principles (Section 4) and the stack-selection table (Section 12); assign A/B/C owners; set the standup cadence (09:00, 17:00).
+    [Normal] Gate: repo builds green, GCP project accepts a deploy, and at least the CMS source pages are reachable and saved locally. If a required GCP API cannot be enabled on Day 0, escalate immediately — the entire build depends on the stack in Table 12.1 and a missing API on Day 5 is a submission-threatening delay.
+ >>>[Normal] 25.  Days 1–3 — Foundation, Evidence Corpus, Vertical Skeleton
+    [Normal] Day 1 (Aug 15) — Infrastructure, schema, skeleton
+    [Normal] Stand up the stores and the empty vertical skeleton. Firestore collections (cases, denials, outcomes, decision_trace_events) created with security rules that deny all but service-account writes. Cloud SQL pgvector schema created with the evidence and citation tables from Section 20. Pub/Sub topics (decision_trace, agent_tasks) created. The api service round-trips an empty Case through Firestore. The web app renders a blank case page over WebSocket. Deliverable: an empty case created from the UI appears in Firestore and streams a placeholder event back to the UI. Gate: empty case round-trips.
+    [Normal] Day 2 (Aug 16) — Evidence corpus v1
+    [Normal] Run the ingest service over the raw evidence downloaded on Day 0. Each document is parsed, content-hashed, tagged with source, document, section, effective date, retrieved date, provenance tier, and status, embedded with Gemini, and written to pgvector. Target 100+ hashed, provenance-tagged evidence records by end of day. SynPUFs are used to seed realistic synthetic case structures without PHI. Deliverable: a queryable corpus with provenance cards. Gate: 100+ documents with hash + provenance; a sample citation resolves to a real document.
+
+--- Context around paragraph 207 ---
+    [Normal] Gate: repo builds green, GCP project accepts a deploy, and at least the CMS source pages are reachable and saved locally. If a required GCP API cannot be enabled on Day 0, escalate immediately — the entire build depends on the stack in Table 12.1 and a missing API on Day 5 is a submission-threatening delay.
+    [Normal] 25.  Days 1–3 — Foundation, Evidence Corpus, Vertical Skeleton
+ >>>[Normal] Day 1 (Aug 15) — Infrastructure, schema, skeleton
+    [Normal] Stand up the stores and the empty vertical skeleton. Firestore collections (cases, denials, outcomes, decision_trace_events) created with security rules that deny all but service-account writes. Cloud SQL pgvector schema created with the evidence and citation tables from Section 20. Pub/Sub topics (decision_trace, agent_tasks) created. The api service round-trips an empty Case through Firestore. The web app renders a blank case page over WebSocket. Deliverable: an empty case created from the UI appears in Firestore and streams a placeholder event back to the UI. Gate: empty case round-trips.
+    [Normal] Day 2 (Aug 16) — Evidence corpus v1
+    [Normal] Run the ingest service over the raw evidence downloaded on Day 0. Each document is parsed, content-hashed, tagged with source, document, section, effective date, retrieved date, provenance tier, and status, embedded with Gemini, and written to pgvector. Target 100+ hashed, provenance-tagged evidence records by end of day. SynPUFs are used to seed realistic synthetic case structures without PHI. Deliverable: a queryable corpus with provenance cards. Gate: 100+ documents with hash + provenance; a sample citation resolves to a real document.
+    [Normal] Day 3 (Aug 17) — Vertical slice (single-agent)
+
+--- Context around paragraph 209 ---
+    [Normal] Day 1 (Aug 15) — Infrastructure, schema, skeleton
+    [Normal] Stand up the stores and the empty vertical skeleton. Firestore collections (cases, denials, outcomes, decision_trace_events) created with security rules that deny all but service-account writes. Cloud SQL pgvector schema created with the evidence and citation tables from Section 20. Pub/Sub topics (decision_trace, agent_tasks) created. The api service round-trips an empty Case through Firestore. The web app renders a blank case page over WebSocket. Deliverable: an empty case created from the UI appears in Firestore and streams a placeholder event back to the UI. Gate: empty case round-trips.
+ >>>[Normal] Day 2 (Aug 16) — Evidence corpus v1
+    [Normal] Run the ingest service over the raw evidence downloaded on Day 0. Each document is parsed, content-hashed, tagged with source, document, section, effective date, retrieved date, provenance tier, and status, embedded with Gemini, and written to pgvector. Target 100+ hashed, provenance-tagged evidence records by end of day. SynPUFs are used to seed realistic synthetic case structures without PHI. Deliverable: a queryable corpus with provenance cards. Gate: 100+ documents with hash + provenance; a sample citation resolves to a real document.
+    [Normal] Day 3 (Aug 17) — Vertical slice (single-agent)
+    [Normal] Prove the thinnest possible end-to-end path with one agent: upload a synthetic denial → Gemini multimodal parses it to structured JSON → a single monolithic agent retrieves three citations and drafts a one-paragraph appeal → the draft renders with clickable provenance cards. This is deliberately not the final architecture; it is the vertical slice that proves the plumbing (UI → api → Firestore → pgvector → Gemini → UI) works before any multi-agent complexity is added. Deliverable: a synthetic denial produces a draft with three real citations. Gate: the slice completes reliably five times in a row. This gate is the most important early checkpoint — if it cannot be made reliable, the entire multi-agent plan is at risk and scope must be cut before Day 4.
+    [Normal] 26.  Days 4–6 — Agents, Provenance, Decision Trace
+
+--- Context around paragraph 210 ---
+    [Normal] Stand up the stores and the empty vertical skeleton. Firestore collections (cases, denials, outcomes, decision_trace_events) created with security rules that deny all but service-account writes. Cloud SQL pgvector schema created with the evidence and citation tables from Section 20. Pub/Sub topics (decision_trace, agent_tasks) created. The api service round-trips an empty Case through Firestore. The web app renders a blank case page over WebSocket. Deliverable: an empty case created from the UI appears in Firestore and streams a placeholder event back to the UI. Gate: empty case round-trips.
+    [Normal] Day 2 (Aug 16) — Evidence corpus v1
+ >>>[Normal] Run the ingest service over the raw evidence downloaded on Day 0. Each document is parsed, content-hashed, tagged with source, document, section, effective date, retrieved date, provenance tier, and status, embedded with Gemini, and written to pgvector. Target 100+ hashed, provenance-tagged evidence records by end of day. SynPUFs are used to seed realistic synthetic case structures without PHI. Deliverable: a queryable corpus with provenance cards. Gate: 100+ documents with hash + provenance; a sample citation resolves to a real document.
+    [Normal] Day 3 (Aug 17) — Vertical slice (single-agent)
+    [Normal] Prove the thinnest possible end-to-end path with one agent: upload a synthetic denial → Gemini multimodal parses it to structured JSON → a single monolithic agent retrieves three citations and drafts a one-paragraph appeal → the draft renders with clickable provenance cards. This is deliberately not the final architecture; it is the vertical slice that proves the plumbing (UI → api → Firestore → pgvector → Gemini → UI) works before any multi-agent complexity is added. Deliverable: a synthetic denial produces a draft with three real citations. Gate: the slice completes reliably five times in a row. This gate is the most important early checkpoint — if it cannot be made reliable, the entire multi-agent plan is at risk and scope must be cut before Day 4.
+    [Normal] 26.  Days 4–6 — Agents, Provenance, Decision Trace
+    [Normal] Day 4 (Aug 18) — Agents 1–3: Advocate, Triage, Policy Research
+
+--- Context around paragraph 211 ---
+    [Normal] Day 2 (Aug 16) — Evidence corpus v1
+    [Normal] Run the ingest service over the raw evidence downloaded on Day 0. Each document is parsed, content-hashed, tagged with source, document, section, effective date, retrieved date, provenance tier, and status, embedded with Gemini, and written to pgvector. Target 100+ hashed, provenance-tagged evidence records by end of day. SynPUFs are used to seed realistic synthetic case structures without PHI. Deliverable: a queryable corpus with provenance cards. Gate: 100+ documents with hash + provenance; a sample citation resolves to a real document.
+ >>>[Normal] Day 3 (Aug 17) — Vertical slice (single-agent)
+    [Normal] Prove the thinnest possible end-to-end path with one agent: upload a synthetic denial → Gemini multimodal parses it to structured JSON → a single monolithic agent retrieves three citations and drafts a one-paragraph appeal → the draft renders with clickable provenance cards. This is deliberately not the final architecture; it is the vertical slice that proves the plumbing (UI → api → Firestore → pgvector → Gemini → UI) works before any multi-agent complexity is added. Deliverable: a synthetic denial produces a draft with three real citations. Gate: the slice completes reliably five times in a row. This gate is the most important early checkpoint — if it cannot be made reliable, the entire multi-agent plan is at risk and scope must be cut before Day 4.
+    [Normal] 26.  Days 4–6 — Agents, Provenance, Decision Trace
+    [Normal] Day 4 (Aug 18) — Agents 1–3: Advocate, Triage, Policy Research
+    [Normal] Split the monolith into the first three agents under ADK. Patient Advocate owns empathetic intake and case framing. Denial Triage owns the multimodal parse and the structured denial JSON (payer, reason code, category, deadline, confidence). Policy Research owns retrieval over the corpus and clause selection. Provenance cards now render from real retrievals, not placeholders. Deliverable: triage produces a denial JSON that a human can confirm at Gate 1, and Policy Research returns three clause-cited candidates. Gate: HITL Gate 1 (confirm denial) works and blocks the pipeline until confirmed.
+
+--- Context around paragraph 227 ---
+    [Normal] Day 9 (Aug 23) — Two-case behavioral demo
+    [Normal] Construct the live two-case demonstration. Case 1 runs to a LOSS; the system updates procedural evidence. Case 2 (same payer, related denial) runs with a visibly different argument ranking, and the agent explains the change. Wire the before/after metric display so it shows the real measured delta. Deliverable: the second-case behavioral moment works live. Gate: the ranking change is attributable to the recorded outcomes (verified by reading the Memory Bank weight delta), not a hardcoded reorder. This is the single biggest strategic change from the blueprint as written (Section 13) — its gate is non-negotiable.
+ >>>[Normal] 28.  Days 10–12 — Governance, PHI Guard, NPI, Polish
+    [Normal] Day 10 (Aug 24) — PHI Guard
+    [Normal] Build the phi-guard service as the front gate. The classifier runs before any agent invocation; a block guarantees zero model calls and is logged. Construct a deliberately sensitive test document. Deliverable: the PHI Guard demo moment — synthetic case → allow; sensitive document → block with “no model invocation.” Gate: a block is provably a no-invocation event (verified in the decision trace and the audit log).
+    [Normal] Day 25 (Aug 25) — Governance: Model Armor, Identity, Observability
+    [Normal] Wire Model Armor as the second layer inside the agent fleet for prompt-injection and jailbreak defense on retrieved content. Configure Agent Identity so each agent's permissions are scoped (Quality Review cannot write appeals; Letter Drafting cannot ingest outcomes). Sink the decision-trace Pub/Sub stream into Agent Observability so every case is queryable end-to-end. Deliverable: the governance vertex of the triad (Figure 5.1) is complete. Gate: an audit query can reconstruct a full case from trace events alone.
+
+--- Context around paragraph 228 ---
+    [Normal] Construct the live two-case demonstration. Case 1 runs to a LOSS; the system updates procedural evidence. Case 2 (same payer, related denial) runs with a visibly different argument ranking, and the agent explains the change. Wire the before/after metric display so it shows the real measured delta. Deliverable: the second-case behavioral moment works live. Gate: the ranking change is attributable to the recorded outcomes (verified by reading the Memory Bank weight delta), not a hardcoded reorder. This is the single biggest strategic change from the blueprint as written (Section 13) — its gate is non-negotiable.
+    [Normal] 28.  Days 10–12 — Governance, PHI Guard, NPI, Polish
+ >>>[Normal] Day 10 (Aug 24) — PHI Guard
+    [Normal] Build the phi-guard service as the front gate. The classifier runs before any agent invocation; a block guarantees zero model calls and is logged. Construct a deliberately sensitive test document. Deliverable: the PHI Guard demo moment — synthetic case → allow; sensitive document → block with “no model invocation.” Gate: a block is provably a no-invocation event (verified in the decision trace and the audit log).
+    [Normal] Day 25 (Aug 25) — Governance: Model Armor, Identity, Observability
+    [Normal] Wire Model Armor as the second layer inside the agent fleet for prompt-injection and jailbreak defense on retrieved content. Configure Agent Identity so each agent's permissions are scoped (Quality Review cannot write appeals; Letter Drafting cannot ingest outcomes). Sink the decision-trace Pub/Sub stream into Agent Observability so every case is queryable end-to-end. Deliverable: the governance vertex of the triad (Figure 5.1) is complete. Gate: an audit query can reconstruct a full case from trace events alone.
+    [Normal] Day 12 (Aug 26) — NPI lookup, Gemma classifier, polish, UX
+
+--- Context around paragraph 230 ---
+    [Normal] Day 10 (Aug 24) — PHI Guard
+    [Normal] Build the phi-guard service as the front gate. The classifier runs before any agent invocation; a block guarantees zero model calls and is logged. Construct a deliberately sensitive test document. Deliverable: the PHI Guard demo moment — synthetic case → allow; sensitive document → block with “no model invocation.” Gate: a block is provably a no-invocation event (verified in the decision trace and the audit log).
+ >>>[Normal] Day 25 (Aug 25) — Governance: Model Armor, Identity, Observability
+    [Normal] Wire Model Armor as the second layer inside the agent fleet for prompt-injection and jailbreak defense on retrieved content. Configure Agent Identity so each agent's permissions are scoped (Quality Review cannot write appeals; Letter Drafting cannot ingest outcomes). Sink the decision-trace Pub/Sub stream into Agent Observability so every case is queryable end-to-end. Deliverable: the governance vertex of the triad (Figure 5.1) is complete. Gate: an audit query can reconstruct a full case from trace events alone.
+    [Normal] Day 12 (Aug 26) — NPI lookup, Gemma classifier, polish, UX
+    [Normal] Integrate the NPI Registry REST API for provider validation when a case contains a provider. Add the Gemma-based local citation classifier as the on-device credibility story (kept in the narrative; Veo and Lyria added as optional artifacts only if the bonus is confirmed). Polish the UX: provenance cards, decision-trace stream, HITL gates, the two-case moment, the PHI Guard banners. Run the phrase-correction grep (Table 17.1) across the repo and Devpost draft. Deliverable: the product looks finished. Gate: the three forbidden phrases are absent everywhere; NPI lookup produces a real provider record.
+    [Normal] 29.  Day 13 — Demo Lock, Dry Runs, Domain Validation
+
+--- Context around paragraph 232 ---
+    [Normal] Day 25 (Aug 25) — Governance: Model Armor, Identity, Observability
+    [Normal] Wire Model Armor as the second layer inside the agent fleet for prompt-injection and jailbreak defense on retrieved content. Configure Agent Identity so each agent's permissions are scoped (Quality Review cannot write appeals; Letter Drafting cannot ingest outcomes). Sink the decision-trace Pub/Sub stream into Agent Observability so every case is queryable end-to-end. Deliverable: the governance vertex of the triad (Figure 5.1) is complete. Gate: an audit query can reconstruct a full case from trace events alone.
+ >>>[Normal] Day 12 (Aug 26) — NPI lookup, Gemma classifier, polish, UX
+    [Normal] Integrate the NPI Registry REST API for provider validation when a case contains a provider. Add the Gemma-based local citation classifier as the on-device credibility story (kept in the narrative; Veo and Lyria added as optional artifacts only if the bonus is confirmed). Polish the UX: provenance cards, decision-trace stream, HITL gates, the two-case moment, the PHI Guard banners. Run the phrase-correction grep (Table 17.1) across the repo and Devpost draft. Deliverable: the product looks finished. Gate: the three forbidden phrases are absent everywhere; NPI lookup produces a real provider record.
+    [Normal] 29.  Day 13 — Demo Lock, Dry Runs, Domain Validation
+    [Normal] Day 13 is the day the submission stops growing and starts proving. The demo is frozen; no new features are added. The team runs the full two-act demo live, on the demo laptop, over the expected network, ten times. Each run is timed and any failure is logged. In parallel, the medical billing / RCM specialist (recruited no later than Day 3 — Section 6 of the doctrine) reviews the denial taxonomy, the evidence workflow, the appeal structure, the deadline workflow, the terminology, the human-approval boundaries, and two-to-three generated appeals; their three concrete changes are logged as a “Domain Validation” artifact. Deliverable: 10/10 reliable demo runs and a logged domain-validation record. Gate: the 10x test passes; if it does not, cut the lowest-tier item and retest — do not proceed to Day 14 with a flaky demo.
+    [Normal] Domain validation as a product feature  Do not merely list the advisor in the README. Ship a “Domain Validation” panel: reviewed by a medical billing specialist; validated (denial taxonomy, appeal workflow, evidence requirements, deadline handling); changed (the three concrete edits). “We didn't invent this workflow — a specialist reviewed it and changed these three things” is domain credibility no competitor can fake in 14 days.
+
+--- Context around paragraph 234 ---
+    [Normal] Day 12 (Aug 26) — NPI lookup, Gemma classifier, polish, UX
+    [Normal] Integrate the NPI Registry REST API for provider validation when a case contains a provider. Add the Gemma-based local citation classifier as the on-device credibility story (kept in the narrative; Veo and Lyria added as optional artifacts only if the bonus is confirmed). Polish the UX: provenance cards, decision-trace stream, HITL gates, the two-case moment, the PHI Guard banners. Run the phrase-correction grep (Table 17.1) across the repo and Devpost draft. Deliverable: the product looks finished. Gate: the three forbidden phrases are absent everywhere; NPI lookup produces a real provider record.
+ >>>[Normal] 29.  Day 13 — Demo Lock, Dry Runs, Domain Validation
+    [Normal] Day 13 is the day the submission stops growing and starts proving. The demo is frozen; no new features are added. The team runs the full two-act demo live, on the demo laptop, over the expected network, ten times. Each run is timed and any failure is logged. In parallel, the medical billing / RCM specialist (recruited no later than Day 3 — Section 6 of the doctrine) reviews the denial taxonomy, the evidence workflow, the appeal structure, the deadline workflow, the terminology, the human-approval boundaries, and two-to-three generated appeals; their three concrete changes are logged as a “Domain Validation” artifact. Deliverable: 10/10 reliable demo runs and a logged domain-validation record. Gate: the 10x test passes; if it does not, cut the lowest-tier item and retest — do not proceed to Day 14 with a flaky demo.
+    [Normal] Domain validation as a product feature  Do not merely list the advisor in the README. Ship a “Domain Validation” panel: reviewed by a medical billing specialist; validated (denial taxonomy, appeal workflow, evidence requirements, deadline handling); changed (the three concrete edits). “We didn't invent this workflow — a specialist reviewed it and changed these three things” is domain credibility no competitor can fake in 14 days.
+    [Normal] 30.  Day 14 — Final Dry Runs, Video, Submission Buffer
+    [Normal] Record the demo video (the 90-second core plus the extended technical cut). Finalize the Devpost description with the doctrine, the architecture, the measured results (ablation + before/after), the domain-validation panel, and the claims-discipline language. Run three more full dry runs to confirm Day 13 reliability holds. Submit no later than Aug 30, keeping Aug 31 as a hard contingency buffer for last-minute portal issues. Deliverable: a submitted, reliable, measured, domain-validated entry. Gate: submission confirmed on Devpost; the repo is public and the GCP proof-of-deployment URL is in the description.
+
+--- Context around paragraph 235 ---
+    [Normal] Integrate the NPI Registry REST API for provider validation when a case contains a provider. Add the Gemma-based local citation classifier as the on-device credibility story (kept in the narrative; Veo and Lyria added as optional artifacts only if the bonus is confirmed). Polish the UX: provenance cards, decision-trace stream, HITL gates, the two-case moment, the PHI Guard banners. Run the phrase-correction grep (Table 17.1) across the repo and Devpost draft. Deliverable: the product looks finished. Gate: the three forbidden phrases are absent everywhere; NPI lookup produces a real provider record.
+    [Normal] 29.  Day 13 — Demo Lock, Dry Runs, Domain Validation
+ >>>[Normal] Day 13 is the day the submission stops growing and starts proving. The demo is frozen; no new features are added. The team runs the full two-act demo live, on the demo laptop, over the expected network, ten times. Each run is timed and any failure is logged. In parallel, the medical billing / RCM specialist (recruited no later than Day 3 — Section 6 of the doctrine) reviews the denial taxonomy, the evidence workflow, the appeal structure, the deadline workflow, the terminology, the human-approval boundaries, and two-to-three generated appeals; their three concrete changes are logged as a “Domain Validation” artifact. Deliverable: 10/10 reliable demo runs and a logged domain-validation record. Gate: the 10x test passes; if it does not, cut the lowest-tier item and retest — do not proceed to Day 14 with a flaky demo.
+    [Normal] Domain validation as a product feature  Do not merely list the advisor in the README. Ship a “Domain Validation” panel: reviewed by a medical billing specialist; validated (denial taxonomy, appeal workflow, evidence requirements, deadline handling); changed (the three concrete edits). “We didn't invent this workflow — a specialist reviewed it and changed these three things” is domain credibility no competitor can fake in 14 days.
+    [Normal] 30.  Day 14 — Final Dry Runs, Video, Submission Buffer
+    [Normal] Record the demo video (the 90-second core plus the extended technical cut). Finalize the Devpost description with the doctrine, the architecture, the measured results (ablation + before/after), the domain-validation panel, and the claims-discipline language. Run three more full dry runs to confirm Day 13 reliability holds. Submit no later than Aug 30, keeping Aug 31 as a hard contingency buffer for last-minute portal issues. Deliverable: a submitted, reliable, measured, domain-validated entry. Gate: submission confirmed on Devpost; the repo is public and the GCP proof-of-deployment URL is in the description.
+    [Normal] 31.  Daily Discipline — Standups, Risk Gates, Stopping Rules
+
+--- Context around paragraph 237 ---
+    [Normal] Day 13 is the day the submission stops growing and starts proving. The demo is frozen; no new features are added. The team runs the full two-act demo live, on the demo laptop, over the expected network, ten times. Each run is timed and any failure is logged. In parallel, the medical billing / RCM specialist (recruited no later than Day 3 — Section 6 of the doctrine) reviews the denial taxonomy, the evidence workflow, the appeal structure, the deadline workflow, the terminology, the human-approval boundaries, and two-to-three generated appeals; their three concrete changes are logged as a “Domain Validation” artifact. Deliverable: 10/10 reliable demo runs and a logged domain-validation record. Gate: the 10x test passes; if it does not, cut the lowest-tier item and retest — do not proceed to Day 14 with a flaky demo.
+    [Normal] Domain validation as a product feature  Do not merely list the advisor in the README. Ship a “Domain Validation” panel: reviewed by a medical billing specialist; validated (denial taxonomy, appeal workflow, evidence requirements, deadline handling); changed (the three concrete edits). “We didn't invent this workflow — a specialist reviewed it and changed these three things” is domain credibility no competitor can fake in 14 days.
+ >>>[Normal] 30.  Day 14 — Final Dry Runs, Video, Submission Buffer
+    [Normal] Record the demo video (the 90-second core plus the extended technical cut). Finalize the Devpost description with the doctrine, the architecture, the measured results (ablation + before/after), the domain-validation panel, and the claims-discipline language. Run three more full dry runs to confirm Day 13 reliability holds. Submit no later than Aug 30, keeping Aug 31 as a hard contingency buffer for last-minute portal issues. Deliverable: a submitted, reliable, measured, domain-validated entry. Gate: submission confirmed on Devpost; the repo is public and the GCP proof-of-deployment URL is in the description.
+    [Normal] 31.  Daily Discipline — Standups, Risk Gates, Stopping Rules
+    [Normal] A 14-day build with this many moving parts fails not from lack of talent but from lack of discipline. Three practices keep the build honest: a morning standup that confirms the day's gate, an evening standup that confirms the gate passed or a scope-cut was made, and a live-updating risk register that tracks every open issue against a day number. The stopping rule is explicit: if by end of Day 9 the vertical slice is not reliable and the outcome-learning experiment has not produced an honest before/after table, the team reduces scope to the Tier-S list (Section 38) and ships the most undeniable narrow version rather than gambling the submission on a wider, unreliable one. The blueprint's fallback discipline is correct here: if the core cannot be made reliable, reduce scope rather than gamble.
+    [Normal] Table 31.1 — Daily discipline. The stopping rule on Day 9 is the submission's safety net.
+
+--- Context around paragraph 238 ---
+    [Normal] Domain validation as a product feature  Do not merely list the advisor in the README. Ship a “Domain Validation” panel: reviewed by a medical billing specialist; validated (denial taxonomy, appeal workflow, evidence requirements, deadline handling); changed (the three concrete edits). “We didn't invent this workflow — a specialist reviewed it and changed these three things” is domain credibility no competitor can fake in 14 days.
+    [Normal] 30.  Day 14 — Final Dry Runs, Video, Submission Buffer
+ >>>[Normal] Record the demo video (the 90-second core plus the extended technical cut). Finalize the Devpost description with the doctrine, the architecture, the measured results (ablation + before/after), the domain-validation panel, and the claims-discipline language. Run three more full dry runs to confirm Day 13 reliability holds. Submit no later than Aug 30, keeping Aug 31 as a hard contingency buffer for last-minute portal issues. Deliverable: a submitted, reliable, measured, domain-validated entry. Gate: submission confirmed on Devpost; the repo is public and the GCP proof-of-deployment URL is in the description.
+    [Normal] 31.  Daily Discipline — Standups, Risk Gates, Stopping Rules
+    [Normal] A 14-day build with this many moving parts fails not from lack of talent but from lack of discipline. Three practices keep the build honest: a morning standup that confirms the day's gate, an evening standup that confirms the gate passed or a scope-cut was made, and a live-updating risk register that tracks every open issue against a day number. The stopping rule is explicit: if by end of Day 9 the vertical slice is not reliable and the outcome-learning experiment has not produced an honest before/after table, the team reduces scope to the Tier-S list (Section 38) and ships the most undeniable narrow version rather than gambling the submission on a wider, unreliable one. The blueprint's fallback discipline is correct here: if the core cannot be made reliable, reduce scope rather than gamble.
+    [Normal] Table 31.1 — Daily discipline. The stopping rule on Day 9 is the submission's safety net.
+
+--- Context around paragraph 247 ---
+    [Normal] Demo & Submission
+    [Normal] 32.  The Two-Act Demo — Second-by-Second Script
+ >>>[Normal] The blueprint's four-minute script is too busy — it tries to demonstrate denial, triage, policy, evidence, letter, quality, HITL, deadlines, learning, a clinic dashboard, and the Google stack, which leaves no time for any single moment to land. The corrected demo is a sharper two-act structure: Act I fights the denial (the primary wow), Act II learns from the outcome (the secondary wow), and only the final twenty seconds survey the architecture. The script below is timed to the second and is the single document the operator rehearses to ten-for-ten reliability on Day 13.
+    [Normal] Table 32.1 — The two-act demo, second-by-second. Act I (0:00–2:30) fights the denial; Act II (2:30–3:20) learns from the outcome; the final 40 seconds survey architecture and close.
+    [Normal] Demo discipline  Act I is the primary wow — the 90-second transformation. Act II is the secondary wow — observable learning. Only the final twenty seconds survey the stack, because “look how many Google products we used” is not a wow. The PHI Guard moment (3:20–3:40) is the security wow and must be truthful: a block means no model invocation, provable in the trace.
+    [Normal] 33.  The Second-Case Behavioral Moment
+
+--- Context around paragraph 254 ---
+    [Normal] This is the strongest single recommendation in the entire document and the moment the demo must not omit. Showing “outcome → weight changed” is weak; showing Case 1 (argument order A, B, C; outcome LOSS) followed by Case 2 (same payer, related denial; argument order now C, A, B) with the agent explaining “this ranking changed because two previous validated outcomes favored Argument C” is actual observable learning. A judge understands it instantly, and it is materially harder to fake than a green animation because the ranking must be attributable to a real weight delta in Memory Bank. Before/after metric is shown only if it was measured; an unmeasured number is never displayed on screen, because a single fabricated number collapses the credibility of every other number in the submission.
+    [Normal] 34.  Three Forbidden Phrases — Claims Discipline
+ >>>[Normal] Three phrases must disappear from every artifact: “every agent's reasoning visible,” “winning appeal,” and “HIPAA does not apply.” They are replaced by “decision trace,” “evidence-backed appeal draft,” and “prototype intentionally processes no PHI” respectively (Table 17.1). The discipline is enforced by a pre-submission grep of the repository and the Devpost copy on Day 12 and again on Day 14. These three changes materially improve credibility at zero engineering cost, because they replace overclaims with scoped, defensible statements that an attacker cannot refute without arguing against an explicit scope.
+    [Normal] 35.  Devpost & Repository Hygiene
+    [Normal] The Devpost description should spend its space on what happens technically, not on business projections. The blueprint's market-size, ARR, seed-round, and Year-5-incumbent projections are useful internally but are not what the rubric rewards; keep the business thesis to one concise section. The bulk of the description should cover the triad architecture, the eight-agent necessity (with the ablation table), the measured outcome-learning results, the PHI Guard, the provenance system, and the domain-validation panel. The repository is public and clean: a README that opens with the doctrine, an architecture diagram, a reproducible eval command (make eval) that regenerates the metrics tables, and a proof-of-deployment Cloud Run URL. Every claim in the Devpost copy is either measured, scoped, or removed.
+    [Normal] Table 35.1 — Devpost hygiene. Spend the space on what happens technically; keep business to one section.

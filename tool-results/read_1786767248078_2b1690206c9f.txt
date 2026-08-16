@@ -1,0 +1,668 @@
+     1→     1→'use client';
+     2→     2→
+     3→     3→/**
+     4→     4→ * DenialDefender — Day 8 Panel: Before/After Experiment + Agent Ablation
+     5→     5→ *
+     6→     6→ * Day 8 features:
+     7→     7→ * 1. Before/After Delta Table — 50 outcomes ingested, weights updated, re-scored
+     8→     8→ * 2. Agent Ablation Table (Table 7.1) — 4 topologies on 10 held-out cases
+     9→     9→ * 3. Gate Status — honest reporting (Principle 5)
+    10→    10→ * 4. Outcome Learning visualization
+    11→    11→ *
+    12→    12→ * Per Blueprint: "Both killer tables exist as real numbers."
+    13→    13→ * Gate: "The before/after table is honest — if the delta is negative on any
+    14→    14→ * metric, that is reported, not hidden."
+    15→    15→ */
+    16→    16→
+    17→    17→import React, { useState, useCallback } from 'react';
+    18→    18→import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+    19→    19→import { Button } from '@/components/ui/button';
+    20→    20→import { Badge } from '@/components/ui/badge';
+    21→    21→import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+    22→    22→import { Progress } from '@/components/ui/progress';
+    23→    23→import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+    24→    24→import { Separator } from '@/components/ui/separator';
+    25→    25→import {
+    26→    26→  FlaskConical, CheckCircle2, XCircle, ArrowRight, Play, TrendingUp,
+    27→    27→  TrendingDown, Minus, Shield, BarChart3, Target, GitBranch, Loader2,
+    28→    28→  AlertTriangle, Activity, Database, Eye, Scale, Users, Zap,
+    29→    29→  ChevronDown, ChevronUp, ArrowUpRight, ArrowDownRight, MinusCircle,
+    30→    30→} from 'lucide-react';
+    31→    31→
+    32→    32→// ─── Types ────────────────────────────────────────────────────────────────
+    33→    33→
+    34→    34→interface BeforeAfterDelta {
+    35→    35→  metric: string;
+    36→    36→  metricLabel: string;
+    37→    37→  beforeValue: number;
+    38→    38→  afterValue: number;
+    39→    39→  delta: number;
+    40→    40→  deltaPercent: number;
+    41→    41→  improved: boolean;
+    42→    42→  honest: boolean;
+    43→    43→}
+    44→    44→
+    45→    45→interface AblationTopology {
+    46→    46→  topology: string;
+    47→    47→  label: string;
+    48→    48→  description: string;
+    49→    49→  agentCount: number;
+    50→    50→  agentsIncluded: string[];
+    51→    51→  aggregate: {
+    52→    52→    citationGrounding: number;
+    53→    53→    citationGroundingPercent: number;
+    54→    54→    unsupportedClaims: number;
+    55→    55→    unsupportedClaimsLevel: string;
+    56→    56→    verdict: string;
+    57→    57→    top1Accuracy: number;
+    58→    58→    top3Accuracy: number;
+    59→    59→    appealQuality: number;
+    60→    60→    argumentSelection: number;
+    61→    61→  };
+    62→    62→  caseCount: number;
+    63→    63→  caseErrors: number;
+    64→    64→}
+    65→    65→
+    66→    66→interface BeforeAfterResult {
+    67→    67→  deltas: BeforeAfterDelta[];
+    68→    68→  beforeSnapshot: { runId: string; timestamp: string; aggregateMetrics: Record<string, number> };
+    69→    69→  afterSnapshot: { runId: string; timestamp: string; aggregateMetrics: Record<string, number> };
+    70→    70→  outcomeIngestion: { totalRecords: number; successful: number; failed: number; totalWeightUpdates: number; memoryBankStatus: string };
+    71→    71→  outcomeSources: { public: number; synthetic: number; total: number };
+    72→    72→  gatePassed: boolean;
+    73→    73→  gateDetails: string;
+    74→    74→  durationMs: number;
+    75→    75→}
+    76→    76→
+    77→    77→interface AblationResult {
+    78→    78→  topologies: AblationTopology[];
+    79→    79→  totalCases: number;
+    80→    80→  gatePassed: boolean;
+    81→    81→  gateDetails: string;
+    82→    82→  durationMs: number;
+    83→    83→}
+    84→    84→
+    85→    85→// ─── Component ────────────────────────────────────────────────────────────
+    86→    86→
+    87→    87→export default function Day8ExperimentPanel() {
+    88→    88→  const [activeTab, setActiveTab] = useState('before-after');
+    89→    89→  const [beforeAfterResult, setBeforeAfterResult] = useState<BeforeAfterResult | null>(null);
+    90→    90→  const [ablationResult, setAblationResult] = useState<AblationResult | null>(null);
+    91→    91→  const [runningBA, setRunningBA] = useState(false);
+    92→    92→  const [runningAblation, setRunningAblation] = useState(false);
+    93→    93→  const [expandedCase, setExpandedCase] = useState<string | null>(null);
+    94→    94→
+    95→    95→  // ─── Run Before/After Experiment ──────────────────────────────────────
+    96→    96→
+    97→    97→  const runBeforeAfter = useCallback(async (quick: boolean = true) => {
+    98→    98→    setRunningBA(true);
+    99→    99→    try {
+   100→   100→      const res = await fetch('/api/eval/before-after', {
+   101→   101→        method: 'POST',
+   102→   102→        headers: { 'Content-Type': 'application/json' },
+   103→   103→        body: JSON.stringify({ quick }),
+   104→   104→      });
+   105→   105→      const data = await res.json();
+   106→   106→      if (data.success) {
+   107→   107→        setBeforeAfterResult(data.experiment);
+   108→   108→      }
+   109→   109→    } catch (e) {
+   110→   110→      console.error('Before/after experiment failed:', e);
+   111→   111→    } finally {
+   112→   112→      setRunningBA(false);
+   113→   113→    }
+   114→   114→  }, []);
+   115→   115→
+   116→   116→  // ─── Run Ablation Experiment ─────────────────────────────────────────
+   117→   117→
+   118→   118→  const runAblation = useCallback(async (quick: boolean = true) => {
+   119→   119→    setRunningAblation(true);
+   120→   120→    try {
+   121→   121→      const res = await fetch('/api/eval/ablation', {
+   122→   122→        method: 'POST',
+   123→   123→        headers: { 'Content-Type': 'application/json' },
+   124→   124→        body: JSON.stringify({ quick }),
+   125→   125→      });
+   126→   126→      const data = await res.json();
+   127→   127→      if (data.success) {
+   128→   128→        setAblationResult(data.experiment);
+   129→   129→      }
+   130→   130→    } catch (e) {
+   131→   131→      console.error('Ablation experiment failed:', e);
+   132→   132→    } finally {
+   133→   133→      setRunningAblation(false);
+   134→   134→    }
+   135→   135→  }, []);
+   136→   136→
+   137→   137→  // ─── Run Both Experiments ─────────────────────────────────────────────
+   138→   138→
+   139→   139→  const runBoth = useCallback(async () => {
+   140→   140→    await Promise.all([runBeforeAfter(true), runAblation(true)]);
+   141→   141→  }, [runBeforeAfter, runAblation]);
+   142→   142→
+   143→   143→  // ─── Delta Icon ───────────────────────────────────────────────────────
+   144→   144→
+   145→   145→  const DeltaIcon = ({ delta }: { delta: number }) => {
+   146→   146→    if (delta > 0) return <ArrowUpRight className="h-4 w-4 text-emerald-500" />;
+   147→   147→    if (delta < 0) return <ArrowDownRight className="h-4 w-4 text-red-500" />;
+   148→   148→    return <MinusCircle className="h-4 w-4 text-amber-500" />;
+   149→   149→  };
+   150→   150→
+   151→   151→  const DeltaColor = ({ delta }: { delta: number }) => {
+   152→   152→    if (delta > 0) return 'text-emerald-600';
+   153→   153→    if (delta < 0) return 'text-red-600';
+   154→   154→    return 'text-amber-600';
+   155→   155→  };
+   156→   156→
+   157→   157→  // ─── Unsupported Claims Color ─────────────────────────────────────────
+   158→   158→
+   159→   159→  const claimsLevelColor = (level: string) => {
+   160→   160→    switch (level) {
+   161→   161→      case 'near-zero': return 'bg-emerald-100 text-emerald-800';
+   162→   162→      case 'low': return 'bg-lime-100 text-lime-800';
+   163→   163→      case 'medium': return 'bg-amber-100 text-amber-800';
+   164→   164→      case 'high': return 'bg-red-100 text-red-800';
+   165→   165→      default: return 'bg-gray-100 text-gray-800';
+   166→   166→    }
+   167→   167→  };
+   168→   168→
+   169→   169→  const groundingColor = (pct: number) => {
+   170→   170→    if (pct >= 94) return 'text-emerald-600';
+   171→   171→    if (pct >= 88) return 'text-lime-600';
+   172→   172→    if (pct >= 80) return 'text-amber-600';
+   173→   173→    return 'text-red-600';
+   174→   174→  };
+   175→   175→
+   176→   176→  return (
+   177→   177→    <div className="space-y-6">
+   178→   178→      {/* ─── Header ──────────────────────────────────────────────────── */}
+   179→   179→      <Card>
+   180→   180→        <CardHeader>
+   181→   181→          <div className="flex items-center justify-between">
+   182→   182→            <div>
+   183→   183→              <CardTitle className="flex items-center gap-2">
+   184→   184→                <FlaskConical className="h-5 w-5 text-violet-500" />
+   185→   185→                Day 8: Before/After Experiment + Agent Ablation
+   186→   186→              </CardTitle>
+   187→   187→              <CardDescription className="mt-1">
+   188→   188→                Outcome Learning measured, not claimed. Both killer tables exist as real numbers.
+   189→   189→              </CardDescription>
+   190→   190→            </div>
+   191→   191→            <div className="flex gap-2">
+   192→   192→              <Button
+   193→   193→                onClick={runBoth}
+   194→   194→                disabled={runningBA || runningAblation}
+   195→   195→                size="sm"
+   196→   196→                className="bg-violet-600 hover:bg-violet-700"
+   197→   197→              >
+   198→   198→                {(runningBA || runningAblation) ? (
+   199→   199→                  <><Loader2 className="h-4 w-4 animate-spin mr-1" /> Running...</>
+   200→   200→                ) : (
+   201→   201→                  <><Play className="h-4 w-4 mr-1" /> Run Both Experiments</>
+   202→   202→                )}
+   203→   203→              </Button>
+   204→   204→            </div>
+   205→   205→          </div>
+   206→   206→        </CardHeader>
+   207→   207→        <CardContent>
+   208→   208→          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+   209→   209→            <div className="flex items-center gap-2 p-3 rounded-lg bg-violet-50 border border-violet-200">
+   210→   210→              <Database className="h-4 w-4 text-violet-500" />
+   211→   211→              <div>
+   212→   212→                <div className="font-medium">50 Outcome Records</div>
+   213→   213→                <div className="text-muted-foreground">5 public + 45 synthetic controlled</div>
+   214→   214→              </div>
+   215→   215→            </div>
+   216→   216→            <div className="flex items-center gap-2 p-3 rounded-lg bg-emerald-50 border border-emerald-200">
+   217→   217→              <Target className="h-4 w-4 text-emerald-500" />
+   218→   218→              <div>
+   219→   219→                <div className="font-medium">10 Held-Out Cases</div>
+   220→   220→                <div className="text-muted-foreground">Scored before &amp; after learning</div>
+   221→   221→              </div>
+   222→   222→            </div>
+   223→   223→            <div className="flex items-center gap-2 p-3 rounded-lg bg-amber-50 border border-amber-200">
+   224→   224→              <Scale className="h-4 w-4 text-amber-500" />
+   225→   225→              <div>
+   226→   226→                <div className="font-medium">4 Ablation Topologies</div>
+   227→   227→                <div className="text-muted-foreground">Single → 3 → 5 → 8 agent</div>
+   228→   228→              </div>
+   229→   229→            </div>
+   230→   230→          </div>
+   231→   231→
+   232→   232→          {/* Principle 5 Banner */}
+   233→   233→          <Alert className="mt-4 border-amber-200 bg-amber-50">
+   234→   234→            <Eye className="h-4 w-4 text-amber-600" />
+   235→   235→            <AlertTitle className="text-amber-800">Principle 5: Honest Reporting</AlertTitle>
+   236→   236→            <AlertDescription className="text-amber-700">
+   237→   237→              A measured non-improvement is more credible than an inflated claim.
+   238→   238→              If the delta is negative on any metric, it is reported, not hidden.
+   239→   239→            </AlertDescription>
+   240→   240→          </Alert>
+   241→   241→        </CardContent>
+   242→   242→      </Card>
+   243→   243→
+   244→   244→      {/* ─── Tabs ──────────────────────────────────────────────────────── */}
+   245→   245→      <Tabs value={activeTab} onValueChange={setActiveTab}>
+   246→   246→        <TabsList className="grid w-full grid-cols-2">
+   247→   247→          <TabsTrigger value="before-after" className="flex items-center gap-1">
+   248→   248→            <TrendingUp className="h-4 w-4" /> Before/After Delta Table
+   249→   249→          </TabsTrigger>
+   250→   250→          <TabsTrigger value="ablation" className="flex items-center gap-1">
+   251→   251→            <GitBranch className="h-4 w-4" /> Agent Ablation (Table 7.1)
+   252→   252→          </TabsTrigger>
+   253→   253→        </TabsList>
+   254→   254→
+   255→   255→        {/* ─── Before/After Tab ──────────────────────────────────────── */}
+   256→   256→        <TabsContent value="before-after" className="space-y-4">
+   257→   257→          {!beforeAfterResult ? (
+   258→   258→            <Card>
+   259→   259→              <CardContent className="py-12 text-center">
+   260→   260→                <FlaskConical className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+   261→   261→                <h3 className="text-lg font-semibold mb-2">Before/After Experiment</h3>
+   262→   262→                <p className="text-muted-foreground mb-4 max-w-md mx-auto">
+   263→   263→                  Ingest 50 outcome records, update procedural-evidence weights,
+   264→   264→                  and re-score the same 10 held-out cases to measure the learning delta.
+   265→   265→                </p>
+   266→   266→                <Button
+   267→   267→                  onClick={() => runBeforeAfter(true)}
+   268→   268→                  disabled={runningBA}
+   269→   269→                  className="bg-violet-600 hover:bg-violet-700"
+   270→   270→                >
+   271→   271→                  {runningBA ? (
+   272→   272→                    <><Loader2 className="h-4 w-4 animate-spin mr-1" /> Running Experiment...</>
+   273→   273→                  ) : (
+   274→   274→                    <><Play className="h-4 w-4 mr-1" /> Run Before/After</>
+   275→   275→                  )}
+   276→   276→                </Button>
+   277→   277→              </CardContent>
+   278→   278→            </Card>
+   279→   279→          ) : (
+   280→   280→            <>
+   281→   281→              {/* Outcome Ingestion Summary */}
+   282→   282→              <Card>
+   283→   283→                <CardHeader>
+   284→   284→                  <CardTitle className="text-base flex items-center gap-2">
+   285→   285→                    <Database className="h-4 w-4 text-violet-500" />
+   286→   286→                    Outcome Ingestion Summary
+   287→   287→                  </CardTitle>
+   288→   288→                </CardHeader>
+   289→   289→                <CardContent>
+   290→   290→                  <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-sm">
+   291→   291→                    <div className="p-3 rounded-lg bg-slate-50 border">
+   292→   292→                      <div className="text-muted-foreground">Public Records</div>
+   293→   293→                      <div className="font-bold text-lg">{beforeAfterResult.outcomeSources.public}</div>
+   294→   294→                    </div>
+   295→   295→                    <div className="p-3 rounded-lg bg-slate-50 border">
+   296→   296→                      <div className="text-muted-foreground">Synthetic</div>
+   297→   297→                      <div className="font-bold text-lg">{beforeAfterResult.outcomeSources.synthetic}</div>
+   298→   298→                    </div>
+   299→   299→                    <div className="p-3 rounded-lg bg-slate-50 border">
+   300→   300→                      <div className="text-muted-foreground">Total Ingested</div>
+   301→   301→                      <div className="font-bold text-lg">{beforeAfterResult.outcomeIngestion.totalRecords}</div>
+   302→   302→                    </div>
+   303→   303→                    <div className="p-3 rounded-lg bg-slate-50 border">
+   304→   304→                      <div className="text-muted-foreground">Weight Updates</div>
+   305→   305→                      <div className="font-bold text-lg">{beforeAfterResult.outcomeIngestion.totalWeightUpdates}</div>
+   306→   306→                    </div>
+   307→   307→                    <div className="p-3 rounded-lg bg-slate-50 border">
+   308→   308→                      <div className="text-muted-foreground">Memory Bank</div>
+   309→   309→                      <div className="font-bold text-lg">{beforeAfterResult.outcomeIngestion.memoryBankStatus}</div>
+   310→   310→                    </div>
+   311→   311→                  </div>
+   312→   312→                  <div className="mt-3 text-xs text-muted-foreground">
+   313→   313→                    Per Blueprint: &quot;never &apos;50 fake wins&apos;&quot; — 5 public (CMS MA appeal data) + 45 synthetic controlled cases
+   314→   314→                  </div>
+   315→   315→                </CardContent>
+   316→   316→              </Card>
+   317→   317→
+   318→   318→              {/* ─── The Killer Table: Before/After Delta ────────────────── */}
+   319→   319→              <Card>
+   320→   320→                <CardHeader>
+   321→   321→                  <CardTitle className="text-base flex items-center gap-2">
+   322→   322→                    <BarChart3 className="h-4 w-4 text-emerald-500" />
+   323→   323→                    Before/After Delta Table — The Killer Table
+   324→   324→                  </CardTitle>
+   325→   325→                  <CardDescription>
+   326→   326→                    Five metrics measured before and after outcome learning on 10 held-out cases
+   327→   327→                  </CardDescription>
+   328→   328→                </CardHeader>
+   329→   329→                <CardContent>
+   330→   330→                  <div className="overflow-x-auto">
+   331→   331→                    <table className="w-full text-sm">
+   332→   332→                      <thead>
+   333→   333→                        <tr className="border-b">
+   334→   334→                          <th className="text-left py-2 px-3 font-medium">Metric</th>
+   335→   335→                          <th className="text-right py-2 px-3 font-medium">Before</th>
+   336→   336→                          <th className="text-right py-2 px-3 font-medium">After</th>
+   337→   337→                          <th className="text-right py-2 px-3 font-medium">Delta</th>
+   338→   338→                          <th className="text-right py-2 px-3 font-medium">Delta %</th>
+   339→   339→                          <th className="text-center py-2 px-3 font-medium">Direction</th>
+   340→   340→                        </tr>
+   341→   341→                      </thead>
+   342→   342→                      <tbody>
+   343→   343→                        {beforeAfterResult.deltas.map((d) => (
+   344→   344→                          <tr key={d.metric} className="border-b hover:bg-muted/50">
+   345→   345→                            <td className="py-2 px-3 font-medium">{d.metricLabel}</td>
+   346→   346→                            <td className="py-2 px-3 text-right tabular-nums">
+   347→   347→                              {(d.beforeValue * 100).toFixed(1)}%
+   348→   348→                            </td>
+   349→   349→                            <td className="py-2 px-3 text-right tabular-nums">
+   350→   350→                              {(d.afterValue * 100).toFixed(1)}%
+   351→   351→                            </td>
+   352→   352→                            <td className={`py-2 px-3 text-right tabular-nums font-bold ${DeltaColor({ delta: d.delta })}`}>
+   353→   353→                              {d.delta > 0 ? '+' : ''}{(d.delta * 100).toFixed(1)}%
+   354→   354→                            </td>
+   355→   355→                            <td className={`py-2 px-3 text-right tabular-nums ${DeltaColor({ delta: d.delta })}`}>
+   356→   356→                              {d.deltaPercent > 0 ? '+' : ''}{d.deltaPercent.toFixed(1)}%
+   357→   357→                            </td>
+   358→   358→                            <td className="py-2 px-3 text-center">
+   359→   359→                              <DeltaIcon delta={d.delta} />
+   360→   360→                            </td>
+   361→   361→                          </tr>
+   362→   362→                        ))}
+   363→   363→                      </tbody>
+   364→   364→                    </table>
+   365→   365→                  </div>
+   366→   366→
+   367→   367→                  {/* Honesty Badge */}
+   368→   368→                  <div className="mt-4 flex items-center gap-3">
+   369→   369→                    <Badge
+   370→   370→                      variant="outline"
+   371→   371→                      className="bg-emerald-50 text-emerald-700 border-emerald-200"
+   372→   372→                    >
+   373→   373→                      <CheckCircle2 className="h-3 w-3 mr-1" />
+   374→   374→                      HONEST REPORTING (Principle 5)
+   375→   375→                    </Badge>
+   376→   376→                    {beforeAfterResult.deltas.some(d => d.delta < 0) ? (
+   377→   377→                      <span className="text-xs text-amber-600">
+   378→   378→                        Negative deltas reported honestly — more credible than inflated claims
+   379→   379→                      </span>
+   380→   380→                    ) : (
+   381→   381→                      <span className="text-xs text-emerald-600">
+   382→   382→                        All metrics improved after outcome learning
+   383→   383→                      </span>
+   384→   384→                    )}
+   385→   385→                  </div>
+   386→   386→                </CardContent>
+   387→   387→              </Card>
+   388→   388→
+   389→   389→              {/* Gate Status */}
+   390→   390→              <Card>
+   391→   391→                <CardHeader>
+   392→   392→                  <CardTitle className="text-base flex items-center gap-2">
+   393→   393→                    <Shield className="h-4 w-4 text-amber-500" />
+   394→   394→                    Before/After Gate Status
+   395→   395→                  </CardTitle>
+   396→   396→                </CardHeader>
+   397→   397→                <CardContent>
+   398→   398→                  <div className="flex items-center gap-3">
+   399→   399→                    <CheckCircle2 className={`h-6 w-6 ${beforeAfterResult.gatePassed ? 'text-emerald-500' : 'text-red-500'}`} />
+   400→   400→                    <div>
+   401→   401→                      <div className={`font-bold ${beforeAfterResult.gatePassed ? 'text-emerald-600' : 'text-red-600'}`}>
+   402→   402→                        GATE {beforeAfterResult.gatePassed ? 'PASSED' : 'FAILED'}
+   403→   403→                      </div>
+   404→   404→                      <div className="text-sm text-muted-foreground">
+   405→   405→                        {beforeAfterResult.gateDetails}
+   406→   406→                      </div>
+   407→   407→                    </div>
+   408→   408→                  </div>
+   409→   409→                </CardContent>
+   410→   410→              </Card>
+   411→   411→            </>
+   412→   412→          )}
+   413→   413→        </TabsContent>
+   414→   414→
+   415→   415→        {/* ─── Ablation Tab ──────────────────────────────────────────── */}
+   416→   416→        <TabsContent value="ablation" className="space-y-4">
+   417→   417→          {!ablationResult ? (
+   418→   418→            <Card>
+   419→   419→              <CardContent className="py-12 text-center">
+   420→   420→                <GitBranch className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+   421→   421→                <h3 className="text-lg font-semibold mb-2">Agent Ablation Experiment</h3>
+   422→   422→                <p className="text-muted-foreground mb-4 max-w-md mx-auto">
+   423→   423→                  Run 4 progressively richer agent topologies on the same 10 held-out cases.
+   424→   424→                  Demonstrates that each agent removal breaks a measurable property.
+   425→   425→                </p>
+   426→   426→                <Button
+   427→   427→                  onClick={() => runAblation(true)}
+   428→   428→                  disabled={runningAblation}
+   429→   429→                  className="bg-violet-600 hover:bg-violet-700"
+   430→   430→                >
+   431→   431→                  {runningAblation ? (
+   432→   432→                    <><Loader2 className="h-4 w-4 animate-spin mr-1" /> Running Ablation...</>
+   433→   433→                  ) : (
+   434→   434→                    <><Play className="h-4 w-4 mr-1" /> Run Ablation</>
+   435→   435→                  )}
+   436→   436→                </Button>
+   437→   437→              </CardContent>
+   438→   438→            </Card>
+   439→   439→          ) : (
+   440→   440→            <>
+   441→   441→              {/* ─── Table 7.1: The Ablation Table ─────────────────────── */}
+   442→   442→              <Card>
+   443→   443→                <CardHeader>
+   444→   444→                  <CardTitle className="text-base flex items-center gap-2">
+   445→   445→                    <GitBranch className="h-4 w-4 text-violet-500" />
+   446→   446→                    Table 7.1 — Agent Ablation Results
+   447→   447→                  </CardTitle>
+   448→   448→                  <CardDescription>
+   449→   449→                    Every cell is a MEASUREMENT, not a claim. Removing agents breaks measurable properties.
+   450→   450→                  </CardDescription>
+   451→   451→                </CardHeader>
+   452→   452→                <CardContent>
+   453→   453→                  <div className="overflow-x-auto">
+   454→   454→                    <table className="w-full text-sm">
+   455→   455→                      <thead>
+   456→   456→                        <tr className="border-b">
+   457→   457→                          <th className="text-left py-2 px-3 font-medium">Architecture</th>
+   458→   458→                          <th className="text-center py-2 px-3 font-medium">Agents</th>
+   459→   459→                          <th className="text-right py-2 px-3 font-medium">Citation Grounding</th>
+   460→   460→                          <th className="text-center py-2 px-3 font-medium">Unsupported Claims</th>
+   461→   461→                          <th className="text-center py-2 px-3 font-medium">Level</th>
+   462→   462→                          <th className="text-left py-2 px-3 font-medium">Verdict</th>
+   463→   463→                        </tr>
+   464→   464→                      </thead>
+   465→   465→                      <tbody>
+   466→   466→                        {ablationResult.topologies.map((t) => (
+   467→   467→                          <tr key={t.topology} className="border-b hover:bg-muted/50">
+   468→   468→                            <td className="py-3 px-3">
+   469→   469→                              <div className="font-medium">{t.label}</div>
+   470→   470→                              <div className="text-xs text-muted-foreground mt-0.5">
+   471→   471→                                {t.agentsIncluded.join(' → ')}
+   472→   472→                              </div>
+   473→   473→                            </td>
+   474→   474→                            <td className="py-3 px-3 text-center">
+   475→   475→                              <Badge variant="outline" className="font-mono">
+   476→   476→                                {t.agentCount}
+   477→   477→                              </Badge>
+   478→   478→                            </td>
+   479→   479→                            <td className={`py-3 px-3 text-right font-bold tabular-nums ${groundingColor(t.aggregate.citationGroundingPercent)}`}>
+   480→   480→                              {t.aggregate.citationGroundingPercent}%
+   481→   481→                            </td>
+   482→   482→                            <td className="py-3 px-3 text-center tabular-nums">
+   483→   483→                              {t.aggregate.unsupportedClaims.toFixed(1)}
+   484→   484→                            </td>
+   485→   485→                            <td className="py-3 px-3 text-center">
+   486→   486→                              <Badge className={`text-xs ${claimsLevelColor(t.aggregate.unsupportedClaimsLevel)}`}>
+   487→   487→                                {t.aggregate.unsupportedClaimsLevel}
+   488→   488→                              </Badge>
+   489→   489→                            </td>
+   490→   490→                            <td className="py-3 px-3 font-medium">
+   491→   491→                              {t.aggregate.verdict}
+   492→   492→                            </td>
+   493→   493→                          </tr>
+   494→   494→                        ))}
+   495→   495→                      </tbody>
+   496→   496→                    </table>
+   497→   497→                  </div>
+   498→   498→
+   499→   499→                  {/* Progression visualization */}
+   500→   500→                  <div className="mt-6 space-y-3">
+   501→   501→                    <h4 className="text-sm font-medium text-muted-foreground">Citation Grounding Progression</h4>
+   502→   502→                    {ablationResult.topologies.map((t) => (
+   503→   503→                      <div key={t.topology} className="flex items-center gap-3">
+   504→   504→                        <div className="w-32 text-xs font-medium truncate">
+   505→   505→                          {t.agentCount}-agent
+   506→   506→                        </div>
+   507→   507→                        <div className="flex-1">
+   508→   508→                          <Progress
+   509→   509→                            value={t.aggregate.citationGroundingPercent}
+   510→   510→                            className="h-3"
+   511→   511→                          />
+   512→   512→                        </div>
+   513→   513→                        <div className="w-14 text-xs font-bold tabular-nums text-right">
+   514→   514→                          {t.aggregate.citationGroundingPercent}%
+   515→   515→                        </div>
+   516→   516→                      </div>
+   517→   517→                    ))}
+   518→   518→                  </div>
+   519→   519→                </CardContent>
+   520→   520→              </Card>
+   521→   521→
+   522→   522→              {/* ─── Detailed Metrics per Topology ─────────────────────── */}
+   523→   523→              <Card>
+   524→   524→                <CardHeader>
+   525→   525→                  <CardTitle className="text-base flex items-center gap-2">
+   526→   526→                    <Activity className="h-4 w-4 text-blue-500" />
+   527→   527→                    Detailed Metrics by Topology
+   528→   528→                  </CardTitle>
+   529→   529→                </CardHeader>
+   530→   530→                <CardContent>
+   531→   531→                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+   532→   532→                    {ablationResult.topologies.map((t) => (
+   533→   533→                      <div key={t.topology} className="p-4 rounded-lg border bg-slate-50">
+   534→   534→                        <div className="flex items-center justify-between mb-3">
+   535→   535→                          <h4 className="font-medium">{t.label}</h4>
+   536→   536→                          <Badge variant="outline">{t.agentCount} agents</Badge>
+   537→   537→                        </div>
+   538→   538→                        <div className="space-y-2 text-sm">
+   539→   539→                          <div className="flex justify-between">
+   540→   540→                            <span className="text-muted-foreground">Top-1 Accuracy</span>
+   541→   541→                            <span className="font-bold tabular-nums">{(t.aggregate.top1Accuracy * 100).toFixed(1)}%</span>
+   542→   542→                          </div>
+   543→   543→                          <div className="flex justify-between">
+   544→   544→                            <span className="text-muted-foreground">Top-3 Accuracy</span>
+   545→   545→                            <span className="font-bold tabular-nums">{(t.aggregate.top3Accuracy * 100).toFixed(1)}%</span>
+   546→   546→                          </div>
+   547→   547→                          <div className="flex justify-between">
+   548→   548→                            <span className="text-muted-foreground">Citation Grounding</span>
+   549→   549→                            <span className="font-bold tabular-nums">{(t.aggregate.citationGrounding * 100).toFixed(1)}%</span>
+   550→   550→                          </div>
+   551→   551→                          <div className="flex justify-between">
+   552→   552→                            <span className="text-muted-foreground">Appeal Quality</span>
+   553→   553→                            <span className="font-bold tabular-nums">{(t.aggregate.appealQuality * 100).toFixed(1)}%</span>
+   554→   554→                          </div>
+   555→   555→                          <div className="flex justify-between">
+   556→   556→                            <span className="text-muted-foreground">Argument Selection</span>
+   557→   557→                            <span className="font-bold tabular-nums">{(t.aggregate.argumentSelection * 100).toFixed(1)}%</span>
+   558→   558→                          </div>
+   559→   559→                          <Separator className="my-2" />
+   560→   560→                          <div className="flex justify-between">
+   561→   561→                            <span className="text-muted-foreground">Unsupported Claims</span>
+   562→   562→                            <Badge className={`text-xs ${claimsLevelColor(t.aggregate.unsupportedClaimsLevel)}`}>
+   563→   563→                              {t.aggregate.unsupportedClaims.toFixed(1)} ({t.aggregate.unsupportedClaimsLevel})
+   564→   564→                            </Badge>
+   565→   565→                          </div>
+   566→   566→                        </div>
+   567→   567→                      </div>
+   568→   568→                    ))}
+   569→   569→                  </div>
+   570→   570→                </CardContent>
+   571→   571→              </Card>
+   572→   572→
+   573→   573→              {/* ─── Key Insight ────────────────────────────────────────── */}
+   574→   574→              <Card>
+   575→   575→                <CardHeader>
+   576→   576→                  <CardTitle className="text-base flex items-center gap-2">
+   577→   577→                    <Zap className="h-4 w-4 text-amber-500" />
+   578→   578→                    Why 8 Agents? — The Necessity Argument
+   579→   579→                  </CardTitle>
+   580→   580→                </CardHeader>
+   581→   581→                <CardContent className="space-y-4 text-sm">
+   582→   582→                  <div className="p-3 rounded-lg bg-violet-50 border border-violet-200">
+   583→   583→                    <div className="font-medium text-violet-800 mb-1">Collapsing Policy Research + Evidence Assembly</div>
+   584→   584→                    <div className="text-violet-700">
+   585→   585→                      Destroys the citation/clinical-evidence distinction the appeal depends on.
+   586→   586→                      Without separate policy lookup, citations come from draft inference only (weak grounding).
+   587→   587→                    </div>
+   588→   588→                  </div>
+   589→   589→                  <div className="p-3 rounded-lg bg-amber-50 border border-amber-200">
+   590→   590→                    <div className="font-medium text-amber-800 mb-1">Removing Quality Review</div>
+   591→   591→                    <div className="text-amber-700">
+   592→   592→                      Reintroduces unsupported claims that the compliance story cannot tolerate.
+   593→   593→                      Without independent review, the system cannot verify its own output.
+   594→   594→                    </div>
+   595→   595→                  </div>
+   596→   596→                  <div className="p-3 rounded-lg bg-emerald-50 border border-emerald-200">
+   597→   597→                    <div className="font-medium text-emerald-800 mb-1">Full 8-Agent Pipeline</div>
+   598→   598→                    <div className="text-emerald-700">
+   599→   599→                      Each agent&apos;s removal breaks a measurable property. The count is justified
+   600→   600→                      by measurement, not by ambition. &quot;Why eight? Because the table shows it.&quot;
+   601→   601→                    </div>
+   602→   602→                  </div>
+   603→   603→                </CardContent>
+   604→   604→              </Card>
+   605→   605→
+   606→   606→              {/* Ablation Gate Status */}
+   607→   607→              <Card>
+   608→   608→                <CardHeader>
+   609→   609→                  <CardTitle className="text-base flex items-center gap-2">
+   610→   610→                    <Shield className="h-4 w-4 text-amber-500" />
+   611→   611→                    Ablation Gate Status
+   612→   612→                  </CardTitle>
+   613→   613→                </CardHeader>
+   614→   614→                <CardContent>
+   615→   615→                  <div className="flex items-center gap-3">
+   616→   616→                    <CheckCircle2 className={`h-6 w-6 ${ablationResult.gatePassed ? 'text-emerald-500' : 'text-red-500'}`} />
+   617→   617→                    <div>
+   618→   618→                      <div className={`font-bold ${ablationResult.gatePassed ? 'text-emerald-600' : 'text-red-600'}`}>
+   619→   619→                        GATE {ablationResult.gatePassed ? 'PASSED' : 'FAILED'}
+   620→   620→                      </div>
+   621→   621→                      <div className="text-sm text-muted-foreground">
+   622→   622→                        {ablationResult.gateDetails}
+   623→   623→                      </div>
+   624→   624→                    </div>
+   625→   625→                  </div>
+   626→   626→                </CardContent>
+   627→   627→              </Card>
+   628→   628→            </>
+   629→   629→          )}
+   630→   630→        </TabsContent>
+   631→   631→      </Tabs>
+   632→   632→
+   633→   633→      {/* ─── Experiment Status Footer ────────────────────────────────── */}
+   634→   634→      {(beforeAfterResult || ablationResult) && (
+   635→   635→        <Card>
+   636→   636→          <CardContent className="py-4">
+   637→   637→            <div className="flex flex-wrap items-center gap-4 text-sm">
+   638→   638→              <div className="flex items-center gap-2">
+   639→   639→                <Badge variant="outline" className="bg-violet-50 text-violet-700">
+   640→   640→                  <FlaskConical className="h-3 w-3 mr-1" />
+   641→   641→                  Day 8
+   642→   642→                </Badge>
+   643→   643→              </div>
+   644→   644→              {beforeAfterResult && (
+   645→   645→                <div className="flex items-center gap-1 text-emerald-600">
+   646→   646→                  <CheckCircle2 className="h-4 w-4" />
+   647→   647→                  Before/After: Complete ({beforeAfterResult.deltas.length} metrics)
+   648→   648→                </div>
+   649→   649→              )}
+   650→   650→              {ablationResult && (
+   651→   651→                <div className="flex items-center gap-1 text-emerald-600">
+   652→   652→                  <CheckCircle2 className="h-4 w-4" />
+   653→   653→                  Ablation: Complete ({ablationResult.topologies.length} topologies)
+   654→   654→                </div>
+   655→   655→              )}
+   656→   656→              {beforeAfterResult && (
+   657→   657→                <div className="text-muted-foreground ml-auto">
+   658→   658→                  Duration: {beforeAfterResult.durationMs}ms
+   659→   659→                </div>
+   660→   660→              )}
+   661→   661→            </div>
+   662→   662→          </CardContent>
+   663→   663→        </Card>
+   664→   664→      )}
+   665→   665→    </div>
+   666→   666→  );
+   667→   667→}
+   668→   668→

@@ -1,0 +1,354 @@
+=== upload/DenialDefender_Ultimate_Blueprint_2026-08-14 (1).docx ===
+GRAND-PRIZE WAR-ROOM DELIVERABLE
+
+DenialDefender
+
+The Ultimate Grand-Prize Blueprint
+
+Evidence-Grounded, Human-Governed Autonomous Denial-Appeal Operations
+
+  Don't build the biggest DenialDefender.
+  Build the most undeniable DenialDefender.
+
+Architectural Strategy · Technical Strategy · Engineering Design · 14-Day Day-by-Day Implementation Plan
+
+Synthesis of the 50-Section Strategic Blueprint and the War-Room Reviewer Commentary
+
+  -------------------------------------------------------------------------------------------------------------------------------
+  Target Competition                  All Things Agentic Hackathon — "Ready, Set, Agent!" (Google LLC)
+  ----------------------------------- -------------------------------------------------------------------------------------------
+  Submission Track                    The Fortified Enterprise Fleet (primary), engineered for the $50,000 Grand Prize
+
+  Judging Weights                     Innovation & Operational Utility 40% · Architecture 30% · Demo & Production Readiness 30%
+
+  Build Window                        14 working days · Aug 15–28, 2026 (submission window closes Aug 31, 2026)
+
+  Author                              Strategic Synthesis — DenialDefender War Room
+
+  Document Version                    Ultimate Blueprint v1.0 — Aug 14, 2026
+  -------------------------------------------------------------------------------------------------------------------------------
+
+Table of Contents
+
+PART I — STRATEGIC VERDICT & DOCTRINE
+
+1. Executive Verdict (TL;DR) 4
+
+2. The Strategic Pivot 5
+
+3. Three Fatal Weaknesses of "Build-As-Written" 6
+
+4. The Ultimate Doctrine — 13 Inviolable Principles 7
+
+PART II — ARCHITECTURAL STRATEGY
+
+5. The Triad Architecture (Evidence · Agents · Governance) 8
+
+6. Agent Architecture — Eight Genuinely Necessary Specialists 9
+
+7. Necessity Justification & the Agent-Ablation Experiment 10
+
+8. Data & Evidence Architecture — Real Public Evidence + Synthetic Cases 11
+
+9. Provenance & Citation Architecture 12
+
+10. Security & Governance Architecture — PHI Guard 13
+
+11. Memory & State Architecture 14
+
+PART III — TECHNICAL STRATEGY
+
+12. Google Stack Selection — Ruthless Trimming 15
+
+13. The Outcome-Learning Experiment (Measured, Not Performed) 16
+
+14. Decision Trace — Not "Agent Thoughts" 17
+
+15. Adversarial Quality Review 18
+
+16. External Integration Strategy — NPI Registry 18
+
+17. Claims & Terminology Discipline 19
+
+PART IV — ENGINEERING STRATEGY & DESIGN
+
+18. Engineering Principles 20
+
+19. Repository & Service Topology 20
+
+20. Core Data Model & Schemas 21
+
+21. The Evaluation Harness — Experimental Backbone 22
+
+22. Reliability & Demo-Failure Plan 23
+
+23. Testing & Quality Gates 23
+
+PART V — DAY-BY-DAY IMPLEMENTATION PLAN (14 DAYS)
+
+24. Day 0 — Pre-Kickoff (Aug 14) 24
+
+25. Days 1–3 — Foundation, Evidence Corpus, Vertical Skeleton 25
+
+26. Days 4–6 — Agents, Provenance, Decision Trace 26
+
+27. Days 7–9 — Outcome-Learning Experiment & Adversarial Review 27
+
+28. Days 10–12 — Governance, PHI Guard, NPI, Polish 28
+
+29. Day 13 — Demo Lock, Dry Runs, Domain Validation 29
+
+30. Day 14 — Final Dry Runs, Video, Submission Buffer 30
+
+31. Daily Discipline — Standups, Risk Gates, Stopping Rules 30
+
+PART VI — DEMO & SUBMISSION
+
+32. The Two-Act Demo — Second-by-Second Script 31
+
+33. The Second-Case Behavioral Moment 32
+
+34. Three Forbidden Phrases — Claims Discipline 33
+
+35. Devpost & Repository Hygiene 33
+
+PART VII — RISK, COUNTERARGUMENTS & FINAL VERDICT
+
+36. Counterarguments & Responses (Steelmanned) 34
+
+37. Risk Register & Decision Gates 35
+
+38. Priority Tiering — Tier S / A / B / C 36
+
+39. Final Verdict & Target Scorecard 37
+
+References 38
+
+PART I
+
+Strategic Verdict & Doctrine
+
+1. Executive Verdict (TL;DR)
+
+Keep DenialDefender. Do not build the existing 178-page blueprint exactly as written. The strategic concept is near-perfect, but the implementation plan is over-scoped, defensively weak on credibility, and bets the Grand Prize on a single fragile artifact (a green "+0.06" weight-change animation) rather than on a measured learning experiment. This document is the corrected, hardened, day-by-day execution doctrine that maximizes the probability of the $50,000 Grand Prize in the All Things Agentic Hackathon, whose official judging weights Innovation & Operational Utility at 40%, Architectural Discipline at 30%, and Demo & Production Readiness at 30%.
+
+The single sentence that should govern every engineering decision for the next 14 days is this: build the most undeniable DenialDefender, not the biggest. "Undeniable" is defined by thirteen properties working in concert — real public evidence, synthetic privacy-safe cases, domain-expert validation, eight genuinely necessary agents, independent verification, human governance, a PHI firewall, observable decision traces, measured learning, a second-case behavioral improvement, a Google-native architecture, one spectacular 90-second transformation, and zero unsupported claims. A submission that delivers all thirteen is substantially harder for a competitor or a skeptic to attack than one that ships a wider feature surface in which no single thing is excellent.
+
+Target Scorecard
+
+Table 1.1 — Grand-Prize target scorecard. Targets are conditional on execution; no Grand Prize is guaranteed.
+
+  ----------------------------------------------------------------------------------------------------------------------------------------------------------------
+  Judging Dimension                        Weight            Target (out of 5)   Primary Carrier
+  ---------------------------------------- ----------------- ------------------- ---------------------------------------------------------------------------------
+  Innovation & Operational Utility         40%               4.7–5.0             Real public evidence + measured outcome learning + second-case behavioral shift
+
+  Architectural Discipline & Tech Stack    30%               4.6–5.0             Triad architecture + agent-ablation evidence + ruthless stack trimming
+
+  Demo & Production Readiness              30%               4.7–5.0             Two-act demo + PHI Guard wow + decision trace + reliable 90-second appeal
+
+  Bonus (Gemma/Veo/Lyria if rules allow)   +0.6–1.0          Captured            Gemma in core narrative; Veo/Lyria as optional artifacts only
+  ----------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+  The one-line thesis DenialDefender does not replace the human. It replaces the hours of work around the human — by turning a 6-hour, error-prone appeal-drafting ordeal into a 90-second, evidence-backed, independently verified, human-approved appeal package that measurably improves after every recorded outcome.
+
+The remainder of Part I explains why "build as written" fails, and Part II onwards specifies the architecture, technology, engineering design, and the daily schedule that delivers the verdict above.
+
+2. The Strategic Pivot
+
+The existing blueprint positions DenialDefender as "the agent that fights your insurance company for you" and, operationally, as "AI that writes insurance appeal letters." That framing is emotionally resonant but technically dangerous: it invites the judge to evaluate the project as a letter generator, in which case a single hallucinated citation or an unverified claim collapses the entire submission. The pivot is to re-position the product one level up the abstraction stack, from output to workflow.
+
+The new target identity is evidence-grounded, human-governed autonomous denial-appeal operations. The central loop is no longer "upload denial → produce letter" but a ten-stage closed loop in which the letter is merely the most visible intermediate artifact and the outcome is the thing the system actually optimizes for:
+
+Figure 2.1 — The ten-stage closed loop. The appeal letter is an intermediate artifact, not the deliverable; the deliverable is a workflow that measurably improves.
+
+  REAL PUBLIC HEALTHCARE EVIDENCE
+  v
+  SYNTHETIC CASE
+  v
+  DENIAL TRIAGE
+  v
+  POLICY + EVIDENCE RESEARCH
+  v
+  APPEAL GENERATION
+  v
+  INDEPENDENT VERIFICATION
+  v
+  HUMAN APPROVAL
+  v
+  DEADLINE MANAGEMENT
+  v
+  OUTCOME RECORDED
+  v
+  MEASURED LEARNING
+  v
+  BETTER NEXT CASE
+
+This pivot directly attacks the three weaknesses the reviewer commentary identifies as existential: domain credibility, the synthetic-data criticism, and the HIPAA-perception problem. By making institutional knowledge real (sourced from CMS and payer public material) while keeping patient cases synthetic, the project can truthfully state that its grounding evidence is authoritative and public, even though its cases are privacy-safe by construction. The distinction is subtle but decisive in a judge's mind: "our data is synthetic" is a confession; "our patient cases are synthetic by design, and the healthcare knowledge grounding them is sourced from authoritative public payer and government material" is a credibility statement.
+
+3. Three Fatal Weaknesses of “Build-As-Written”
+
+The reviewer's forensics on the existing blueprint converge on three failure modes that, left uncorrected, would cap the project at a strong track prize rather than the Grand Prize. Each is stated here as a steel-manned objection so that the engineering plan in Parts IV and V can be read as direct responses.
+
+Weakness 1 — The Outcome-Learning gimmick (severity: critical)
+
+The blueprint's self-evolving moment is a procedural-evidence weight changing from 0.42 to 0.48. Visually this is excellent, but a sophisticated judge can ask, "So you changed a number. How do you know the system actually improved?" Without an experimental answer, the most agentic claim in the entire submission collapses into a UI animation. The fix is to convert Outcome Learning from a performed weight-change into a measured before/after evaluation across a held-out case set, demonstrated live on two cases where the ranking of arguments visibly changes because of recorded outcomes. This single change converts the project from "an agent that changes its weights" into "a system whose behavior changed because of validated outcomes" — the latter is genuinely agentic; the former is theater.
+
+Weakness 2 — Synthetic-only data leaves no credibility floor (severity: high)
+
+A demo built entirely on synthetic denial letters, synthetic medical records, and a synthetic outcome corpus has no defensible answer to "where does your medical knowledge come from?" The answer "we generated it" is exactly the answer that triggers hallucination concerns. The fix is to anchor the evidence corpus in authoritative public sources — CMS denial reason statements and eMDR codes, CMS public-use claims files, CMS SynPUFs (which CMS explicitly created so developers can work with realistic Medicare claims structures while protecting beneficiary privacy), official Medicare appeals guidance, and versioned, frozen payer medical-policy documents. CMS itself distinguishes public-use files from identifiable data and states that public-use files do not contain PHI or PII requiring a data-use agreement, which gives the project a clean, citable data story.
+
+Weakness 3 — The "Google product parade" dilutes reliability (severity: high)
+
+The blueprint is committed to all seven Google Enterprise Agent Platform (GEAP) components plus Gemma, Veo, Lyria, A2A, and MCP. The official rules require only Gemini plus one Google agent framework plus one Google Cloud infrastructure service; the GEAP components are recommended for the Fleet track, not each individually mandatory. Shipping seven labels at the cost of reliability produces a demo in which no single integration is undeniably excellent and several are stubbed — exactly the failure pattern the blueprint's own kill-your-darlings philosophy warns against. The fix is ruthless trimming: keep the core (ADK, Cloud Run, Firestore, Cloud SQL pgvector, Pub/Sub) and the governance trio (Model Armor, Agent Identity, Agent Observability); treat Memory Bank, Gateway, Registry, Veo, Lyria, A2A, and MCP as conditional additions that survive only if they demonstrably strengthen the narrative without compromising the demo.
+
+4. The Ultimate Doctrine — 13 Inviolable Principles
+
+The thirteen properties below are the definition of "undeniable." Every architectural, technical, and engineering decision in this document exists to deliver them, and every daily task in Part V is traceable to one or more of them. They are non-negotiable; if a planned feature cannot be mapped to at least one principle, it is cut.
+
+Table 4.1 — The thirteen inviolable principles. Treat as a checklist for every pull request.
+
+  ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  #                       Principle                                  What “undeniable” requires here
+  ----------------------- ------------------------------------------ -----------------------------------------------------------------------------------------------------------
+  1                       Real public evidence                       Evidence corpus sourced from CMS and payer public material, versioned and hashed.
+
+  2                       Synthetic, privacy-safe cases              Patient cases are synthetic by design; no real PHI is ever processed.
+
+  3                       Domain-expert validation                   A medical billing / RCM specialist reviews taxonomy, workflow, and 2–3 appeals; their changes are logged.
+
+  4                       Eight genuinely necessary agents           Each agent's removal breaks a measurable property; justified by an ablation table.
+
+  5                       Independent verification                   A Quality Review agent attempts to break the draft before human approval.
+
+  6                       Human governance                           Two HITL gates; “autonomous doesn't mean unsupervised.”
+
+  7                       PHI firewall                               A visible PHI Guard blocks model invocation on potential PHI before any agent runs.
+
+  8                       Observable decision traces                 Structured decision events, not exposed chain-of-thought.
+
+  9                       Measured learning                          Before/after evaluation on a held-out set; targets measured, not claimed.
+
+  10                      Second-case behavioral improvement         Live demo shows argument ranking change because of recorded outcomes.
+
+  11                      Google-native architecture                 Core stack is Gemini + ADK + Cloud Run + Firestore + pgvector + Pub/Sub.
+
+  12                      One spectacular 90-second transformation   Denial → evidence-backed appeal draft, end-to-end, reliably.
+
+  13                      Zero unsupported claims                    Every claim is measured, scoped, or
+
+=== upload/DenialDefender_Grand_Prize_Blueprint_2026-08-13 (7).docx ===
+GRAND PRIZE STRATEGIC BLUEPRINT
+
+— — — — — — — — — — — — — — — — — — — — — — — — — —
+
+DenialDefender
+
+"The agent that fights your insurance company for you."
+
+A Complete Implementation-Ready Blueprint
+
+for the All Things Agentic Hackathon
+
+"Ready, Set, Agent!" — Google LLC
+
+  -----------------------------------------------------------------------------------
+  Document                   Grand Prize Strategic Blueprint
+  -------------------------- --------------------------------------------------------
+  Project                    DenialDefender — Multi-Agent Medical Appeals System
+
+  Track                      The Fortified Enterprise Fleet (Grand Prize contender)
+
+  Date                       August 13, 2026
+
+  Prepared by                Grand Prize War-Room Strategy Unit
+
+  Classification             STRATEGIC — For Build Team Only
+  -----------------------------------------------------------------------------------
+
+Table of Contents
+
+50-Section Grand Prize War-Room Methodology
+
+Project: DenialDefender — "The agent that fights your insurance company for you." Target hackathon: All Things Agentic Hackathon ("Ready, Set, Agent!") — Google LLC sole sponsor Submission track: The Fortified Enterprise Fleet (primary), engineered to win Grand Prize Author: Writing Subagent E (Task 7-E) Confidence legend: VERIFIED FACT (direct quote from official source) · EVIDENCE-BASED INFERENCE (≥2 sources combined) · STRATEGIC HYPOTHESIS (analyst judgement) · SPECULATION (weak signal).
+
+1. Executive Verdict
+
+DenialDefender is the Grand Prize thesis for the All Things Agentic Hackathon: an 8-agent ADK 2.0 fleet that turns medical insurance claim denials into winning appeal letters — autonomously parsing denial letters, retrieving payer policy and patient-protection law, assembling medical-necessity evidence, drafting citation-backed appeals, and coordinating at clinic scale for medical billing specialists. It is filed under The Fortified Enterprise Fleet track because the multi-agent fleet is the architectural core, but it is engineered to score maximally on all three track rubrics so it competes for the $50,000 Grand Prize rather than just the $20,000 Track Prize. It wins because it is the only candidate in our 50-concept shortlist that simultaneously satisfies all three hidden mandates — BYOF (visceral personal pain: 1 in 7 insured Americans face claim denials annually [D-1]), Unlikely Hero (medical billing specialists, NOT executives or developers [D-2]), and Evolving Knowledge (payer policies, regulations, and appeal success patterns mutate continuously [A-7]) — while using every mandated Google product deeply (Gemini 3.5 Flash 1M context, ADK 2.0 Collaborative workflows, all 7 GEAP components, Cloud Run + Firestore + Cloud SQL pgvector + Pub/Sub, plus all 3 bonus models Gemma/Veo/Lyria each doing a distinct real job). The memorability sentence is unforgettable on first hearing: "This is the project that fights your insurance company for you when they deny your claim — and then teaches every other patient how to win theirs." It echoes Google's own "agentic Gemini era" narrative [B-3] because it visibly embodies the transition from chatbot to autonomous action-taking agent. The wow moment — a real (de-identified) denial letter dropped into the UI producing a complete citation-backed appeal letter in under 90 seconds, with every agent's reasoning visible in real time — is precisely the "live external interaction + multi-output artifact generation" pattern that won the SalesShortcut Grand Prize (real phone call) and the Unravel Fivetran-track first prize (clinician alert + family letter + ClinVar submission in one screen) [C-1, C-2]. Confidence level: HIGH on rules/stack/winner-patterns (all VERIFIED FACT from Phases A/B/C); MEDIUM-HIGH on the strategic thesis (analyst synthesis from cross-cutting opportunity scoring in Phase D); MEDIUM on execution risk (HIPAA posture, ~14 working days, 3-4 engineer team). The thesis is locked; the remaining 35 sections of this blueprint exist to de-risk execution and amplify differentiation.
+
+2. Competition Intelligence
+
+The All Things Agentic Hackathon ("Ready, Set, Agent!") is the third major Google agent-platform hackathon in twelve months and the largest by prize pool: $180,000 in cash plus $24,500 in Google Cloud credits across all prize tiers [A-1]. Google LLC is the sole cash sponsor; Devpost Inc. is the administrator [A-2]. The contest opens 2026-08-03 09:00 PT and the binding submission deadline is 2026-08-31 17:00 PT (= 2026-09-01 01:00 Africa/Lagos) per Rules §4 [A-3]. Judging runs from 2026-09-01 through approximately 2026-10-01; winners announced "on or around" 2026-10-08 10:00 PT [A-3]. Every registered entrant may request a $150 GCP build credit (form closes 2026-08-28 12:00 PT or while supplies last; 72 business hour SLA; not guaranteed) [A-4]. The companion skilling program is Gemini Enterprise Agent Ready (GEAR), free, 12 skill badges on skills.google, launched 2026-08-06 [A-5].
+
+The competition is structured around three submission tracks, each carrying a hidden mandate buried in the Stage Two rubric text but absent from the public Overview page [A-7]. The Taskmaster ("Continuous Action Engine" internally) carries the BYOF ("Bring Your Own Friction") mandate — solve a real personal friction, not a hypothetical. The Collaborative Partner ("Evolving Knowledge Engine" internally) requires active data synthesis or mutation, not just reading — and ingestion of unusual, messy, or highly complex unstructured data streams. The Fortified Enterprise Fleet ("Multi-Agent Nexus" internally) requires genuine multi-agent necessity (the task must warrant multiple agents), intelligent delegation, and the Unlikely Hero mandate: build for non-standard corporate roles, NOT executives, developers, or marketers. The rubric weights are Innovation & Operational Utility 40%, Architectural Discipline & Tech Stack 30%, Demo & Production Readiness 30% — and ties break first on Innovation, raising the 40% criterion's effective leverage above its face value [A-7]. The bonus structure can add up to +1.0 to the 5.0 rubric maximum, producing a Final score from 1 to 6: +0.2 for a public blog/podcast/video (with mandatory "created for this hackathon" language), +0.2 for a social post with #AllThingsAgenticHackathon, and +0.2 per additional Google AI model integrated (Gemma, Veo, Lyria) up to +0.6 [A-7].
+
+The mandatory tech stack is Google-only: Gemini 3.5 or newer (primary model), at least one of {ADK, GenAI SDK, Antigravity SDK, Genkit} (framework), at least one of {Cloud Run, Cloud SQL, Firestore, GKE, Pub/Sub} (infra), and visible proof of Google Cloud deployment in the demo video [A-7, A-9]. The FAQ explicitly warns against "wrapping a generic chatbot in a nice UI and calling it an agent" — single-agent wrappers are a known disqualifier [A-8]. Submission requires a 4-minute unedited demo video showing live execution ("Proof of Action"), a public code repo with clean architecture diagram and reproducible setup, and a hosted URL if available [A-7]. The submission deadline is hard: after it passes no edits are allowed to video, repo, or live site — editing during the judging window can jeopardize prize eligibility [A-8].
+
+Competition at a Glance
+
+  ----------------------------------------------------------------------------------------------------------------------------------------------------------
+  Field                     Value                                                                                           Source / Confidence
+  ------------------------- ----------------------------------------------------------------------------------------------- --------------------------------
+  Organizer                 Google LLC (Delaware corp, Mountain View CA)                                                    [A-2] VERIFIED FACT
+
+  Administrator             Devpost, Inc. (New York NY)                                                                     [A-2] VERIFIED FACT
+
+  Total cash pool           $180,000                                                                                        [A-1] VERIFIED FACT
+
+  Total GCP credits         $24,500 across winners + $150 per entrant                                                       [A-4] VERIFIED FACT
+
+  Grand Prize               $50,000 + $5,000 credits + virtual coffee + social promo                                        [A-1] VERIFIED FACT
+
+  Each Track Prize          $20,000 + $2,000 credits + coffee + promo                                                       [A-1] VERIFIED FACT
+
+  Submission deadline       2026-08-31 17:00 PT (hard)                                                                      [A-3] VERIFIED FACT
+
+  Judging rubric            Innovation 40% / Architecture 30% / Demo 30%                                                    [A-7] VERIFIED FACT
+
+  Bonus ceiling             +1.0 (blog 0.2 + social 0.2 + Gemma/Veo/Lyria up to 0.6)                                        [A-7] EVIDENCE-BASED INFERENCE
+
+  Tie-break order           Innovation → Architecture → Demo → judge vote                                                   [A-7] VERIFIED FACT
+
+  Demo video cap            4 minutes, unedited live execution required                                                     [A-7] VERIFIED FACT
+
+  Cross-prize rule          Each project max 1 prize                                                                        [A-1] VERIFIED FACT
+
+  Mandatory model           Gemini 3.5 Flash (GA May 19 2026, 1M context, $1.50/$9 per 1M tokens)                           [B-1] VERIFIED FACT
+
+  Mandatory framework       ADK 2.0 (recommended) — GenAI SDK / Antigravity SDK / Genkit also accepted                      [B-2, A-7] VERIFIED FACT
+
+  Mandatory infra           Cloud Run + Firestore + Pub/Sub + Cloud SQL pgvector (our stack; one of each required)          [A-7] VERIFIED FACT
+
+  Hidden mandates           BYOF (Track 1) + Active synthesis (Track 2) + Unlikely Hero & Multi-agent necessity (Track 3)   [A-7] VERIFIED FACT
+
+  Predecessor               Google Cloud Rapid Agent Hackathon ($60k, 1,426 projects, May-Jun 2026)                         [C-3] VERIFIED FACT
+
+  Predecessor-predecessor   ADK Hackathon ($50k+, 477 projects, Aug-Sep 2025)                                               [C-4] VERIFIED FACT
+  ----------------------------------------------------------------------------------------------------------------------------------------------------------
+
+3. Evidence Ledger
+
+The strategic foundation of DenialDefender rests on the following 15 highest-leverage claims. Each is tagged with source tier and evidence strength; the bibliography at the end of this file maps every bracketed citation to a URL.
+
+  ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  #        Claim                                                                                                                                                     Source        Source Tier                                             Date         Evidence Strength          Implication                                                       Confidence
+  -------- --------------------------------------------------------------------------------------------------------------------------------------------------------- ------------- ------------------------------------------------------- ------------ -------------------------- ----------------------------------------------------------------- -------------
+  1        Google LLC is sole sponsor; $180,000 cash pool; one prize per project                                                                                     [A-1] [A-2]   Tier 1 (Rules §2, §9)                                   2026-08-13   VERIFIED FACT              No co-sponsors to satisfy; only Google stack matters              HIGH
+
+  2        Submission deadline 2026-08-31 17:00 PT hard; no edits after                                                                                              [A-3] [A-8]   Tier 1 (Rules §4, FAQ)                                  2026-08-13   VERIFIED FACT              ~14 working days of dev time; rehearse freeze-on-submit           HIGH
+
+  3        Rubric: Innovation 40% / Architecture 30% / Demo 30%; ties break on Innovation first                                                                      [A-7]         Tier 1 (Rules §8)                                       2026-08-13   VERIFIED FACT              Innovation is the single highest-leverage criterion               HIGH
+
+  4        Hidden mandates BYOF + Unlikely Hero + Active Synthesis are in rubric Stage Two text but not Overview page                                                [A-7]         Tier 1 (Rules §8)                                       2026-08-13   VERIFIED FACT              Most competitors will miss mandates; we exploit                   HIGH
+
+  5        Bonus ceiling is +1.0 (blog +0.2 + social +0.2 + Gemma/Veo/Lyria +0.6) → max Final 6.0                                                                    [A-7]         Tier 1 + Overview                                       2026-08-13   EVIDENCE-BASED INFERENCE   Capture all 3 bonus models — non-negotiable                       HIGH
+
+  6        Mandatory model Gemini 3.5 Flash: 1M context, $1.50/$9 per 1M tokens, 4× faster than frontier, multimodal                                                 [B-1]         Tier 1 (Google blog)                                    2026-05-19   VERIFIED FACT              Long-context denial+records+policy fits in one call               HIGH
+
+  7        ADK 2.0 GA May 19 2026; Workflow Runtime graph engine; Collaborative workflows (chat/task/single-turn)                                                    [B-2]         Tier 1 (adk.dev + cloud blog)                           2026-05-19   VERIFIED FACT              Use ADK not GenAI SDK; Collaborative workflow for our 8 agents    HIGH
+
+  8        GEAP = 7 components (Registry, Runtime, Memory Bank, Identity, Gateway, Armor, Observability); recommended for Fleet track                                [B-5] [A-7]   Tier 1 (cloud.google.com + Rules §6)                    2026-04-22   VERIFIED FACT              Deploy all 7 — judge expectation for Fleet track                  HIGH
+
+  9        SalesShortcut won ADK Hackathon Grand Prize with 34 agents, real phone call demo, HITL explicit, full Google stack                                        [C-1]         Tier 1 (Google Cloud blog) + Tier 2 (Devpost writeup)   2025-09-02   VERIFIED FACT              Multi-agent + live external action + HITL = Grand Prize pattern   HIGH
+
+  10       SurgAgent won Dec 2025 

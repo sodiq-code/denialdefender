@@ -1,0 +1,843 @@
+     1→'use client';
+     2→
+     3→/**
+     4→ * DenialDefender — Vertical Slice Panel Component
+     5→ * Day 3: Interactive UI for the vertical slice pipeline.
+     6→ *
+     7→ * Shows: Input section, 3-step progress, parsed denial, 3 citations with
+     8→ * clickable provenance cards, appeal draft, gate status, and latency.
+     9→ */
+    10→
+    11→import { useState, useCallback } from 'react';
+    12→import {
+    13→  Card,
+    14→  CardContent,
+    15→  CardHeader,
+    16→  CardTitle,
+    17→} from '@/components/ui/card';
+    18→import { Badge } from '@/components/ui/badge';
+    19→import { Button } from '@/components/ui/button';
+    20→import { Textarea } from '@/components/ui/textarea';
+    21→import {
+    22→  Select,
+    23→  SelectContent,
+    24→  SelectItem,
+    25→  SelectTrigger,
+    26→  SelectValue,
+    27→} from '@/components/ui/select';
+    28→import {
+    29→  Accordion,
+    30→  AccordionContent,
+    31→  AccordionItem,
+    32→  AccordionTrigger,
+    33→} from '@/components/ui/accordion';
+    34→import {
+    35→  FileText,
+    36→  CheckCircle2,
+    37→  XCircle,
+    38→  Search,
+    39→  BookOpen,
+    40→  Clock,
+    41→  Shield,
+    42→  Loader2,
+    43→  ChevronRight,
+    44→  Zap,
+    45→  AlertTriangle,
+    46→  ShieldCheck,
+    47→  ExternalLink,
+    48→} from 'lucide-react';
+    49→
+    50→// ─── Types ────────────────────────────────────────────────────────────────
+    51→
+    52→interface ParsedDenial {
+    53→  denial_code: string;
+    54→  denial_type: string;
+    55→  denial_type_label: string;
+    56→  payer: string;
+    57→  reason_codes: string[];
+    58→  cpt_codes: string[];
+    59→  icd_codes: string[];
+    60→  amount_denied: number;
+    61→  confidence: number;
+    62→  summary: string;
+    63→}
+    64→
+    65→interface VerticalSliceCitation {
+    66→  number: number;
+    67→  evidenceId: string;
+    68→  source: string;
+    69→  documentName: string;
+    70→  section: string | null;
+    71→  contentPreview: string;
+    72→  provenanceTier: string;
+    73→  provenanceColor: string;
+    74→  clauseId: string | null;
+    75→  retrievalWeight: number;
+    76→  relevanceScore: number;
+    77→}
+    78→
+    79→interface AppealDraft {
+    80→  paragraph: string;
+    81→  wordCount: number;
+    82→  citationsUsed: number[];
+    83→  tone: string;
+    84→  strengths: string[];
+    85→}
+    86→
+    87→interface VerticalSliceResult {
+    88→  parsedDenial: ParsedDenial;
+    89→  citations: VerticalSliceCitation[];
+    90→  appealDraft: AppealDraft;
+    91→  latencyMs: number;
+    92→  success: boolean;
+    93→  gatePassed: boolean;
+    94→  trace: {
+    95→    step: string;
+    96→    agent: string;
+    97→    timestamp: string;
+    98→    detail: string;
+    99→  }[];
+   100→}
+   101→
+   102→interface SampleLetter {
+   103→  id: string;
+   104→  label: string;
+   105→  payer: string;
+   106→  text: string;
+   107→}
+   108→
+   109→// ─── Provenance Tier Config ───────────────────────────────────────────────
+   110→
+   111→const TIER_DISPLAY: Record<string, { label: string; color: string; borderColor: string; icon: typeof ShieldCheck }> = {
+   112→  primary_source: {
+   113→    label: 'Primary Source',
+   114→    color: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200',
+   115→    borderColor: 'border-emerald-300 dark:border-emerald-700',
+   116→    icon: ShieldCheck,
+   117→  },
+   118→  secondary_summary: {
+   119→    label: 'Secondary Summary',
+   120→    color: 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200',
+   121→    borderColor: 'border-amber-300 dark:border-amber-700',
+   122→    icon: BookOpen,
+   123→  },
+   124→  tertiary_commentary: {
+   125→    label: 'Tertiary Commentary',
+   126→    color: 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200',
+   127→    borderColor: 'border-gray-300 dark:border-gray-700',
+   128→    icon: AlertTriangle,
+   129→  },
+   130→};
+   131→
+   132→// ─── Step Indicator ───────────────────────────────────────────────────────
+   133→
+   134→function StepIndicator({
+   135→  steps,
+   136→  currentStep,
+   137→}: {
+   138→  steps: { label: string; icon: typeof FileText }[];
+   139→  currentStep: number; // 0 = not started, 1-3 = in progress, 4 = done
+   140→}) {
+   141→  return (
+   142→    <div className="flex items-center gap-1 sm:gap-2 overflow-x-auto pb-2">
+   143→      {steps.map((step, idx) => {
+   144→        const stepNum = idx + 1;
+   145→        const isActive = currentStep === stepNum;
+   146→        const isDone = currentStep > stepNum;
+   147→        const Icon = step.icon;
+   148→
+   149→        return (
+   150→          <div key={step.label} className="flex items-center shrink-0">
+   151→            <div
+   152→              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-300 ${
+   153→                isDone
+   154→                  ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200'
+   155→                  : isActive
+   156→                  ? 'bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-200 ring-2 ring-teal-400'
+   157→                  : 'bg-muted/50 text-muted-foreground'
+   158→              }`}
+   159→            >
+   160→              {isDone ? (
+   161→                <CheckCircle2 className="h-3.5 w-3.5" />
+   162→              ) : isActive ? (
+   163→                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+   164→              ) : (
+   165→                <Icon className="h-3.5 w-3.5" />
+   166→              )}
+   167→              <span className="hidden sm:inline">{step.label}</span>
+   168→              <span className="sm:hidden">{stepNum}</span>
+   169→            </div>
+   170→            {idx < steps.length - 1 && (
+   171→              <ChevronRight className="h-3.5 w-3.5 text-muted-foreground mx-0.5 sm:mx-1 shrink-0" />
+   172→            )}
+   173→          </div>
+   174→        );
+   175→      })}
+   176→    </div>
+   177→  );
+   178→}
+   179→
+   180→// ─── Main Component ───────────────────────────────────────────────────────
+   181→
+   182→export function VerticalSlicePanel() {
+   183→  const [denialText, setDenialText] = useState('');
+   184→  const [payer, setPayer] = useState('');
+   185→  const [loading, setLoading] = useState(false);
+   186→  const [currentStep, setCurrentStep] = useState(0);
+   187→  const [result, setResult] = useState<VerticalSliceResult | null>(null);
+   188→  const [error, setError] = useState<string | null>(null);
+   189→  const [gateResult, setGateResult] = useState<{
+   190→    allPassed: boolean;
+   191→    passedCount: number;
+   192→    totalRuns: number;
+   193→    totalLatencyMs: number;
+   194→    results: { run: number; sampleLabel: string; citationsCount: number; gatePassed: boolean; latencyMs: number }[];
+   195→  } | null>(null);
+   196→  const [gateLoading, setGateLoading] = useState(false);
+   197→  const [expandedCitation, setExpandedCitation] = useState<number | null>(null);
+   198→  const [samples, setSamples] = useState<SampleLetter[]>([]);
+   199→
+   200→  // Fetch sample letters from API
+   201→  const fetchSamples = useCallback(async () => {
+   202→    if (samples.length > 0) return;
+   203→    try {
+   204→      const res = await fetch('/api/vertical-slice');
+   205→      if (res.ok) {
+   206→        const data = await res.json();
+   207→        // The API returns sample letter metadata; we need full text from the agent module
+   208→        // Since we can't import server code on client, we fetch and set via the sample select
+   209→      }
+   210→    } catch {
+   211→      // Ignore
+   212→    }
+   213→  }, [samples.length]);
+   214→
+   215→  // Run the vertical slice
+   216→  const runSlice = useCallback(async () => {
+   217→    if (!denialText.trim()) return;
+   218→    setLoading(true);
+   219→    setError(null);
+   220→    setResult(null);
+   221→    setCurrentStep(1);
+   222→
+   223→    try {
+   224→      // Simulate step progress for UX
+   225→      const stepTimer = setInterval(() => {
+   226→        setCurrentStep(prev => (prev < 3 ? prev + 1 : prev));
+   227→      }, 800);
+   228→
+   229→      const res = await fetch('/api/vertical-slice', {
+   230→        method: 'POST',
+   231→        headers: { 'Content-Type': 'application/json' },
+   232→        body: JSON.stringify({ denialText, payer: payer || undefined }),
+   233→      });
+   234→
+   235→      clearInterval(stepTimer);
+   236→
+   237→      if (!res.ok) {
+   238→        const errData = await res.json();
+   239→        throw new Error(errData.error || errData.detail || 'Request failed');
+   240→      }
+   241→
+   242→      const data: VerticalSliceResult = await res.json();
+   243→      setCurrentStep(4);
+   244→      setResult(data);
+   245→    } catch (err: unknown) {
+   246→      setError(err instanceof Error ? err.message : String(err));
+   247→      setCurrentStep(0);
+   248→    } finally {
+   249→      setLoading(false);
+   250→    }
+   251→  }, [denialText, payer]);
+   252→
+   253→  // Run the gate test
+   254→  const runGate = useCallback(async () => {
+   255→    setGateLoading(true);
+   256→    setGateResult(null);
+   257→    try {
+   258→      const res = await fetch('/api/vertical-slice/gate', { method: 'POST' });
+   259→      if (!res.ok) throw new Error('Gate test failed');
+   260→      const data = await res.json();
+   261→      setGateResult(data);
+   262→    } catch (err: unknown) {
+   263→      setError(err instanceof Error ? err.message : String(err));
+   264→    } finally {
+   265→      setGateLoading(false);
+   266→    }
+   267→  }, []);
+   268→
+   269→  // Load a sample denial letter
+   270→  const loadSample = useCallback(async (sampleId: string) => {
+   271→    try {
+   272→      // Fetch the full sample text from the vertical-slice API GET endpoint
+   273→      // and then find the matching sample. Since we need the full text on the client,
+   274→      // we'll use a different approach: fetch from API that returns the samples.
+   275→      const res = await fetch('/api/vertical-slice');
+   276→      if (!res.ok) return;
+   277→      const data = await res.json();
+   278→      // The GET endpoint returns sample letter metadata, but not full text.
+   279→      // Instead, we'll use inline sample text directly.
+   280→    } catch {
+   281→      // Ignore
+   282→    }
+   283→
+   284→    // Use inline samples for immediate loading (no server round-trip needed)
+   285→    const inlineSamples = getInlineSamples();
+   286→    const sample = inlineSamples.find(s => s.id === sampleId);
+   287→    if (sample) {
+   288→      setDenialText(sample.text);
+   289→      setPayer(sample.payer);
+   290→    }
+   291→  }, []);
+   292→
+   293→  const STEPS = [
+   294→    { label: 'Parse Denial', icon: FileText },
+   295→    { label: 'Retrieve Citations', icon: Search },
+   296→    { label: 'Draft Appeal', icon: BookOpen },
+   297→  ];
+   298→
+   299→  return (
+   300→    <div className="space-y-6">
+   301→      {/* ── Input Section ──────────────────────────────────────── */}
+   302→      <Card>
+   303→        <CardHeader className="pb-3">
+   304→          <CardTitle className="text-sm flex items-center gap-2">
+   305→            <Zap className="h-4 w-4 text-teal-600" />
+   306→            Vertical Slice — Single-Agent Pipeline
+   307→          </CardTitle>
+   308→          <p className="text-xs text-muted-foreground mt-1">
+   309→            Upload a denial letter → Parse → Retrieve 3 citations → Draft appeal. Proves the end-to-end plumbing works.
+   310→          </p>
+   311→        </CardHeader>
+   312→        <CardContent className="space-y-4">
+   313→          {/* Sample selector */}
+   314→          <div className="flex flex-col sm:flex-row gap-2">
+   315→            <Select onValueChange={loadSample}>
+   316→              <SelectTrigger className="w-full sm:w-[300px]">
+   317→                <SelectValue placeholder="Load sample denial letter..." />
+   318→              </SelectTrigger>
+   319→              <SelectContent>
+   320→                <SelectItem value="sample-1">Medicare — Medical Necessity (CO-50, TKA)</SelectItem>
+   321→                <SelectItem value="sample-2">UnitedHealthcare — Prior Auth (CO-197, MRI)</SelectItem>
+   322→                <SelectItem value="sample-3">Aetna — Coding (CO-4, E/M Level 3)</SelectItem>
+   323→              </SelectContent>
+   324→            </Select>
+   325→            <Select value={payer} onValueChange={setPayer}>
+   326→              <SelectTrigger className="w-full sm:w-[200px]">
+   327→                <SelectValue placeholder="Payer (optional)" />
+   328→              </SelectTrigger>
+   329→              <SelectContent>
+   330→                <SelectItem value="Medicare">Medicare</SelectItem>
+   331→                <SelectItem value="UnitedHealthcare">UnitedHealthcare</SelectItem>
+   332→                <SelectItem value="Aetna">Aetna</SelectItem>
+   333→                <SelectItem value="Cigna">Cigna</SelectItem>
+   334→                <SelectItem value="Humana">Humana</SelectItem>
+   335→                <SelectItem value="Anthem">Anthem</SelectItem>
+   336→              </SelectContent>
+   337→            </Select>
+   338→          </div>
+   339→
+   340→          <Textarea
+   341→            value={denialText}
+   342→            onChange={(e) => setDenialText(e.target.value)}
+   343→            placeholder="Paste a denial letter here, or select a sample above..."
+   344→            className="min-h-[180px] text-sm font-mono"
+   345→          />
+   346→
+   347→          <div className="flex items-center gap-2 flex-wrap">
+   348→            <Button
+   349→              onClick={runSlice}
+   350→              disabled={loading || !denialText.trim()}
+   351→              className="gap-2"
+   352→            >
+   353→              {loading ? (
+   354→                <Loader2 className="h-4 w-4 animate-spin" />
+   355→              ) : (
+   356→                <Zap className="h-4 w-4" />
+   357→              )}
+   358→              Run Vertical Slice
+   359→            </Button>
+   360→            <Button
+   361→              variant="outline"
+   362→              onClick={runGate}
+   363→              disabled={gateLoading}
+   364→              className="gap-2"
+   365→            >
+   366→              {gateLoading ? (
+   367→                <Loader2 className="h-4 w-4 animate-spin" />
+   368→              ) : (
+   369→                <Shield className="h-4 w-4" />
+   370→              )}
+   371→              Run Gate Test (5×)
+   372→            </Button>
+   373→            {result && (
+   374→              <Badge variant="outline" className="gap-1 text-xs">
+   375→                <Clock className="h-3 w-3" />
+   376→                {result.latencyMs}ms
+   377→              </Badge>
+   378→            )}
+   379→          </div>
+   380→        </CardContent>
+   381→      </Card>
+   382→
+   383→      {/* ── Progress Indicator ──────────────────────────────────── */}
+   384→      {currentStep > 0 && (
+   385→        <Card>
+   386→          <CardContent className="p-4">
+   387→            <StepIndicator steps={STEPS} currentStep={currentStep} />
+   388→          </CardContent>
+   389→        </Card>
+   390→      )}
+   391→
+   392→      {/* ── Error Display ───────────────────────────────────────── */}
+   393→      {error && (
+   394→        <Card className="border-red-300 dark:border-red-700">
+   395→          <CardContent className="p-4">
+   396→            <div className="flex items-center gap-2 text-red-700 dark:text-red-400">
+   397→              <XCircle className="h-4 w-4 shrink-0" />
+   398→              <p className="text-sm">{error}</p>
+   399→            </div>
+   400→          </CardContent>
+   401→        </Card>
+   402→      )}
+   403→
+   404→      {/* ── Results ─────────────────────────────────────────────── */}
+   405→      {result && (
+   406→        <>
+   407→          {/* Parsed Denial */}
+   408→          <Card>
+   409→            <CardHeader className="pb-3">
+   410→              <CardTitle className="text-sm flex items-center gap-2">
+   411→                <FileText className="h-4 w-4 text-teal-600" />
+   412→                Parsed Denial
+   413→                <Badge variant="outline" className="text-[10px] ml-auto">
+   414→                  Confidence: {Math.round(result.parsedDenial.confidence * 100)}%
+   415→                </Badge>
+   416→              </CardTitle>
+   417→            </CardHeader>
+   418→            <CardContent>
+   419→              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 text-xs">
+   420→                <div className="bg-muted/50 rounded p-2.5">
+   421→                  <span className="text-muted-foreground block mb-0.5">Denial Code</span>
+   422→                  <p className="font-mono font-semibold">{result.parsedDenial.denial_code}</p>
+   423→                </div>
+   424→                <div className="bg-muted/50 rounded p-2.5">
+   425→                  <span className="text-muted-foreground block mb-0.5">Denial Type</span>
+   426→                  <p className="font-medium">{result.parsedDenial.denial_type_label}</p>
+   427→                </div>
+   428→                <div className="bg-muted/50 rounded p-2.5">
+   429→                  <span className="text-muted-foreground block mb-0.5">Payer</span>
+   430→                  <p className="font-medium">{result.parsedDenial.payer}</p>
+   431→                </div>
+   432→                <div className="bg-muted/50 rounded p-2.5">
+   433→                  <span className="text-muted-foreground block mb-0.5">Amount Denied</span>
+   434→                  <p className="font-mono font-semibold">
+   435→                    {result.parsedDenial.amount_denied > 0
+   436→                      ? `$${result.parsedDenial.amount_denied.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+   437→                      : '—'}
+   438→                  </p>
+   439→                </div>
+   440→                <div className="bg-muted/50 rounded p-2.5">
+   441→                  <span className="text-muted-foreground block mb-0.5">CPT Codes</span>
+   442→                  <div className="flex flex-wrap gap-1">
+   443→                    {result.parsedDenial.cpt_codes.length > 0
+   444→                      ? result.parsedDenial.cpt_codes.map(c => (
+   445→                          <Badge key={c} variant="outline" className="text-[10px] font-mono">{c}</Badge>
+   446→                        ))
+   447→                      : <span className="text-muted-foreground">—</span>}
+   448→                  </div>
+   449→                </div>
+   450→                <div className="bg-muted/50 rounded p-2.5">
+   451→                  <span className="text-muted-foreground block mb-0.5">ICD Codes</span>
+   452→                  <div className="flex flex-wrap gap-1">
+   453→                    {result.parsedDenial.icd_codes.length > 0
+   454→                      ? result.parsedDenial.icd_codes.map(c => (
+   455→                          <Badge key={c} variant="outline" className="text-[10px] font-mono">{c}</Badge>
+   456→                        ))
+   457→                      : <span className="text-muted-foreground">—</span>}
+   458→                  </div>
+   459→                </div>
+   460→                <div className="bg-muted/50 rounded p-2.5 col-span-2 sm:col-span-1">
+   461→                  <span className="text-muted-foreground block mb-0.5">Reason Codes</span>
+   462→                  <div className="flex flex-wrap gap-1">
+   463→                    {result.parsedDenial.reason_codes.length > 0
+   464→                      ? result.parsedDenial.reason_codes.map(c => (
+   465→                          <Badge key={c} variant="outline" className="text-[10px] font-mono">{c}</Badge>
+   466→                        ))
+   467→                      : <span className="text-muted-foreground">—</span>}
+   468→                  </div>
+   469→                </div>
+   470→                <div className="bg-muted/50 rounded p-2.5 col-span-2">
+   471→                  <span className="text-muted-foreground block mb-0.5">Summary</span>
+   472→                  <p className="font-medium">{result.parsedDenial.summary}</p>
+   473→                </div>
+   474→              </div>
+   475→            </CardContent>
+   476→          </Card>
+   477→
+   478→          {/* Citations with Provenance Cards */}
+   479→          <Card>
+   480→            <CardHeader className="pb-3">
+   481→              <CardTitle className="text-sm flex items-center gap-2">
+   482→                <Search className="h-4 w-4 text-emerald-600" />
+   483→                Retrieved Citations
+   484→                <Badge variant="outline" className="text-[10px]">
+   485→                  {result.citations.length} of 3
+   486→                </Badge>
+   487→                <Badge
+   488→                  className={`text-[10px] ml-auto ${
+   489→                    result.gatePassed
+   490→                      ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200'
+   491→                      : 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200'
+   492→                  }`}
+   493→                >
+   494→                  {result.gatePassed ? (
+   495→                    <><CheckCircle2 className="h-3 w-3 mr-1" />Gate Passed</>
+   496→                  ) : (
+   497→                    <><XCircle className="h-3 w-3 mr-1" />Gate Not Passed</>
+   498→                  )}
+   499→                </Badge>
+   500→              </CardTitle>
+   501→            </CardHeader>
+   502→            <CardContent className="space-y-3">
+   503→              {result.citations.length === 0 ? (
+   504→                <p className="text-sm text-muted-foreground">No citations retrieved. The evidence corpus may be empty or the query did not match.</p>
+   505→              ) : (
+   506→                result.citations.map((citation) => {
+   507→                  const tierConfig = TIER_DISPLAY[citation.provenanceTier] || TIER_DISPLAY.tertiary_commentary;
+   508→                  const TierIcon = tierConfig.icon;
+   509→                  const isExpanded = expandedCitation === citation.number;
+   510→
+   511→                  return (
+   512→                    <div
+   513→                      key={citation.number}
+   514→                      className={`rounded-lg border ${tierConfig.borderColor} hover:shadow-md transition-all cursor-pointer`}
+   515→                      onClick={() => setExpandedCitation(isExpanded ? null : citation.number)}
+   516→                    >
+   517→                      <div className="p-3 sm:p-4">
+   518→                        {/* Header */}
+   519→                        <div className="flex items-start justify-between gap-2 mb-2">
+   520→                          <div className="flex items-center gap-2 min-w-0">
+   521→                            <div className="flex items-center justify-center h-6 w-6 rounded-full bg-muted text-xs font-bold shrink-0">
+   522→                              {citation.number}
+   523→                            </div>
+   524→                            <TierIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
+   525→                            <div className="min-w-0">
+   526→                              <p className="text-sm font-medium truncate">{citation.documentName}</p>
+   527→                              {citation.section && (
+   528→                                <p className="text-xs text-muted-foreground truncate">§ {citation.section}</p>
+   529→                              )}
+   530→                            </div>
+   531→                          </div>
+   532→                          <Badge className={`text-[10px] shrink-0 ${tierConfig.color}`}>
+   533→                            {tierConfig.label}
+   534→                          </Badge>
+   535→                        </div>
+   536→
+   537→                        {/* Source + scores */}
+   538→                        <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground mb-2">
+   539→                          <span className="flex items-center gap-1">
+   540→                            <FileText className="h-3 w-3" />
+   541→                            {citation.source}
+   542→                          </span>
+   543→                          <span className="flex items-center gap-1">
+   544→                            Relevance: {citation.relevanceScore}
+   545→                          </span>
+   546→                          <span className="flex items-center gap-1">
+   547→                            Weight: {citation.retrievalWeight}
+   548→                          </span>
+   549→                          {citation.clauseId && (
+   550→                            <span className="flex items-center gap-1 font-mono">
+   551→                              Clause: {citation.clauseId}
+   552→                            </span>
+   553→                          )}
+   554→                        </div>
+   555→
+   556→                        {/* Content Preview */}
+   557→                        <p className="text-xs text-muted-foreground line-clamp-2">
+   558→                          {citation.contentPreview}
+   559→                        </p>
+   560→
+   561→                        {/* Expanded detail */}
+   562→                        {isExpanded && (
+   563→                          <div className="mt-3 pt-3 border-t space-y-2">
+   564→                            <div className="grid grid-cols-2 gap-2 text-xs">
+   565→                              <div className="bg-muted/50 rounded p-2">
+   566→                                <span className="text-muted-foreground block mb-0.5">Evidence ID</span>
+   567→                                <p className="font-mono">{citation.evidenceId}</p>
+   568→                              </div>
+   569→                              <div className="bg-muted/50 rounded p-2">
+   570→                                <span className="text-muted-foreground block mb-0.5">Provenance Tier</span>
+   571→                                <p className="font-medium">{citation.provenanceTier}</p>
+   572→                              </div>
+   573→                              <div className="bg-muted/50 rounded p-2">
+   574→                                <span className="text-muted-foreground block mb-0.5">Retrieval Weight</span>
+   575→                                <p className="font-mono">{citation.retrievalWeight}</p>
+   576→                              </div>
+   577→                              <div className="bg-muted/50 rounded p-2">
+   578→                                <span className="text-muted-foreground block mb-0.5">Relevance Score</span>
+   579→                                <p className="font-mono">{citation.relevanceScore}</p>
+   580→                              </div>
+   581→                            </div>
+   582→                            <div className="bg-muted/50 rounded p-2 text-xs">
+   583→                              <span className="text-muted-foreground block mb-1">Full Content Preview</span>
+   584→                              <p className="whitespace-pre-wrap">{citation.contentPreview}</p>
+   585→                            </div>
+   586→                          </div>
+   587→                        )}
+   588→                      </div>
+   589→                    </div>
+   590→                  );
+   591→                })
+   592→              )}
+   593→            </CardContent>
+   594→          </Card>
+   595→
+   596→          {/* Appeal Draft */}
+   597→          <Card>
+   598→            <CardHeader className="pb-3">
+   599→              <CardTitle className="text-sm flex items-center gap-2">
+   600→                <BookOpen className="h-4 w-4 text-teal-600" />
+   601→                Appeal Draft
+   602→                <Badge variant="outline" className="text-[10px]">
+   603→                  {result.appealDraft.wordCount} words
+   604→                </Badge>
+   605→                <Badge variant="outline" className="text-[10px]">
+   606→                  Tone: {result.appealDraft.tone}
+   607→                </Badge>
+   608→              </CardTitle>
+   609→            </CardHeader>
+   610→            <CardContent className="space-y-4">
+   611→              {/* Appeal paragraph with inline citation references */}
+   612→              <div className="bg-muted/30 border rounded-lg p-4">
+   613→                <p className="text-sm leading-relaxed whitespace-pre-wrap">
+   614→                  {renderAppealWithCitations(result.appealDraft.paragraph, result.citations)}
+   615→                </p>
+   616→              </div>
+   617→
+   618→              {/* Strengths */}
+   619→              {result.appealDraft.strengths.length > 0 && (
+   620→                <div>
+   621→                  <p className="text-xs font-medium text-muted-foreground mb-2">Appeal Strengths:</p>
+   622→                  <ul className="space-y-1">
+   623→                    {result.appealDraft.strengths.map((s, idx) => (
+   624→                      <li key={idx} className="flex items-start gap-1.5 text-xs text-muted-foreground">
+   625→                        <CheckCircle2 className="h-3 w-3 mt-0.5 shrink-0 text-emerald-500" />
+   626→                        {s}
+   627→                      </li>
+   628→                    ))}
+   629→                  </ul>
+   630→                </div>
+   631→              )}
+   632→
+   633→              {/* Trace */}
+   634→              <Accordion type="single" collapsible>
+   635→                <AccordionItem value="trace" className="border-b-0">
+   636→                  <AccordionTrigger className="text-xs py-2 hover:no-underline">
+   637→                    <span className="flex items-center gap-1.5">
+   638→                      <Clock className="h-3 w-3" />
+   639→                      Decision Trace ({result.trace.length} steps)
+   640→                    </span>
+   641→                  </AccordionTrigger>
+   642→                  <AccordionContent>
+   643→                    <div className="space-y-2 max-h-64 overflow-y-auto">
+   644→                      {result.trace.map((t, idx) => (
+   645→                        <div key={idx} className="flex items-start gap-2 text-xs bg-muted/30 rounded p-2">
+   646→                          <div className="flex items-center justify-center h-5 w-5 rounded-full bg-muted text-[10px] font-bold shrink-0">
+   647→                            {idx + 1}
+   648→                          </div>
+   649→                          <div className="min-w-0">
+   650→                            <div className="flex items-center gap-2 mb-0.5">
+   651→                              <span className="font-medium">{t.step}</span>
+   652→                              <span className="text-muted-foreground font-mono text-[10px]">
+   653→                                {new Date(t.timestamp).toLocaleTimeString()}
+   654→                              </span>
+   655→                            </div>
+   656→                            <p className="text-muted-foreground break-words">{t.detail}</p>
+   657→                          </div>
+   658→                        </div>
+   659→                      ))}
+   660→                    </div>
+   661→                  </AccordionContent>
+   662→                </AccordionItem>
+   663→              </Accordion>
+   664→            </CardContent>
+   665→          </Card>
+   666→
+   667→          {/* Gate Status Card */}
+   668→          <Card className={result.gatePassed ? 'border-emerald-300 dark:border-emerald-700' : 'border-amber-300 dark:border-amber-700'}>
+   669→            <CardContent className="p-4">
+   670→              <div className="flex items-center justify-between gap-3">
+   671→                <div className="flex items-center gap-2">
+   672→                  {result.gatePassed ? (
+   673→                    <ShieldCheck className="h-5 w-5 text-emerald-600" />
+   674→                  ) : (
+   675→                    <AlertTriangle className="h-5 w-5 text-amber-600" />
+   676→                  )}
+   677→                  <div>
+   678→                    <p className="text-sm font-medium">
+   679→                      Gate: {result.gatePassed ? 'PASSED' : 'NOT PASSED'}
+   680→                    </p>
+   681→                    <p className="text-xs text-muted-foreground">
+   682→                      Requires 3+ citations. Got {result.citations.length}.
+   683→                    </p>
+   684→                  </div>
+   685→                </div>
+   686→                <div className="flex items-center gap-2">
+   687→                  <Badge variant="outline" className="text-[10px] gap-1">
+   688→                    <Clock className="h-2.5 w-2.5" />
+   689→                    {result.latencyMs}ms
+   690→                  </Badge>
+   691→                  <Badge
+   692→                    className={`text-[10px] ${
+   693→                      result.gatePassed
+   694→                        ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200'
+   695→                        : 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200'
+   696→                    }`}
+   697→                  >
+   698→                    {result.citations.length}/3
+   699→                  </Badge>
+   700→                </div>
+   701→              </div>
+   702→            </CardContent>
+   703→          </Card>
+   704→        </>
+   705→      )}
+   706→
+   707→      {/* ── Gate Test Results ───────────────────────────────────── */}
+   708→      {gateResult && (
+   709→        <Card className={gateResult.allPassed ? 'border-emerald-300 dark:border-emerald-700' : 'border-amber-300 dark:border-amber-700'}>
+   710→          <CardHeader className="pb-3">
+   711→            <CardTitle className="text-sm flex items-center gap-2">
+   712→              <Shield className="h-4 w-4 text-teal-600" />
+   713→              Gate Test Results (5×)
+   714→              <Badge
+   715→                className={`text-[10px] ml-auto ${
+   716→                  gateResult.allPassed
+   717→                    ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200'
+   718→                    : 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200'
+   719→                }`}
+   720→              >
+   721→                {gateResult.allPassed ? (
+   722→                  <><CheckCircle2 className="h-3 w-3 mr-1" />All Passed</>
+   723→                ) : (
+   724→                  <>{gateResult.passedCount}/{gateResult.totalRuns} Passed</>
+   725→                )}
+   726→              </Badge>
+   727→            </CardTitle>
+   728→          </CardHeader>
+   729→          <CardContent className="space-y-3">
+   730→            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs mb-3">
+   731→              <div className="bg-muted/50 rounded p-2.5">
+   732→                <span className="text-muted-foreground block mb-0.5">Total Runs</span>
+   733→                <p className="font-mono font-semibold">{gateResult.totalRuns}</p>
+   734→              </div>
+   735→              <div className="bg-muted/50 rounded p-2.5">
+   736→                <span className="text-muted-foreground block mb-0.5">Passed</span>
+   737→                <p className={`font-mono font-semibold ${gateResult.allPassed ? 'text-emerald-600' : 'text-amber-600'}`}>
+   738→                  {gateResult.passedCount}
+   739→                </p>
+   740→              </div>
+   741→              <div className="bg-muted/50 rounded p-2.5">
+   742→                <span className="text-muted-foreground block mb-0.5">Total Latency</span>
+   743→                <p className="font-mono font-semibold">{gateResult.totalLatencyMs}ms</p>
+   744→              </div>
+   745→            </div>
+   746→
+   747→            {gateResult.results.map((r) => (
+   748→              <div
+   749→                key={r.run}
+   750→                className={`flex items-center gap-3 rounded-lg border p-3 ${
+   751→                  r.gatePassed
+   752→                    ? 'border-emerald-200 dark:border-emerald-800'
+   753→                    : 'border-red-200 dark:border-red-800'
+   754→                }`}
+   755→              >
+   756→                <div className="flex items-center justify-center h-6 w-6 rounded-full bg-muted text-xs font-bold shrink-0">
+   757→                  {r.run}
+   758→                </div>
+   759→                <div className="flex-1 min-w-0">
+   760→                  <p className="text-xs font-medium truncate">{r.sampleLabel}</p>
+   761→                  <p className="text-[10px] text-muted-foreground">
+   762→                    {r.citationsCount} citations &middot; {r.latencyMs}ms
+   763→                  </p>
+   764→                </div>
+   765→                {r.gatePassed ? (
+   766→                  <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+   767→                ) : (
+   768→                  <XCircle className="h-4 w-4 text-red-500 shrink-0" />
+   769→                )}
+   770→              </div>
+   771→            ))}
+   772→          </CardContent>
+   773→        </Card>
+   774→      )}
+   775→    </div>
+   776→  );
+   777→}
+   778→
+   779→// ─── Helper: Render appeal paragraph with clickable citation refs ────────
+   780→
+   781→function renderAppealWithCitations(paragraph: string, citations: VerticalSliceCitation[]) {
+   782→  // Split on [1], [2], [3] patterns and interleave with clickable spans
+   783→  const parts: React.ReactNode[] = [];
+   784→  const regex = /\[(\d+)\]/g;
+   785→  let lastIndex = 0;
+   786→  let match;
+   787→
+   788→  while ((match = regex.exec(paragraph)) !== null) {
+   789→    // Push text before the match
+   790→    if (match.index > lastIndex) {
+   791→      parts.push(paragraph.slice(lastIndex, match.index));
+   792→    }
+   793→
+   794→    const citationNum = parseInt(match[1]);
+   795→    const citation = citations.find(c => c.number === citationNum);
+   796→
+   797→    parts.push(
+   798→      <button
+   799→        key={`cite-${match.index}`}
+   800→        className="inline-flex items-center gap-0.5 px-1 py-0 rounded bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-200 text-xs font-medium hover:bg-teal-200 dark:hover:bg-teal-800 transition-colors"
+   801→        title={citation ? `${citation.documentName}${citation.section ? ` — §${citation.section}` : ''}` : `Citation ${citationNum}`}
+   802→      >
+   803→        [{citationNum}]
+   804→        <ExternalLink className="h-2.5 w-2.5" />
+   805→      </button>
+   806→    );
+   807→
+   808→    lastIndex = regex.lastIndex;
+   809→  }
+   810→
+   811→  // Push remaining text
+   812→  if (lastIndex < paragraph.length) {
+   813→    parts.push(paragraph.slice(lastIndex));
+   814→  }
+   815→
+   816→  return parts;
+   817→}
+   818→
+   819→// ─── Inline Sample Denial Letters ─────────────────────────────────────────
+   820→
+   821→function getInlineSamples(): SampleLetter[] {
+   822→  return [
+   823→    {
+   824→      id: 'sample-1',
+   825→      label: 'Medicare — Medical Necessity (CO-50, TKA)',
+   826→      payer: 'Medicare',
+   827→      text: `Medicare\nClaims Adjudication Department\n\nDATE: March 4, 2026\n\nRE: Denial of Claim — 27447 (Total Knee Arthroplasty)\n\nDear Provider,\n\nThis letter is to inform you that the claim submitted for the above-referenced service has been denied.\n\nDENIAL REASON: CO50 — Non-covered services because it is not deemed medically necessary\n\nPAYER STATEMENT: The requested service is not medically necessary for the diagnosed condition. Conservative treatment options have not been adequately documented as exhausted.\n\nPROCEDURE: 27447 — Total Knee Arthroplasty\nDIAGNOSIS: M17.11 — Primary osteoarthritis, right knee\nAMOUNT DENIED: $34,250.00\n\nAPPEAL RIGHTS: You have the right to appeal this denial within 120 days of the date of this notice.\n\nSincerely,\nClaims Adjudication Department\nMedicare`,
+   828→    },
+   829→    {
+   830→      id: 'sample-2',
+   831→      label: 'UnitedHealthcare — Prior Auth (CO-197, MRI)',
+   832→      payer: 'UnitedHealthcare',
+   833→      text: `UnitedHealthcare\nPrior Authorization Department\n\nDATE: February 28, 2026\n\nRE: Denial of Claim — 70553 (MRI Brain With and Without Contrast)\n\nDear Provider,\n\nThis letter is to inform you that the claim submitted for the above-referenced service has been denied.\n\nDENIAL REASON: CO197 — Precertification/authorization/notification/pre-treatment absent\n\nPAYER STATEMENT: Precertification was not obtained prior to service delivery. This procedure requires prior authorization per UnitedHealthcare Medical Policy.\n\nPROCEDURE: 70553 — MRI brain with and without contrast\nDIAGNOSIS: G43.909 — Migraine, unspecified, not intractable\nAMOUNT DENIED: $2,890.00\n\nAPPEAL RIGHTS: You have the right to appeal this denial within 180 days.\n\nSincerely,\nPrior Authorization Department\nUnitedHealthcare`,
+   834→    },
+   835→    {
+   836→      id: 'sample-3',
+   837→      label: 'Aetna — Coding (CO-4, E/M Level 3)',
+   838→      payer: 'Aetna',
+   839→      text: `Aetna\nClaims Adjudication Department\n\nDATE: March 10, 2026\n\nRE: Denial of Claim — 99213 (Office Visit, Established Patient, Level 3)\n\nDear Provider,\n\nThis letter is to inform you that the claim submitted for the above-referenced service has been denied.\n\nDENIAL REASON: CO4 — The procedure code is inconsistent with the modifier used or is inconsistent with the diagnosis\n\nPAYER STATEMENT: Procedure code 99213 is inconsistent with the submitted diagnosis code. The level of service billed does not match the documentation provided for the stated diagnosis.\n\nPROCEDURE: 99213 — Office visit, established patient, level 3\nDIAGNOSIS: K21.0 — Gastro-esophageal reflux disease with esophagitis\nAMOUNT DENIED: $156.00\n\nAPPEAL RIGHTS: You have the right to appeal this denial within 90 days.\n\nSincerely,\nClaims Adjudication Department\nAetna`,
+   840→    },
+   841→  ];
+   842→}
+   843→

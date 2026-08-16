@@ -1,0 +1,502 @@
+     1→GRAND-PRIZE WAR-ROOM DELIVERABLE
+     2→DenialDefender
+     3→The Ultimate Grand-Prize Blueprint
+     4→Evidence-Grounded, Human-Governed Autonomous Denial-Appeal Operations
+     5→Don't build the biggest DenialDefender.Build the most undeniable DenialDefender.
+     6→Architectural Strategy  ·  Technical Strategy  ·  Engineering Design  ·  14-Day Day-by-Day Implementation Plan
+     7→Synthesis of the 50-Section Strategic Blueprint and the War-Room Reviewer Commentary
+     8→Target Competition
+     9→All Things Agentic Hackathon — "Ready, Set, Agent!" (Google LLC)
+    10→Submission Track
+    11→The Fortified Enterprise Fleet (primary), engineered for the $50,000 Grand Prize
+    12→Judging Weights
+    13→Innovation & Operational Utility 40% · Architecture 30% · Demo & Production Readiness 30%
+    14→Build Window
+    15→14 working days · Aug 15–28, 2026 (submission window closes Aug 31, 2026)
+    16→Author
+    17→Strategic Synthesis — DenialDefender War Room
+    18→Document Version
+    19→Ultimate Blueprint v1.0 — Aug 14, 2026
+    20→Table of Contents
+    21→PART I — STRATEGIC VERDICT & DOCTRINE
+    22→1.  Executive Verdict (TL;DR)4
+    23→2.  The Strategic Pivot5
+    24→3.  Three Fatal Weaknesses of "Build-As-Written"6
+    25→4.  The Ultimate Doctrine — 13 Inviolable Principles7
+    26→PART II — ARCHITECTURAL STRATEGY
+    27→5.  The Triad Architecture (Evidence · Agents · Governance)8
+    28→6.  Agent Architecture — Eight Genuinely Necessary Specialists9
+    29→7.  Necessity Justification & the Agent-Ablation Experiment10
+    30→8.  Data & Evidence Architecture — Real Public Evidence + Synthetic Cases11
+    31→9.  Provenance & Citation Architecture12
+    32→10. Security & Governance Architecture — PHI Guard13
+    33→11. Memory & State Architecture14
+    34→PART III — TECHNICAL STRATEGY
+    35→12. Google Stack Selection — Ruthless Trimming15
+    36→13. The Outcome-Learning Experiment (Measured, Not Performed)16
+    37→14. Decision Trace — Not "Agent Thoughts"17
+    38→15. Adversarial Quality Review18
+    39→16. External Integration Strategy — NPI Registry18
+    40→17. Claims & Terminology Discipline19
+    41→PART IV — ENGINEERING STRATEGY & DESIGN
+    42→18. Engineering Principles20
+    43→19. Repository & Service Topology20
+    44→20. Core Data Model & Schemas21
+    45→21. The Evaluation Harness — Experimental Backbone22
+    46→22. Reliability & Demo-Failure Plan23
+    47→23. Testing & Quality Gates23
+    48→PART V — DAY-BY-DAY IMPLEMENTATION PLAN (14 DAYS)
+    49→24. Day 0 — Pre-Kickoff (Aug 14)24
+    50→25. Days 1–3 — Foundation, Evidence Corpus, Vertical Skeleton25
+    51→26. Days 4–6 — Agents, Provenance, Decision Trace26
+    52→27. Days 7–9 — Outcome-Learning Experiment & Adversarial Review27
+    53→28. Days 10–12 — Governance, PHI Guard, NPI, Polish28
+    54→29. Day 13 — Demo Lock, Dry Runs, Domain Validation29
+    55→30. Day 14 — Final Dry Runs, Video, Submission Buffer30
+    56→31. Daily Discipline — Standups, Risk Gates, Stopping Rules30
+    57→PART VI — DEMO & SUBMISSION
+    58→32. The Two-Act Demo — Second-by-Second Script31
+    59→33. The Second-Case Behavioral Moment32
+    60→34. Three Forbidden Phrases — Claims Discipline33
+    61→35. Devpost & Repository Hygiene33
+    62→PART VII — RISK, COUNTERARGUMENTS & FINAL VERDICT
+    63→36. Counterarguments & Responses (Steelmanned)34
+    64→37. Risk Register & Decision Gates35
+    65→38. Priority Tiering — Tier S / A / B / C36
+    66→39. Final Verdict & Target Scorecard37
+    67→References38
+    68→PART I
+    69→Strategic Verdict & Doctrine
+    70→1.  Executive Verdict (TL;DR)
+    71→Keep DenialDefender. Do not build the existing 178-page blueprint exactly as written. The strategic concept is near-perfect, but the implementation plan is over-scoped, defensively weak on credibility, and bets the Grand Prize on a single fragile artifact (a green "+0.06" weight-change animation) rather than on a measured learning experiment. This document is the corrected, hardened, day-by-day execution doctrine that maximizes the probability of the $50,000 Grand Prize in the All Things Agentic Hackathon, whose official judging weights Innovation & Operational Utility at 40%, Architectural Discipline at 30%, and Demo & Production Readiness at 30%.
+    72→The single sentence that should govern every engineering decision for the next 14 days is this: build the most undeniable DenialDefender, not the biggest. "Undeniable" is defined by thirteen properties working in concert — real public evidence, synthetic privacy-safe cases, domain-expert validation, eight genuinely necessary agents, independent verification, human governance, a PHI firewall, observable decision traces, measured learning, a second-case behavioral improvement, a Google-native architecture, one spectacular 90-second transformation, and zero unsupported claims. A submission that delivers all thirteen is substantially harder for a competitor or a skeptic to attack than one that ships a wider feature surface in which no single thing is excellent.
+    73→Target Scorecard
+    74→Table 1.1 — Grand-Prize target scorecard. Targets are conditional on execution; no Grand Prize is guaranteed.
+    75→Judging Dimension
+    76→Weight
+    77→Target (out of 5)
+    78→Primary Carrier
+    79→Innovation & Operational Utility
+    80→40%
+    81→4.7–5.0
+    82→Real public evidence + measured outcome learning + second-case behavioral shift
+    83→Architectural Discipline & Tech Stack
+    84→30%
+    85→4.6–5.0
+    86→Triad architecture + agent-ablation evidence + ruthless stack trimming
+    87→Demo & Production Readiness
+    88→30%
+    89→4.7–5.0
+    90→Two-act demo + PHI Guard wow + decision trace + reliable 90-second appeal
+    91→Bonus (Gemma/Veo/Lyria if rules allow)
+    92→+0.6–1.0
+    93→Captured
+    94→Gemma in core narrative; Veo/Lyria as optional artifacts only
+    95→The one-line thesis  DenialDefender does not replace the human. It replaces the hours of work around the human — by turning a 6-hour, error-prone appeal-drafting ordeal into a 90-second, evidence-backed, independently verified, human-approved appeal package that measurably improves after every recorded outcome.
+    96→The remainder of Part I explains why "build as written" fails, and Part II onwards specifies the architecture, technology, engineering design, and the daily schedule that delivers the verdict above.
+    97→2.  The Strategic Pivot
+    98→The existing blueprint positions DenialDefender as "the agent that fights your insurance company for you" and, operationally, as "AI that writes insurance appeal letters." That framing is emotionally resonant but technically dangerous: it invites the judge to evaluate the project as a letter generator, in which case a single hallucinated citation or an unverified claim collapses the entire submission. The pivot is to re-position the product one level up the abstraction stack, from output to workflow.
+    99→The new target identity is evidence-grounded, human-governed autonomous denial-appeal operations. The central loop is no longer "upload denial → produce letter" but a ten-stage closed loop in which the letter is merely the most visible intermediate artifact and the outcome is the thing the system actually optimizes for:
+   100→Figure 2.1 — The ten-stage closed loop. The appeal letter is an intermediate artifact, not the deliverable; the deliverable is a workflow that measurably improves.
+   101→REAL PUBLIC HEALTHCARE EVIDENCE              v      SYNTHETIC CASE              v       DENIAL TRIAGE              v   POLICY + EVIDENCE RESEARCH              v      APPEAL GENERATION              v    INDEPENDENT VERIFICATION              v       HUMAN APPROVAL              v    DEADLINE MANAGEMENT              v       OUTCOME RECORDED              v      MEASURED LEARNING              v       BETTER NEXT CASE
+   102→This pivot directly attacks the three weaknesses the reviewer commentary identifies as existential: domain credibility, the synthetic-data criticism, and the HIPAA-perception problem. By making institutional knowledge real (sourced from CMS and payer public material) while keeping patient cases synthetic, the project can truthfully state that its grounding evidence is authoritative and public, even though its cases are privacy-safe by construction. The distinction is subtle but decisive in a judge's mind: "our data is synthetic" is a confession; "our patient cases are synthetic by design, and the healthcare knowledge grounding them is sourced from authoritative public payer and government material" is a credibility statement.
+   103→3.  Three Fatal Weaknesses of “Build-As-Written”
+   104→The reviewer's forensics on the existing blueprint converge on three failure modes that, left uncorrected, would cap the project at a strong track prize rather than the Grand Prize. Each is stated here as a steel-manned objection so that the engineering plan in Parts IV and V can be read as direct responses.
+   105→Weakness 1 — The Outcome-Learning gimmick (severity: critical)
+   106→The blueprint's self-evolving moment is a procedural-evidence weight changing from 0.42 to 0.48. Visually this is excellent, but a sophisticated judge can ask, "So you changed a number. How do you know the system actually improved?" Without an experimental answer, the most agentic claim in the entire submission collapses into a UI animation. The fix is to convert Outcome Learning from a performed weight-change into a measured before/after evaluation across a held-out case set, demonstrated live on two cases where the ranking of arguments visibly changes because of recorded outcomes. This single change converts the project from "an agent that changes its weights" into "a system whose behavior changed because of validated outcomes" — the latter is genuinely agentic; the former is theater.
+   107→Weakness 2 — Synthetic-only data leaves no credibility floor (severity: high)
+   108→A demo built entirely on synthetic denial letters, synthetic medical records, and a synthetic outcome corpus has no defensible answer to "where does your medical knowledge come from?" The answer "we generated it" is exactly the answer that triggers hallucination concerns. The fix is to anchor the evidence corpus in authoritative public sources — CMS denial reason statements and eMDR codes, CMS public-use claims files, CMS SynPUFs (which CMS explicitly created so developers can work with realistic Medicare claims structures while protecting beneficiary privacy), official Medicare appeals guidance, and versioned, frozen payer medical-policy documents. CMS itself distinguishes public-use files from identifiable data and states that public-use files do not contain PHI or PII requiring a data-use agreement, which gives the project a clean, citable data story.
+   109→Weakness 3 — The "Google product parade" dilutes reliability (severity: high)
+   110→The blueprint is committed to all seven Google Enterprise Agent Platform (GEAP) components plus Gemma, Veo, Lyria, A2A, and MCP. The official rules require only Gemini plus one Google agent framework plus one Google Cloud infrastructure service; the GEAP components are recommended for the Fleet track, not each individually mandatory. Shipping seven labels at the cost of reliability produces a demo in which no single integration is undeniably excellent and several are stubbed — exactly the failure pattern the blueprint's own kill-your-darlings philosophy warns against. The fix is ruthless trimming: keep the core (ADK, Cloud Run, Firestore, Cloud SQL pgvector, Pub/Sub) and the governance trio (Model Armor, Agent Identity, Agent Observability); treat Memory Bank, Gateway, Registry, Veo, Lyria, A2A, and MCP as conditional additions that survive only if they demonstrably strengthen the narrative without compromising the demo.
+   111→4.  The Ultimate Doctrine — 13 Inviolable Principles
+   112→The thirteen properties below are the definition of "undeniable." Every architectural, technical, and engineering decision in this document exists to deliver them, and every daily task in Part V is traceable to one or more of them. They are non-negotiable; if a planned feature cannot be mapped to at least one principle, it is cut.
+   113→Table 4.1 — The thirteen inviolable principles. Treat as a checklist for every pull request.
+   114→#
+   115→Principle
+   116→What “undeniable” requires here
+   117→1
+   118→Real public evidence
+   119→Evidence corpus sourced from CMS and payer public material, versioned and hashed.
+   120→2
+   121→Synthetic, privacy-safe cases
+   122→Patient cases are synthetic by design; no real PHI is ever processed.
+   123→3
+   124→Domain-expert validation
+   125→A medical billing / RCM specialist reviews taxonomy, workflow, and 2–3 appeals; their changes are logged.
+   126→4
+   127→Eight genuinely necessary agents
+   128→Each agent's removal breaks a measurable property; justified by an ablation table.
+   129→5
+   130→Independent verification
+   131→A Quality Review agent attempts to break the draft before human approval.
+   132→6
+   133→Human governance
+   134→Two HITL gates; “autonomous doesn't mean unsupervised.”
+   135→7
+   136→PHI firewall
+   137→A visible PHI Guard blocks model invocation on potential PHI before any agent runs.
+   138→8
+   139→Observable decision traces
+   140→Structured decision events, not exposed chain-of-thought.
+   141→9
+   142→Measured learning
+   143→Before/after evaluation on a held-out set; targets measured, not claimed.
+   144→10
+   145→Second-case behavioral improvement
+   146→Live demo shows argument ranking change because of recorded outcomes.
+   147→11
+   148→Google-native architecture
+   149→Core stack is Gemini + ADK + Cloud Run + Firestore + pgvector + Pub/Sub.
+   150→12
+   151→One spectacular 90-second transformation
+   152→Denial → evidence-backed appeal draft, end-to-end, reliably.
+   153→13
+   154→Zero unsupported claims
+   155→Every claim is measured, scoped, or removed; no “wins appeals.”
+   156→PART II
+   157→Architectural Strategy
+   158→5.  The Triad Architecture (Evidence · Agents · Governance)
+   159→The judging architecture a judge should see at the end of the demo is a triad: Evidence, Agents, and Governance, joined at a human-approval vertex, leading to an appeal package, an outcome, and measured learning. This is deliberately not a diagram of "eight agents" or a "Google stack" — those are implementation details that sit inside the Agents vertex. The triad is the product; everything else is plumbing in service of it. The discipline of drawing the architecture this way forces every component to justify itself against one of the three vertices or the outcome loop, and it makes the multi-agent necessity argument visual rather than rhetorical.
+   160→Figure 5.1 — The judging triad. The product is the loop, not the agent count or the stack.
+   161→                 DENIALDEFENDER                       |        +--------------+--------------+        |              |              |    EVIDENCE        AGENTS       GOVERNANCE        |              |              | CMS / payer       8 specialists   PHI Guard public sources    ADK workflow    Model Armor        |              |          Identity        |              |          Observability        +--------------+--------------+                       |                 HUMAN APPROVAL                       |                       v              APPEAL PACKAGE                       |                       v                   OUTCOME                       |                       v             MEASURED LEARNING                       |                       v                BETTER NEXT CASE
+   162→Three architectural consequences follow from the triad. First, the Evidence vertex is a first-class subsystem with its own storage, versioning, and provenance — not a vector index bolted onto the agents. Second, the Agents vertex is internally a workflow orchestrated by ADK, but externally it presents as a single decision-trace stream, so judges never have to reason about agent topology to understand a case. Third, the Governance vertex is co-equal with the other two: PHI Guard, Model Armor, Agent Identity, and Agent Observability are not security afterthoughts tacked onto a working pipeline — they are the third pillar of the product, and the PHI Guard in particular is a demo-grade feature, not a backend detail.
+   163→Why a triad and not a stack
+   164→A stack diagram invites the judge to ask "why so many boxes?" A triad invites the judge to ask "is each pillar genuinely necessary?" — which is the question the project can actually answer. Removing Evidence breaks citation grounding; removing Agents breaks the workflow and the multi-agent necessity argument; removing Governance breaks the enterprise-grade and production-readiness criteria. The triad is therefore the minimum architecture that satisfies all three judging dimensions simultaneously, which is why it is the headline diagram rather than the agent graph.
+   165→6.  Agent Architecture — Eight Genuinely Necessary Specialists
+   166→Eight specialized agents implement the workflow. The headline is not "eight agents" — it is "a verified appeal workflow that learns from outcomes, implemented by eight specialists." A sophisticated judge does not care whether the count is 8, 12, or 34; they care why these boundaries are necessary. The table below is the one-screen architecture justification: each agent, its single responsibility, and what measurably breaks if it is removed. This table is also the basis of the ablation experiment in Section 7.
+   167→Table 6.1 — The eight agents. Each row is a necessity argument; Section 7 turns it into a measured ablation.
+   168→#
+   169→Agent
+   170→Single Responsibility
+   171→What Breaks If Removed
+   172→1
+   173→Patient Advocate
+   174→Empathetic intake, case framing, user trust
+   175→Intake becomes a form; the “Unlikely Hero” persona collapses
+   176→2
+   177→Denial Triage
+   178→Multimodal parse of denial letter → structured JSON
+   179→No structured input; every downstream agent runs on noise
+   180→3
+   181→Policy Research
+   182→Retrieve payer policy + clause citations
+   183→No citation grounding; hallucination risk returns
+   184→4
+   185→Evidence Assembly
+   186→Match clinical evidence to denial reason
+   187→No medical evidence; appeal is legal argument only
+   188→5
+   189→Letter Drafting
+   190→Compose evidence-backed appeal draft
+   191→No output artifact; the 90-second moment vanishes
+   192→6
+   193→Quality Review (adversarial)
+   194→Attempt to break the draft; verify every citation
+   195→No independent verification; credibility floor drops
+   196→7
+   197→Outcome Learning
+   198→Ingest outcomes; update retrieval; before/after eval
+   199→No measured learning; the agentic claim is theater
+   200→8
+   201→Compliance & Deadline
+   202→Deadline tracking, payer-format checks, audit trail
+   203→No enterprise governance; production-readiness score drops
+   204→The agents are orchestrated by the Agent Development Kit (ADK), Google's open-source framework for building, debugging, and deploying reliable AI agents at enterprise scale. ADK provides the delegation, hand-off, and tool-calling primitives that make the eight-agent topology a workflow rather than eight independent prompts. Agents persist case context to Firestore and long-term memory to Vertex AI Memory Bank (where stable), so the system exhibits genuine persistent context — a criterion the Fortified Enterprise Fleet track explicitly rewards. Each agent emits structured decision-trace events to a Pub/Sub topic consumed by the Agent Observability sink, so the demo's decision trace is not a separate instrumentation layer but a first-class output of the orchestration.
+   205→Why eight and not fewer  The ablation in Section 7 is designed to show that a single agent cannot ground citations independently and verify them in the same pass (incentive conflict), and that collapsing Policy Research and Evidence Assembly into one agent destroys the citation/clinical-evidence distinction the appeal depends on. The count is justified by measurement, not by ambition.
+   206→7.  Necessity Justification & the Agent-Ablation Experiment
+   207→The Fortified Enterprise Fleet rubric explicitly asks whether a task is complex enough to warrant multiple agents and whether delegation is intelligent. A narrative answer is weak; a measured answer is decisive. The agent-ablation experiment is therefore a killer technical artifact: run the same held-out case set through progressively richer agent topologies and measure the property each agent is supposed to protect. The numbers below are targets to be measured, not claims; the experiment must demonstrate that multi-agent separation improves something measurable, and the result is reported whether or not it flatters the architecture.
+   208→Table 7.1 — Agent-ablation targets. Every cell is a measurement to be run in the evaluation harness (Section 21), not a claim.
+   209→Architecture
+   210→Citation Grounding
+   211→Unsupported Claims
+   212→Verdict
+   213→Single agent (monolith)
+   214→≤ 75% (target)
+   215→high
+   216→Fails verification
+   217→3-agent (Triage + Draft + Review)
+   218→~84% (target)
+   219→medium
+   220→Weak grounding
+   221→5-agent (+ Policy + Evidence)
+   222→~91% (target)
+   223→low
+   224→Strong grounding
+   225→8-agent (full)
+   226→~96% (target)
+   227→near-zero
+   228→Independently verifiable
+   229→The experiment runs on the same ten held-out cases used for the outcome-learning before/after evaluation (Section 13), which means a single evaluation run produces both the ablation table and the learning evidence. This is a deliberate efficiency: the two strongest technical artifacts in the submission are generated by one harness. The ablation is also the cleanest possible answer to the judge question "why eight agents and not three?" — because the table shows that the marginal agents each lift a measurable property, and that removing Quality Review reintroduces unsupported claims that the compliance story cannot tolerate.
+   230→8.  Data & Evidence Architecture — Real Public Evidence + Synthetic Cases
+   231→The data architecture is the project's credibility floor and its single most important upgrade over the blueprint as written. The principle is absolute: patient cases are synthetic by design; the institutional knowledge grounding them is real and authoritative. This split is what converts "our data is synthetic" (a confession) into "our cases are synthetic by design, and the healthcare knowledge is sourced from authoritative public payer and government material" (a credibility statement). The architecture below implements that split as three versioned layers feeding one evidence corpus.
+   232→Figure 8.1 — Public-data architecture. The corpus is versioned, hashed, and provenance-tagged; the patient case is synthetic.
+   233→       +--------------------+       |  CMS PUBLIC DATA  |       |  denial reasons   |       |  claims structures |       |  appeal procedures |       |  SynPUFs           |       +---------+----------+                 |       +---------v----------+       | OFFICIAL POLICIES  |       | payer documents    |       | state DOI rules    |       +---------+----------+                 |       +---------v----------+       | EVIDENCE CORPUS   |       | versioned + hash  |       | effective dates    |       | provenance         |       +---------+----------+                 |                 v           DenialDefender                 |   Synthetic patient case  -->  Real institutional evidence  -->  Evidence-backed appeal
+   234→Authoritative source inventory
+   235→The evidence corpus is built from named, citable public sources. CMS publishes standardized denial and non-affirmation reason statements used by Medicare review contractors, which gives the triage agent a controlled vocabulary rather than free-text classification. CMS publishes public-use Medicare claims files containing non-identifiable claim-specific information, and specifically created Medicare Claims Synthetic Public Use Files (SynPUFs) so developers can work with realistic Medicare claims structures while protecting beneficiary privacy. CMS and Medicare publicly document the multi-level appeal workflow. Publicly available payer medical-policy documents are used, but frozen and versioned for the hackathon — the system never scrapes payer portals live. CMS distinguishes public-use files from identifiable data and states that public-use files do not contain PHI or PII requiring a data-use agreement, which is the clean data story cited in the demo.
+   236→Table 8.1 — Evidence corpus source inventory. Each source is named, tiered, and frozen or versioned for the hackathon window.
+   237→Source
+   238→What it grounds
+   239→Provenance tier
+   240→CMS Reason Statements / eMDR Codes
+   241→Denial taxonomy, triage classification
+   242→Authoritative / public
+   243→CMS Medicare Claims Public-Use Files
+   244→Claims structure, denial-pattern realism
+   245→Authoritative / public
+   246→CMS SynPUFs
+   247→Realistic claims structures, no PHI
+   248→Authoritative / synthetic-public
+   249→Medicare Appeals guidance (5 levels)
+   250→Appeal workflow, deadlines, levels
+   251→Authoritative / public
+   252→Payer medical-policy documents (frozen)
+   253→Policy clauses, citation targets
+   254→Authoritative / versioned
+   255→State Department of Insurance rules
+   256→External-appeal jurisdiction logic
+   257→Authoritative / public
+   258→NPI Registry (npiregistry.cms.hhs.gov)
+   259→Provider identity validation
+   260→Authoritative / live-public
+   261→Terminology discipline  Use six terms precisely and never interchangeably: synthetic (generated case), public-use (officially released non-identifiable dataset), de-identified (transformed per a de-identification standard), retrieved (external source pulled in), verified (human or deterministic check), and model-generated (AI output). The provenance architecture already distinguishes these categories; the discipline is to make the terminology visible in the UI and the Devpost copy.
+   262→9.  Provenance & Citation Architecture
+   263→Provenance is elevated from a backend detail to a core product feature. Every important claim in an appeal carries a provenance card the judge can open with one click, which directly attacks the hallucination concern that sinks most LLM-in-healthcare submissions. The provenance record is a structured object, not a free-text citation, so it is machine-checkable by the Quality Review agent and human-checkable by the judge in seconds. This is the single most cost-effective credibility upgrade in the entire plan: it costs roughly one day of engineering (Day 5) and lifts the Innovation and Architecture scores simultaneously.
+   264→Figure 9.1 — The provenance card. Every citation in an appeal resolves to one of these; the judge clicks “Why did the agent say this?” and gets this.
+   265→SOURCE          CMS / PAYERDOCUMENT        Medical Policy XSECTION         4.2EFFECTIVE DATE  2026-01-01RETRIEVED       2026-08-15PROVENANCE      AUTHORITATIVE / PUBLICSTATUS          VERIFIEDCONTENT HASH    sha256:9f2c...e1a
+   266→Three properties make the provenance system credible rather than decorative. First, every evidence document is content-hashed at ingestion, so the version used at appeal time is the version on disk — a judge can verify the hash. Second, effective dates are mandatory; an appeal never cites a clause whose effective date has lapsed, because the Compliance agent rejects it. Third, the provenance status field is one of a controlled set (verified, retrieved, model-generated, synthetic), so the UI can color-code trust and the Quality Review agent can refuse to pass a draft whose citations are not all verified or retrieved. This is what makes the “5 citations checked → 5 verified” demo moment truthful rather than aspirational.
+   267→10.  Security & Governance Architecture — PHI Guard
+   268→The governance vertex of the triad is built from four components: PHI Guard, Model Armor, Agent Identity, and Agent Observability. PHI Guard is the demo-grade feature; the other three are the enterprise-governance proof. PHI Guard sits in front of the agent fleet and classifies every upload before any model invocation: synthetic or public content is allowed through; potential PHI is blocked and the block is logged. The decisive property is that a block means no model invocation occurred — which is both a real security guarantee and an excellent enterprise-security demo moment.
+   269→Figure 10.1 — PHI Guard. A block guarantees zero model invocation, which is the security wow moment.
+   270→Upload  |  vPHI Guard  (classifier: is this potential PHI?)  +-- Synthetic / Public  --> ALLOW  --> agent fleet  +-- Potential PHI       --> BLOCK   --> no model invocation, logged
+   271→The demo uses PHI Guard twice. The first upload is a synthetic case, and the banner reads “No PHI detected — processing allowed.” The second upload is a deliberately constructed sensitive document, and the banner reads “Potential PHI detected — processing blocked. No model invocation occurred.” That contrast is the security wow and it is truthful because the classifier runs before any agent. Model Armor is then wired as the second layer inside the agent fleet for prompt-injection and jailbreak defense on retrieved content, Agent Identity scopes each agent's permissions so the Quality Review agent cannot write appeals and the Letter Drafting agent cannot ingest outcomes, and Agent Observability sinks the decision-trace Pub/Sub stream into a queryable store so every case is auditable end-to-end. Together these four satisfy the enterprise-governance criterion the Fleet track rewards.
+   272→The HIPAA language fix (non-negotiable)  Remove the sentence “HIPAA does not apply to the demo or repo.” It is unnecessarily categorical and invites attack. Replace it with: “The hackathon prototype is intentionally designed not to process PHI. Demonstration cases are synthetic and public sources are non-PHI. We are not claiming production HIPAA compliance. A production deployment handling PHI would require the applicable HIPAA privacy/security program, contractual arrangements, access controls, auditability, and governance.” HHS's official guidance describes formal de-identification through Safe Harbor or Expert Determination; the replacement language is almost impossible to attack without arguing against an explicit scope.
+   273→11.  Memory & State Architecture
+   274→Persistent context is an explicit Fortified Enterprise Fleet criterion, so memory is engineered, not improvised. Three tiers are kept and two are dropped, because complexity must appear only where the judge can see its payoff. The tiers that survive each have a visible demo consequence; the tiers that are cut have no visible payoff and would only add failure surface.
+   275→Table 11.1 — Memory tiers. Three kept (each with a demo payoff), two cut (no payoff, only failure surface).
+   276→Tier
+   277→Store
+   278→Purpose
+   279→Demo-visible payoff
+   280→Case state
+   281→Firestore
+   282→Case state machine, HITL gates, deadlines
+   283→Decision trace + deadline countdown
+   284→Evidence & citations
+   285→Cloud SQL pgvector
+   286→Versioned corpus + semantic retrieval
+   287→Clickable provenance + ranking
+   288→Long-term memory
+   289→Vertex AI Memory Bank
+   290→Cross-case patterns, learned weights
+   291→Second-case ranking change
+   292→(dropped) Short-term scratch
+   293→—
+   294→In-prompt scratchpad
+   295→No visible payoff; cut
+   296→(dropped) Episodic replay
+   297→—
+   298→Full transcript replay
+   299→No visible payoff; cut
+   300→The case state machine is the backbone of the workflow. A case moves through states — intake, triaged, researched, drafted, verified, approved, submitted, outcome-recorded, learned — and each transition is a Firestore write that emits a decision-trace event. The HITL gates are explicit states, not interruptions: Gate 1 (confirm extracted denial information) sits between triaged and researched; Gate 2 (approve or edit the appeal) sits between verified and submitted. The Memory Bank stores the procedural-evidence weights that Outcome Learning updates, which is what makes the second-case ranking change a real state transition rather than a recompute. This tiering is what "persistent context" means in practice: a case resumed three days later opens at exactly the state it was left in, with its decision trace intact.
+   301→PART III
+   302→Technical Strategy
+   303→12.  Google Stack Selection — Ruthless Trimming
+   304→The official rules require Gemini plus one Google agent framework plus one Google Cloud infrastructure service. The GEAP components are recommended for the Fleet track, not each individually mandatory. The blueprint's commitment to all seven GEAP components plus Gemma, Veo, Lyria, A2A, and MCP is the largest unnecessary risk in the plan, because every additional component is a stub-or-reliability trade that the team cannot win in 14 days. The doctrine is therefore: ship a small, undeniably-working core; add a component only if it survives a gate that asks whether it strengthens the narrative without compromising the demo. The blueprint's own Gate 2 decision (if a GEAP component has to be stubbed, trim it and document why) is applied ruthlessly.
+   305→Table 12.1 — Stack selection. Each line survives or dies by a gate; nothing is kept “to show a label.”
+   306→Tier
+   307→Component
+   308→Decision
+   309→Rationale
+   310→Core
+   311→Gemini 3 (Flash multimodal)
+   312→KEEP
+   313→Required; drives triage, research, drafting
+   314→Core
+   315→Agent Development Kit (ADK)
+   316→KEEP
+   317→Required agent framework; orchestration + delegation
+   318→Core
+   319→Cloud Run
+   320→KEEP
+   321→Required infra; hosts services, scales to zero, GCP-proof
+   322→Core
+   323→Firestore
+   324→KEEP
+   325→Case state, HITL gates, deadlines
+   326→Core
+   327→Cloud SQL pgvector
+   328→KEEP
+   329→Versioned corpus + citation retrieval
+   330→Core
+   331→Pub/Sub
+   332→KEEP
+   333→Decision-trace stream + long-running workflow
+   334→Governance
+   335→Model Armor
+   336→KEEP
+   337→Prompt-injection defense; enterprise governance
+   338→Governance
+   339→Agent Identity
+   340→KEEP
+   341→Per-agent permission scoping
+   342→Governance
+   343→Agent Observability
+   344→KEEP
+   345→Auditable decision traces
+   346→Memory
+   347→Vertex AI Memory Bank
+   348→KEEP if stable
+   349→Long-term weights; if flaky, fall back to Firestore
+   350→Optional
+   351→GEAP Gateway / Registry
+   352→CUT unless trivial
+   353→No visible demo payoff
+   354→Optional
+   355→A2A / MCP
+   356→CUT
+   357→No visible payoff; protocols without partners
+   358→Bonus
+   359→Gemma
+   360→KEEP in narrative
+   361→Local citation-classifier; on-device credibility story
+   362→Bonus
+   363→Veo
+   364→Optional artifact only
+   365→Tiny optional asset; not in main demo
+   366→Bonus
+   367→Lyria
+   368→Accessible, not demoed
+   369→Weakest narrative fit; no demo time
+   370→The Veo / Lyria rule  Integrate Gemma, Veo, and Lyria only if the bonus is actually available as stated in the rules. Only Gemma belongs in the core narrative (a local citation classifier is a credible on-device story). Veo may appear as a tiny optional artifact. Lyria can be accessible through the product but must not consume demo time. The main four-minute demo must never become “look how many Google models we used.”
+   371→13.  The Outcome-Learning Experiment (Measured, Not Performed)
+   372→This is the most important technical recommendation in the entire document and the single biggest strategic change from the blueprint as written. Outcome Learning must be converted from a performed weight-change animation into a measured before/after evaluation demonstrated live across two cases. The blueprint's target of at least 20% improvement in top-3 retrieval is kept, but it must be measured before it is claimed. A judge can always ask “how do you know the system improved?” — the only defensible answer is an experiment.
+   373→Experimental design
+   374→The learning corpus is built from three legitimate sources: public authoritative evidence, public appeal-decision material, and synthetic controlled cases — not “50 fake wins.” CMS's public appeals materials demonstrate that the appeal process is multi-stage and outcome-oriented, which gives the corpus a defensible outcome signal. The evaluation harness runs as follows: fifty synthetic training outcomes are ingested; weights are updated; the same ten held-out cases are scored before and after. Five metrics are measured — top-1 retrieval accuracy, top-3 retrieval accuracy, citation grounding, argument selection, and appeal quality. The result is reported whether or not it flatters the system, because an honest negative result is more credible than an inflated positive one.
+   375→Figure 13.1 — Before/after evaluation. The same ten cases, scored twice; the delta is the agentic claim.
+   376→BEFORE LEARNING  -> retrieve top-3 arguments on 10 held-out cases  -> score (top-1 acc, top-3 acc, grounding, argument, quality)  -> snapshot metricsTHEN  -> ingest 50 outcome records (public + synthetic)  -> update procedural-evidence weightsAFTER LEARNING  -> run same 10 held-out cases  -> score again  -> diff metrics   (target: top-3 retrieval +>=20%)
+   377→The two-case live demonstration
+   378→The measured experiment is the technical artifact; the two-case live demonstration is the demo artifact. Case 1 runs to a LOSS, the system updates procedural evidence, and Case 2 — same payer, related denial — runs with a visibly different argument ranking, which the agent explains: “This ranking changed because two previous validated outcomes favored Argument C.” That is actual observable learning. A judge understands it instantly, and it is vastly stronger than a green “+0.06.” The before/after metric (“Top-3 retrieval accuracy: 60% → 80%”) is shown only if it was actually measured; an unmeasured number is never displayed.
+   379→14.  Decision Trace — Not “Agent Thoughts”
+   380→The blueprint repeatedly says “every agent's thoughts visible.” That phrasing is technically and conceptually dangerous. Exposing private chain-of-thought invites the judge to evaluate the reasoning process rather than the decision, and it pretends to expose hidden reasoning that the model does not actually expose faithfully. The replacement is a structured decision trace: discrete, named, verifiable events emitted by each agent as it completes a step. This gives judges transparency without pretending to expose hidden reasoning, and it is safer conceptually because the trace is a record of decisions, not a confession of internal monologue.
+   381→Figure 14.1 — Decision trace. Structured, named, verifiable events; not chain-of-thought.
+   382→Triage  [x] payer identified  [x] denial type classified  [x] deadline extractedPolicy Research  [x] 3 sources retrieved  [x] clause UNH-MN-014 selectedEvidence  [x] 4 supporting records foundQuality Review  [x] 5/5 citations verified  [x] 0 unsupported claims
+   383→The decision trace is emitted to a Pub/Sub topic by each agent at step completion, persisted to Firestore as part of the case record, and rendered in the UI as a live event stream during the demo. Because each event is a structured object (agent, step, status, evidence references, timestamp), the Quality Review agent can read the trace to verify that every citation it later checks was actually retrieved by Policy Research — which closes the loop between trace and verification. This is what makes the trace an audit artifact rather than a decorative animation.
+   384→15.  Adversarial Quality Review
+   385→The Quality Review agent is strengthened from a passive “does this look good?” checker into an explicit adversarial agent whose job is to break the draft before a human ever sees it. It asks a fixed battery of attack questions and refuses to pass the draft until each is answered affirmatively. This turns the verification moment from a soft confirmation into a hard gate, and it is what makes the “5 citations checked → 5 verified” demo moment truthful: the verification is adversarial, not ceremonial.
+   386→Table 15.1 — The adversarial Quality Review battery. Each row is a hard pass condition.
+   387→Attack question
+   388→Pass condition
+   389→Can I prove this citation resolves to a real, hashed document?
+   390→All citations resolve + hash matches
+   391→Can I find this claim in the cited evidence?
+   392→Every claim traced to a span
+   393→Does the policy actually support the argument?
+   394→Clause semantics checked
+   395→Is the deadline correct and within the payer's window?
+   396→Deadline recomputed independently
+   397→Is any of this medical advice?
+   398→No diagnostic / prescriptive language
+   399→Is there unsupported language (e.g., “will win”)?
+   400→Zero overclaims
+   401→Is the payer-required format satisfied?
+   402→Required sections present
+   403→16.  External Integration Strategy — NPI Registry
+   404→The system integrates exactly one legitimate external public API: the NPI Registry at npiregistry.cms.hhs.gov, a free public directory of all active National Provider Identifier records with a documented REST API (v2.1). When a synthetic case contains a provider, the Policy Research agent validates the provider's identity and taxonomy against the live NPI registry. This is the only place the demo can truthfully show “external public data lookup → agent decision,” which is far stronger than pretending Gemini itself is an “external action.” No payer portals, fax, email, EHR, live payer scraping, real PHI, blockchain, or Kubernetes are built — the blueprint's kill-your-darlings list is accepted in full.
+   405→17.  Claims & Terminology Discipline
+   406→Three phrase corrections are non-negotiable and must be enforced in every artifact — code comments, Devpost copy, demo script, pitch deck, and Q&A answers. They materially improve credibility at zero engineering cost, because they replace overclaims with scoped, defensible statements. The discipline is mechanical: a pre-submission grep of the repository and the Devpost text for the forbidden phrases, replacing each with its approved alternative.
+   407→Table 17.1 — Phrase corrections. Enforced by a pre-submission grep across repo and Devpost.
+   408→Forbidden phrase
+   409→Approved replacement
+   410→Why
+   411→“every agent's reasoning visible”
+   412→“decision trace”
+   413→Reasoning implies hidden monologue; trace implies named events
+   414→“winning appeal”
+   415→“evidence-backed appeal draft”
+   416→The agent cannot know an appeal will win
+   417→“HIPAA does not apply”
+   418→“prototype intentionally processes no PHI”
+   419→Avoids an over-categorical legal claim
+   420→“No competitor does this”
+   421→“In our scan, we did not identify a product targeting medical billing specialists as the primary persona”
+   422→Scoped to the scan, not the universe
+   423→“This creates a data moat”
+   424→“We believe outcome data can become a moat; our prototype demonstrates the learning mechanism”
+   425→Hypothesis, not assertion
+   426→PART IV
+   427→Engineering Strategy & Design
+   428→18.  Engineering Principles
+   429→Five engineering principles govern every implementation decision in Part V. They exist to prevent the specific failure mode the reviewer warns against: shipping eight agents, seven GEAP components, three bonus models, two protocols, five memory tiers, dashboards, a business model, security, and learning, with none of the individual things undeniably excellent. The principles are listed in priority order, and a conflict between two is resolved in favor of the higher one.
+   430→Table 18.1 — Engineering principles, in priority order.
+   431→#
+   432→Principle
+   433→Operational meaning
+   434→1
+   435→Vertical slice first
+   436→One case end-to-end (denial → approved draft) before any second feature
+   437→2
+   438→Complexity only where the judge sees its payoff
+   439→If a component has no visible demo consequence, it is cut
+   440→3
+   441→Measure, do not perform
+   442→Every agentic claim is backed by a number from the evaluation harness
+   443→4
+   444→Reliability over labels
+   445→Never sacrifice demo reliability to show an extra Google product label
+   446→5
+   447→Honest negative results are acceptable
+   448→A measured non-improvement is more credible than an inflated claim
+   449→19.  Repository & Service Topology
+   450→The repository is a monorepo with a small number of deployable Cloud Run services. A monorepo is chosen over a multi-repo split because the team is small (3–4 engineers), the build is short (14 days), and the cost of cross-repo coordination exceeds the cost of a slightly larger single repo. Each Cloud Run service has a single responsibility and scales independently, which satisfies the production-readiness criterion without introducing Kubernetes — the blueprint's kill of Kubernetes is accepted.
+   451→Figure 19.1 — Monorepo topology. Five Cloud Run services, one web app, two shared packages.
+   452→denialdefender/                      (monorepo)  services/    api/           -> Cloud Run   (REST + WebSocket gateway, HITL, case state)    agents/        -> Cloud Run   (ADK-orchestrated 8-agent workflow)    ingest/        -> Cloud Run   (evidence corpus loader, hasher, versioner)    phi-guard/     -> Cloud Run   (upload classifier, blocks before invocation)    eval/          -> Cloud Run   (evaluation harness, ablation, before/after)  web/             -> Next.js    (decision trace UI, provenance cards, HITL gates)  packages/    shared-schema/ (pydantic / zod types)    provenance/    (citation + hash + effective-date)  data/    corpus/        (frozen, versioned CMS + payer sources)    cases/         (synthetic case definitions + held-out set)  infra/           (terraform / gcloud scripts, Cloud Run + Firestore + pgvector + Pub/Sub)
+   453→The api service is the single entry point for the web client; it owns case state, HITL gate transitions, and the WebSocket channel that streams decision-trace events to the UI. The agents service hosts the ADK workflow and is invoked asynchronously via Pub/Sub so long-running cases do not block the gateway. The ingest service is a batch loader run once per evidence-corpus version; it hashes every document and writes provenance records to pgvector. The phi-guard service is deliberately separate so its block guarantee is auditable: a request that reaches the agents service provably passed the guard. The eval service is the experimental backbone described in Section 21.
+   454→20.  Core Data Model & Schemas
+   455→The data model is intentionally small. Five primary entities carry the entire product: Case, Denial, Evidence, Citation, and Outcome. A sixth (DecisionTraceEvent) is append-only and powers both the UI stream and the audit log. Keeping the model small is a deliberate engineering bet: every entity must justify itself against a demo moment, and any entity that does not is cut. The schemas below are the contract between the agents and the stores; they are defined once in the shared-schema package and used by every service.
+   456→Table 20.1 — Core data model. Six entities; each maps to a demo moment or the audit trail.
+   457→Entity
+   458→Store
+   459→Key fields
+   460→Demo role
+   461→Case
+   462→Firestore
+   463→id, persona, state, deadline, created, hitl_gates[]
+   464→Case state machine
+   465→Denial
+   466→Firestore
+   467→payer, reason_code, category, deadline, confidence
+   468→Triage decision trace
+   469→Evidence
+   470→pgvector
+   471→id, source, doc, section, effective_date, hash, embedding
+   472→Provenance cards
+   473→Citation
+   474→pgvector
+   475→evidence_id, span, claim, status
+   476→Click-to-verify
+   477→Outcome
+   478→Firestore
+   479→case_id, verdict, level, recorded_at
+   480→Learning signal
+   481→DecisionTraceEvent
+   482→Firestore
+   483→case_id, agent, step, status, refs[], ts
+   484→Live UI stream + audit
+   485→21.  The Evaluation Harness — Experimental Backbone
+   486→The evaluation harness is the most important engineering artifact in the submission, because it produces the two strongest technical artifacts — the agent ablation (Section 7) and the outcome-learning before/after (Section 13) — from a single set of held-out cases. It is built as the eval Cloud Run service and is run nightly so that a regression in any metric is visible before it reaches the demo. The harness is deterministic: the same case set and the same model configuration produce the same scores, so before/after deltas are attributable to the learning update rather than to model non-determinism. Temperature is pinned to zero for evaluation runs; only the live demo uses a slightly higher temperature for narrative quality.
+   487→Held-out case set
+   488→Ten held-out cases are reserved and never used for weight updates. They are constructed to span the denial categories the triage classifier must distinguish (medical necessity, coding, prior authorization, experimental, out-of-network, other) and to include at least one case per primary payer in the corpus. The same ten cases are scored before learning, after learning, and across each ablation topology, which means one harness run produces the evidence for both killer artifacts. The case set is checked into the repo under data/cases/held_out/ and is versioned; any change to it is a commit that must be justified, because silently altering the held-out set is the easiest way to invalidate every metric in the submission.
+   489→22.  Reliability & Demo-Failure Plan
+   490→A demo that fails live is a submission that fails. The reliability plan assumes the live demo will encounter at least one degraded condition and engineers for it. Three paths guarantee the demo can always complete: a live path (the real system), a cached-rollback path (pre-recorded decision traces and drafts for the exact demo cases, replayed if latency or an error is detected), and a static-fallback path (a narrated walkthrough of the same artifacts if the network is unavailable). The operator can switch paths in under five seconds without the audience noticing, because all three render the same decision-trace and provenance UI.
+   491→Table 22.1 — Demo-failure contingency matrix. Three paths; switch in <5s; same UI either way.
+   492→Failure
+   493→Detection
+   494→Response
+   495→Agent latency > 15s
+   496→Timeout in api gateway
+   497→Switch to cached-rollback for current step
+   498→Gemini API error
+   499→Agent error event
+   500→Retry once, then cached-rollback
+
+[showing lines 1-500 of 877; use offset=501 with limit to continue reading]

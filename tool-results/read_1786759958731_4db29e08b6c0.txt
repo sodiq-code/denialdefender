@@ -1,0 +1,836 @@
+     1→'use client';
+     2→
+     3→/**
+     4→ * DenialDefender — Day 6 Panel: Decision Trace + HITL Gates + UI Stream
+     5→ *
+     6→ * Full interactive UI2 showing:
+     7→ * - Input: denial letter + payer + Run button
+     8→ * - Live decision-trace stream (Figure 14.1 format)
+     9→ * - Both HITL gates with Confirm/Reject/Approve/Edit
+    10→ * - Appeal letter display with clickable provenance cards
+    11→ * - Letter edit with version history
+    12→ * - Triage edit → re-runs Policy Research
+    13→ * - Quality Review battery
+    14→ * - Gate test button
+    15→ */
+    16→
+    17→import { useState, useCallback, useRef, useEffect } from 'react';
+    18→import {
+    19→  Card, CardContent, CardHeader, CardTitle, CardDescription,
+    20→} from '@/components/ui/card';
+    21→import { Badge } from '@/components/ui/badge';
+    22→import { Button } from '@/components/ui/button';
+    23→import { Textarea } from '@/components/ui/textarea';
+    24→import { Input } from '@/components/ui/input';
+    25→import { Label } from '@/components/ui/label';
+    26→import {
+    27→  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+    28→} from '@/components/ui/select';
+    29→import {
+    30→  Accordion, AccordionContent, AccordionItem, AccordionTrigger,
+    31→} from '@/components/ui/accordion';
+    32→import { Separator } from '@/components/ui/separator';
+    33→import { ScrollArea } from '@/components/ui/scroll-area';
+    34→import {
+    35→  Heart, Search, BookOpen, CheckCircle2, XCircle, Clock,
+    36→ 7 Loader2, Shield, AlertCircle, FileText, PenTool,
+    37→  ShieldCheck, Database, Radio, Zap, Eye,
+    38→  Send, Edit3, History, ChevronDown, ChevronRight,
+    39→} from 'lucide-react';
+    40→
+    41→// ─── Types ────────────────────────────────────────────────────────────────
+    42→
+    43→interface TraceChecklistItem {
+    44→  agent: string;
+    45→  label: string;
+    46→  completed: boolean;
+    47→  detail?: string;
+    48→}
+    49→
+    50→interface StructuredTraceEvent {
+    51→  id?: string;
+    52→  caseId: string;
+    53→  agent: string;
+    54→  step: string;
+    55→  status: 'started' | 'completed' | 'error' | 'blocked';
+    56→  detail: string;
+    57→  timestamp: string;
+    58→  latencyMs?: number;
+    59→  references?: string[];
+    60→}
+    61→
+    62→interface InlineCitation {
+    63→  number: number;
+    64→  evidenceId: string;
+    65→  source: string;
+    66→  documentName: string;
+    67→  contentHash: string;
+    68→  claimText: string;
+    69→  provenanceTier: string;
+    70→}
+    71→
+    72→interface AppealSection {
+    73→  title: string;
+    74→  content: string;
+    75→}
+    76→
+    77→interface BatteryResult {
+    78→  attackQuestion: string;
+    79→  passCondition: string;
+    80→  passed: boolean;
+    81→  details: string;
+    82→  severity: 'critical' | 'warning' | 'info';
+    83→}
+    84→
+    85→interface PipelineState {
+    86→  phase: 'idle' | 'running-phase1' | 'awaiting-gate1' | 'running-phase2' | 'awaiting-gate2' | 'completed' | 'gate1-rejected' | 'quality-failed';
+    87→  caseId: string | null;
+    88→  pipelineStatus: string;
+    89→  traces: StructuredTraceEvent[];
+    90→  traceChecklist: TraceChecklistItem[];
+    91→  gate1: { status: string; gateId: string | null; confirmPrompt: string } | null;
+    92→  gate2: {
+    93→    status: string; gateId: string | null; reviewNote: string;
+    94→    appealLetter: string; citationCount: number; qualityScore: number;
+    95→  } | null;
+    96→  triage: {
+    97→    denialType: string; reasonCode: string; payer: string;
+    98→    confidence: number; isAppealable: boolean; appealStrategy: string;
+    99→    humanConfirmPrompt: string;
+   100→  } | null;
+   101→  policyResearch: { clauses: unknown[]; retrievalLatencyMs: number } | null;
+   102→  evidenceAssembly: { totalEvidenceItems: number; evidenceStrength: string; duplicatesRemoved: number } | null;
+   103→  letterDrafting: {
+   104→    appealLetter: string; sections: AppealSection[]; inlineCitations: InlineCitation[];
+   105→    wordCount: number; citationCount: number; formatCompliant: boolean;
+   106→  } | null;
+   107→  qualityReview: {
+   108→    overallVerdict: string; overallScore: number; citationsVerified: number;
+   109→    unsupportedClaims: number; canProceed: boolean; batteryResults: BatteryResult[];
+   110→    issues: { category: string; description: string; severity: string; suggestion: string }[];
+   111→  } | null;
+   112→  letterVersion: number;
+   113→  latencyMs: number;
+   114→  cachedTriageResult: unknown;
+   115→  cachedAdvocateResult: unknown;
+   116→}
+   117→
+   118→// ─── Sample Denial Letters ─────────────────────────────────────────────────
+   119→
+   120→const SAMPLE_LETTERS = [
+   121→  {
+   122→    label: 'Medicare — CO-50 TKA Denial',
+   123→    payer: 'Medicare',
+   124→    text: `DETERMINATION OF COVERAGE\n\nDate: August 20, 2026\nPatient ID: XXX-XX-4321\nClaim ID: CLM-2026-0815\n\nYour claim for CPT 27447 (Total Knee Arthroplasty) has been denied as not medically necessary.\n\nReason Code: CO-50\nDenial Category: Medical Necessity\nDiagnosis: M17.11 (Primary osteoarthritis, right knee)\nAmount Denied: $34,567.89\n\nPer Medicare Coverage Determination, the requested service does not meet the criteria for coverage under 42 CFR § 410.32.\n\nYou have 120 calendar days from the date of this determination to file an appeal.`,
+   125→  },
+   126→  {
+   127→    label: 'UnitedHealthcare — CO-15 Prior Auth',
+   128→    payer: 'UnitedHealthcare',
+   129→    text: `DENIAL NOTICE\n\nDate: August 18, 2026\nMember ID: UHC-987654\nClaim ID: UHC-2026-0818\n\nYour claim for CPT 70553 (MRI Brain with contrast) has been denied. Prior authorization was not obtained.\n\nReason Code: CO-15\nDenial Category: Prior Authorization Required\nDiagnosis: G43.909 (Migraine, unspecified)\nAmount Denied: $2,450.00\n\nPer UnitedHealthcare Medical Policy, this service requires prior authorization. No prior auth was on file.\n\nYou have 180 calendar days to file an appeal.`,
+   130→  },
+   131→  {
+   132→    label: 'Aetna — CO-4 Coding Error',
+   133→    payer: 'Aetna',
+   134→    text: `CLAIM DENIAL\n\nDate: August 15, 2026\nMember ID: AET-456789\nClaim ID: AET-2026-0815\n\nYour claim for CPT 99215 (Office Visit, Established Patient) has been denied. The procedure code is inconsistent with the modifier or diagnosis.\n\nReason Code: CO-4\nDenial Category: Coding/Billing Error\nDiagnosis: M54.5 (Low back pain)\nAmount Denied: $285.00\n\nPer Aetna Clinical Policy, the submitted code-modifier combination is not payable for the reported diagnosis.\n\nYou have 60 calendar days to file an appeal.`,
+   135→  },
+   136→];
+   137→
+   138→// ─── Agent Step Config ─────────────────────────────────────────────────────
+   139→
+   140→const AGENT_STEPS = [
+   141→  { agent: 'patient-advocate', label: 'Patient Advocate', icon: Heart, color: 'text-rose-600 dark:text-rose-400' },
+   142→  { agent: 'denial-triage', label: 'Denial Triage', icon: Search, color: 'text-teal-600 dark:text-teal-400' },
+   143→  { agent: 'policy-research', label: 'Policy Research', icon: BookOpen, color: 'text-emerald-600 dark:text-emerald-400' },
+   144→  { agent: 'evidence-assembly', label: 'Evidence Assembly', icon: Database, color: 'text-cyan-600 dark:text-cyan-400' },
+   145→  { agent: 'letter-drafting', label: 'Letter Drafting', icon: PenTool, color: 'text-violet-600 dark:text-violet-400' },
+   146→  { agent: 'quality-review', label: 'Quality Review', icon: ShieldCheck, color: 'text-purple-600 dark:text-purple-400' },
+   147→];
+   148→
+   149→// ─── Component ─────────────────────────────────────────────────────────────
+   150→
+   151→export function Day6PipelinePanel() {
+   152→  const [denialText, setDenialText] = useState(SAMPLE_LETTERS[0].text);
+   153→  const [payer, setPayer] = useState('Medicare');
+   154→  const [selectedSample, setSelectedSample] = useState('0');
+   155→  const [state, setState] = useState<PipelineState>({
+   156→    phase: 'idle', caseId: null, pipelineStatus: '', traces: [], traceChecklist: [],
+   157→    gate1: null, gate2: null, triage: null, policyResearch: null, evidenceAssembly: null,
+   158→    letterDrafting: null, qualityReview: null, letterVersion: 0, latencyMs: 0,
+   159→    cachedTriageResult: null, cachedAdvocateResult: null,
+   160→  });
+   161→  const [loading, setLoading] = useState(false);
+   162→  const [error, setError] = useState<string | null>(null);
+   163→  const [editedLetter, setEditedLetter] = useState('');
+   164→  const [editReason, setEditReason] = useState('');
+   165→  const [showVersionHistory, setShowVersionHistory] = useState(false);
+   166→  const [gateTestResult, setGateTestResult] = useState<Record<string, unknown> | null>(null);
+   167→  const [gateTestLoading, setGateTestLoading] = useState(false);
+   168→
+   169→  const traceEndRef = useRef<HTMLDivElement>(null);
+   170→  useEffect(() => { traceEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [state.traces.length]);
+   171→
+   172→  // ── Run Phase 1 (up to Gate 1) ───────────────────────────────────────
+   173→  const runPhase1 = useCallback(async () => {
+   174→    setLoading(true);
+   175→    setError(null);
+   176→    setState(prev => ({ ...prev, phase: 'running-phase1', traces: [], traceChecklist: [] }));
+   177→
+   178→    try {
+   179→      const res = await fetch('/api/full-pipeline', {
+   180→        method: 'POST',
+   181→        headers: { 'Content-Type': 'application/json' },
+   182→        body: JSON.stringify({ denialText, payer }),
+   183→      });
+   184→      const data = await res.json();
+   185→
+   186→      if (!res.ok) throw new Error(data.error || 'Pipeline failed');
+   187→
+   188→      setState(prev => ({
+   189→        ...prev,
+   190→        phase: 'awaiting-gate1',
+   191→        caseId: data.caseId,
+   192→        pipelineStatus: data.pipelineStatus,
+   193→        traces: data.traces || [],
+   194→        traceChecklist: data.traceChecklist || [],
+   195→        gate1: data.gate1,
+   196→        triage: data.triage,
+   197→        latencyMs: data.latencyMs,
+   198→        cachedTriageResult: data.triage,
+   199→        cachedAdvocateResult: data.advocate,
+   200→      }));
+   201→    } catch (err: unknown) {
+   202→      setError(err instanceof Error ? err.message : 'Unknown error');
+   203→      setState(prev => ({ ...prev, phase: 'idle' }));
+   204→    } finally {
+   205→      setLoading(false);
+   206→    }
+   207→  }, [denialText, payer]);
+   208→
+   209→  // ── Resolve Gate 1 ───────────────────────────────────────────────────
+   210→  const resolveGate1 = useCallback(async (status: 'approved' | 'rejected') => {
+   211→    if (!state.caseId) return;
+   212→    setLoading(true);
+   213→    setError(null);
+   214→
+   215→    try {
+   216→      const res = await fetch('/api/full-pipeline/resume', {
+   217→        method: 'POST',
+   218→        headers: { 'Content-Type': 'application/json' },
+   219→        body: JSON.stringify({
+   220→          caseId: state.caseId,
+   221→          gateStatus: status,
+   222→          cachedTriageResult: state.cachedTriageResult,
+   223→          cachedAdvocateResult: state.cachedAdvocateResult,
+   224→        }),
+   225→      });
+   226→      const data = await res.json();
+   227→
+   228→      if (!res.ok) throw new Error(data.error || 'Resume failed');
+   229→
+   230→      const newPhase = data.pipelineStatus === 'awaiting_gate2' ? 'awaiting-gate2'
+   231→        : data.pipelineStatus === 'gate1_rejected' ? 'gate1-rejected'
+   232→        : data.pipelineStatus === 'quality_review_failed' ? 'quality-failed'
+   233→        : 'idle';
+   234→
+   235→      setState(prev => ({
+   236→        ...prev,
+   237→        phase: newPhase,
+   238→        pipelineStatus: data.pipelineStatus,
+   239→        traces: [...prev.traces, ...(data.traces || [])],
+   240→        traceChecklist: data.traceChecklist || [],
+   241→        gate1: data.gate1,
+   242→        gate2: data.gate2,
+   243→        policyResearch: data.policyResearch,
+   244→        evidenceAssembly: data.evidenceAssembly,
+   245→        letterDrafting: data.letterDrafting,
+   246→        qualityReview: data.qualityReview,
+   247→        letterVersion: data.letterVersion || 0,
+   248→        latencyMs: data.latencyMs,
+   249→      }));
+   250→
+   251→      if (data.letterDrafting?.appealLetter) {
+   252→        setEditedLetter(data.letterDrafting.appealLetter);
+   253→      }
+   254→    } catch (err: unknown) {
+   255→      setError(err instanceof Error ? err.message : 'Unknown error');
+   256→    } finally {
+   257→      setLoading(false);
+   258→    }
+   259→  }, [state.caseId, state.cachedTriageResult, state.cachedAdvocateResult]);
+   260→
+   261→  // ── Resolve Gate 2 ───────────────────────────────────────────────────
+   262→  const resolveGate2 = useCallback(async (resolution: 'approved' | 'rejected') => {
+   263→    if (!state.caseId) return;
+   264→    setLoading(true);
+   265→    setError(null);
+   266→
+   267→    try {
+   268→      const res = await fetch('/api/full-pipeline/gate2', {
+   269→        method: 'POST',
+   270→        headers: { 'Content-Type': 'application/json' },
+   271→        body: JSON.stringify({
+   272→          caseId: state.caseId,
+   273→          resolution,
+   274→          editedLetter: editedLetter !== state.letterDrafting?.appealLetter ? editedLetter : undefined,
+   275→          editReason: editReason || undefined,
+   276→        }),
+   277→      });
+   278→      const data = await res.json();
+   279→
+   280→      if (!res.ok) throw new Error(data.error || 'Gate 2 resolution failed');
+   281→
+   282→      setState(prev => ({
+   283→        ...prev,
+   284→        phase: data.gate2Status === 'approved' ? 'completed' : 'awaiting-gate2',
+   285→        gate2: prev.gate2 ? { ...prev.gate2, status: data.gate2Status } : null,
+   286→        letterVersion: data.letterVersion || prev.letterVersion,
+   287→      }));
+   288→
+   289→      if (data.gate2Status === 'approved') {
+   290→        // Submit the appeal automatically after approval
+   291→        await fetch('/api/full-pipeline/gate2', {
+   292→          method: 'POST',
+   293→          headers: { 'Content-Type': 'application/json' },
+   294→          body: JSON.stringify({ caseId: state.caseId, action: 'submit' }),
+   295→        });
+   296→      }
+   297→    } catch (err: unknown) {
+   298→      setError(err instanceof Error ? err.message : 'Unknown error');
+   299→    } finally {
+   300→      setLoading(false);
+   301→    }
+   302→  }, [state.caseId, editedLetter, editReason, state.letterDrafting]);
+   303→
+   304→  // ── Run Gate Test ────────────────────────────────────────────────────
+   305→  const runGateTest = useCallback(async () => {
+   306→    setGateTestLoading(true);
+   307→    setGateTestResult(null);
+   308→    try {
+   309→      const res = await fetch('/api/full-pipeline/gate-test', {
+   310→        method: 'POST',
+   311→        headers: { 'Content-Type': 'application/json' },
+   312→        body: JSON.stringify({ denialText, payer }),
+   313→      });
+   314→      const data = await res.json();
+   315→      setGateTestResult(data);
+   316→    } catch (err: unknown) {
+   317→      setGateTestResult({ error: err instanceof Error ? err.message : 'Gate test failed' });
+   318→    } finally {
+   319→      setGateTestLoading(false);
+   320→    }
+   321→  }, [denialText, payer]);
+   322→
+   323→  // ── Sample letter selection ──────────────────────────────────────────
+   324→  const handleSampleSelect = useCallback((idx: string) => {
+   325→    setSelectedSample(idx);
+   326→    const sample = SAMPLE_LETTERS[parseInt(idx)];
+   327→    if (sample) {
+   328→      setDenialText(sample.text);
+   329→      setPayer(sample.payer);
+   330→    }
+   331→  }, []);
+   332→
+   333→  // ── Derived state ────────────────────────────────────────────────────
+   334→  const isRunning = loading;
+   335→  const agentStepStatus = (agent: string): 'pending' | 'running' | 'completed' | 'error' => {
+   336→    const hasCompleted = state.traces.some(t => t.agent === agent && t.status === 'completed');
+   337→    const hasError = state.traces.some(t => t.agent === agent && t.status === 'error');
+   338→    const hasStarted = state.traces.some(t => t.agent === agent && t.status === 'started');
+   339→    if (hasError) return 'error';
+   340→    if (hasCompleted) return 'completed';
+   341→    if (hasStarted) return 'running';
+   342→    // For Gate 1 agents (advocate + triage), show running during phase 1
+   343→    if (agent === 'patient-advocate' && state.phase === 'running-phase1') return 'running';
+   344→    if (agent === 'denial-triage' && state.phase === 'running-phase1') return 'running';
+   345→    // For post-Gate 1 agents, show running during phase 2
+   346→    if (['policy-research', 'evidence-assembly', 'letter-drafting', 'quality-review'].includes(agent) && state.phase === 'running-phase2') return 'running';
+   347→    return 'pending';
+   348→  };
+   349→
+   350→  const provenanceTierColor = (tier: string) => {
+   351→    switch (tier) {
+   352→      case 'primary_source': return 'bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-200';
+   353→      case 'secondary_summary': return 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200';
+   354→      default: return 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200';
+   355→    }
+   356→  };
+   357→
+   358→  return (
+   359→    <div className="space-y-6">
+   360→      {/* ── Input Section ─────────────────────────────────────────────── */}
+   361→      <Card>
+   362→        <CardHeader>
+   363→          <CardTitle className="flex items-center gap-2">
+   364→            <Radio className="h-5 w-5 text-teal-600" />
+   365→            Day 6: Decision Trace + HITL Gates + UI Stream
+   366→          </CardTitle>
+   367→          <CardDescription>
+   368→            Full pipeline with live trace streaming, both HITL gates, letter editing with version history
+   369→          </CardDescription>
+   370→        </CardHeader>
+   371→        <CardContent className="space-y-4">
+   372→          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+   373→            <div className="space-y-2">
+   374→              <Label className="text-xs font-medium">Sample Denial Letter</Label>
+   375→              <Select value={selectedSample} onValueChange={handleSampleSelect}>
+   376→                <SelectTrigger className="text-sm">
+   377→                  <SelectValue placeholder="Select sample..." />
+   378→                </SelectTrigger>
+   379→                <SelectContent>
+   380→                  {SAMPLE_LETTERS.map((s, i) => (
+   381→                    <SelectItem key={i} value={String(i)}>{s.label}</SelectItem>
+   382→                  ))}
+   383→                </SelectContent>
+   384→              </Select>
+   385→            </div>
+   386→            <div className="space-y-2">
+   387→              <Label className="text-xs font-medium">Payer</Label>
+   388→              <Select value={payer} onValueChange={setPayer}>
+   389→                <SelectTrigger className="text-sm">
+   390→                  <SelectValue />
+   391→                </SelectTrigger>
+   392→                <SelectContent>
+   393→                  <SelectItem value="Medicare">Medicare</SelectItem>
+   394→                  <SelectItem value="UnitedHealthcare">UnitedHealthcare</SelectItem>
+   395→                  <SelectItem value="Aetna">Aetna</SelectItem>
+   396→                </SelectContent>
+   397→              </Select>
+   398→            </div>
+   399→          </div>
+   400→          <Textarea
+   401→            value={denialText}
+   402→            onChange={(e) => setDenialText(e.target.value)}
+   403→            placeholder="Paste denial letter text here..."
+   404→            className="min-h-[120px] text-sm font-mono"
+   405→          />
+   406→          <div className="flex gap-3 flex-wrap">
+   407→            <Button
+   408→              onClick={runPhase1}
+   409→              disabled={isRunning || state.phase !== 'idle'}
+   410→              className="bg-teal-600 hover:bg-teal-700 text-white"
+   411→            >
+   412→              {isRunning ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Radio className="h-4 w-4 mr-2" />}
+   413→              Run Full Pipeline
+   414→            </Button>
+   415→            <Button
+   416→              onClick={runGateTest}
+   417→              disabled={gateTestLoading}
+   418→              variant="outline"
+   419→              className="border-purple-300 text-purple-700 hover:bg-purple-50"
+   420→            >
+   421→              {gateTestLoading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Shield className="h-4 w-4 mr-2" />}
+   422→              Gate Test
+   423→            </Button>
+   424→          </div>
+   425→        </CardContent>
+   426→      </Card>
+   427→
+   428→      {/* ── Agent Step Progress ────────────────────────────────────────── */}
+   429→      {state.phase !== 'idle' && (
+   430→        <Card>
+   431→          <CardHeader className="pb-3">
+   432→            <CardTitle className="text-sm flex items-center gap-2">
+   433→              <Zap className="h-4 w-4 text-amber-500" />
+   434→              Pipeline Progress
+   435→              <Badge variant="outline" className="text-xs ml-auto">
+   436→                {state.latencyMs}ms
+   437→              </Badge>
+   438→            </CardTitle>
+   439→          </CardHeader>
+   440→          <CardContent>
+   441→            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+   442→              {AGENT_STEPS.map((step) => {
+   443→                const status = agentStepStatus(step.agent);
+   444→                const Icon = step.icon;
+   445→                return (
+   446→                  <div
+   447→                    key={step.agent}
+   448→                    className={`flex flex-col items-center gap-1.5 p-3 rounded-lg border ${
+   449→                      status === 'completed' ? 'border-emerald-300 bg-emerald-50 dark:border-emerald-700 dark:bg-emerald-950' :
+   450→                      status === 'running' ? 'border-teal-300 bg-teal-50 dark:border-teal-700 dark:bg-teal-950' :
+   451→                      status === 'error' ? 'border-red-300 bg-red-50 dark:border-red-700 dark:bg-red-950' :
+   452→                      'border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-900'
+   453→                    }`}
+   454→                  >
+   455→                    <Icon className={`h-5 w-5 ${step.color} ${status === 'running' ? 'animate-pulse' : ''}`} />
+   456→                    <span className="text-[10px] font-medium text-center leading-tight">{step.label}</span>
+   457→                    {status === 'completed' && <CheckCircle2 className="h-3 w-3 text-emerald-500" />}
+   458→                    {status === 'running' && <Loader2 className="h-3 w-3 text-teal-500 animate-spin" />}
+   459→                    {status === 'error' && <XCircle className="h-3 w-3 text-red-500" />}
+   460→                  </div>
+   461→                );
+   462→              })}
+   463→            </div>
+   464→          </CardContent>
+   465→        </Card>
+   466→      )}
+   467→
+   468→      {/* ── Live Decision Trace Stream (Figure 14.1) ──────────────────── */}
+   469→      {state.traces.length > 0 && (
+   470→        <Card>
+   471→          <CardHeader className="pb-3">
+   472→            <CardTitle className="text-sm flex items-center gap-2">
+   473→              <Eye className="h-4 w-4 text-cyan-500" />
+   474→              Live Decision Trace
+   475→              <Badge variant="outline" className="text-xs">{state.traces.length} events</Badge>
+   476→            </CardTitle>
+   477→          </CardHeader>
+   478→          <CardContent className="space-y-4">
+   479→            {/* Figure 14.1 Checklist Format */}
+   480→            {state.traceChecklist.length > 0 && (
+   481→              <div className="bg-muted/30 rounded-lg p-4 space-y-3 border border-dashed border-muted-foreground/20">
+   482→                <p className="text-xs font-medium text-muted-foreground mb-2">Figure 14.1 — Decision Trace Checklist</p>
+   483→                {(() => {
+   484→                  const agents = [...new Set(state.traceChecklist.map(i => i.agent))];
+   485→                  return agents.map(agent => (
+   486→                    <div key={agent}>
+   487→                      <p className="text-sm font-semibold mb-1">{agent}</p>
+   488→                      <div className="ml-4 space-y-0.5">
+   489→                        {state.traceChecklist.filter(i => i.agent === agent).map((item,6 idx) => (
+   490→                          <div key={idx} className="flex items-center gap-2 text-sm">
+   491→                            {item.completed ? (
+   492→                              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+   493→                            ) : (
+   494→                              <div className="h-3.5 w-3.5 rounded-full border border-gray-300 shrink-0" />
+   495→                            )}
+   496→                            <span className={item.completed ? 'text-foreground' : 'text-muted-foreground'}>
+   497→                              {item.label}
+   498→                            </span>
+   499→                          </div>
+   500→                        ))}
+   501→                      </div>
+   502→                    </div>
+   503→                  ));
+   504→                })()}
+   505→              </div>
+   506→            )}
+   507→
+   508→            {/* Raw Trace Events Stream */}
+   509→            <Accordion type="single" collapsible>
+   510→              <AccordionItem value="raw-traces">
+   511→                <AccordionTrigger className="text-xs py-2">
+   512→                  Raw Trace Events ({state.traces.length})
+   513→                </AccordionTrigger>
+   514→                <AccordionContent>
+   515→                  <ScrollArea className="max-h-64 overflow-y-auto">
+   516→                    <div className="space-y-1.5 pr-4">
+   517→                      {state.traces.map((trace, idx) => (
+   518→                        <div
+   519→                          key={trace.id ?? idx}
+   520→                          className="flex items-start gap-2 rounded border bg-card p-2 text-xs hover:bg-accent/50 transition-colors"
+   521→                        >
+   522→                          <div className="mt-0.5 shrink-0">
+   523→                            {trace.status === 'completed' && <CheckCircle2 className="h-3 w-3 text-emerald-500" />}
+   524→                            {trace.status === 'error' && <XCircle className="h-3 w-3 text-red-500" />}
+   525→                            {trace.status === 'blocked' && <AlertCircle className="h-3 w-3 text-amber-500" />}
+   526→                            {trace.status === 'started' && <Loader2 className="h-3 w-3 text-teal-500 animate-spin" />}
+   527→                          </div>
+   528→                          <div className="flex-1 min-w-0">
+   529→                            <span className="font-medium text-teal-700 dark:text-teal-300">{trace.agent}</span>
+   530→                            <span className="text-muted-foreground mx-1">·</span>
+   531→                            <span className="text-muted-foreground">{trace.step}</span>
+   532→                            <p className="text-[10px] text-muted-foreground truncate mt-0.5">{trace.detail}</p>
+   533→                          </div>
+   534→                          {trace.latencyMs && (
+   535→                            <Badge variant="outline" className="text-[9px] px-1 shrink-0">{trace.latencyMs}ms</Badge>
+   536→                          )}
+   537→                        </div>
+   538→                      ))}
+   539→                      <div ref={traceEndRef} />
+   540→                    </div>
+   541→                  </ScrollArea>
+   542→                </AccordionContent>
+   543→              </AccordionItem>
+   544→            </Accordion>
+   545→          </CardContent>
+   546→        </Card>
+   547→      )}
+   548→
+   549→      {/* ── HITL Gate 1 ────────────────────────────────────────────────── */}
+   550→      {state.gate1 && state.phase === 'awaiting-gate1' && (
+   551→        <Card className="border-2 border-amber-300 dark:border-amber-700">
+   552→          <CardHeader className="pb-3">
+   553→            <CardTitle className="text-sm flex items-center gap-2">
+   554→              <Shield className="h-4 w-4 text-amber-500" />
+   555→              HITL Gate 1: Confirm Denial
+   556→              <Badge className="bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200 ml-auto">
+   557→                Pending Review
+   558→              </Badge>
+   559→            </CardTitle>
+   560→          </CardHeader>
+   561→          <CardContent className="space-y-3">
+   562→            {state.triage && (
+   563→              <div className="bg-muted/30 rounded p-3 text-sm space-y-1">
+   564→                <p><strong>Payer:</strong> {state.triage.payer}</p>
+   565→                <p><strong>Denial Type:</strong> {state.triage.denialType}</p>
+   566→                <p><strong>Reason Code:</strong> {state.triage.reasonCode}</p>
+   567→                <p><strong>Confidence:</strong> {(state.triage.confidence * 100).toFixed(0)}%</p>
+   568→                <p><strong>Appealable:</strong> {state.triage.isAppealable ? 'Yes' : 'No'}</p>
+   569→                <p><strong>Strategy:</strong> {state.triage.appealStrategy}</p>
+   570→              </div>
+   571→            )}
+   572→            <div className="flex gap-3">
+   573→              <Button
+   574→                onClick={() => resolveGate1('approved')}
+   575→                disabled={isRunning}
+   576→                className="bg-emerald-600 hover:bg-emerald-700 text-white"
+   577→              >
+   578→                <6CheckCircle2 className="h-4 w-4 mr-2" />
+   579→                Confirm & Continue
+   580→              </Button>
+   581→              <Button
+   582→                onClick={() => resolveGate1('rejected')}
+   583→                disabled={isRunning}
+   584→                variant="destructive"
+   585→              >
+   586→                <XCircle className="h-4 w-4 mr-2" />
+   587→                Reject & Stop
+   588→              </Button>
+   589→            </div>
+   590→          </CardContent>
+   591→        </Card>
+   592→      )}
+   593→
+   594→      {/* ── Gate 1 Rejected ────────────────────────────────────────────── */}
+   595→      {state.phase === 'gate1-rejected' && (
+   596→        <Card className="border-2 border-red-300 dark:border-red-700">
+   597→          <CardContent className="py-4">
+   598→            <div className="flex items-center gap-2 text-red-700 dark:text-red-300">
+   599→              <XCircle className="h-5- w-5" />
+   600→              <p className="font-medium">Pipeline Stopped — Gate 1 Rejected</p>
+   601→            </div>
+   602→            <p className="text-sm text-muted-foreground mt-1">The denial classification was rejected. No further processing.</p>
+   603→          </CardContent>
+   604→        </Card>
+   605→      )}
+   606→
+   607→      {/* ── Quality Review Failed ──────────────────────────────────────── */}
+   608→      {state.phase === 'quality-failed' && state.qualityReview && (
+   609→        <Card className="border-2 border-red-300 dark:border-red-700">
+   610→          <CardHeader className="pb-3">
+   611→            <CardTitle className="text-sm flex items-center gap-2 text-red-700">
+   612→              <XCircle className="h-4 w-4" />
+   613→              Quality Review FAILED — Pipeline Blocked
+   614→            </CardTitle>
+   615→          </CardHeader>
+   616→          <CardContent>
+   617→            <p className="text-sm mb-3">Score: {state.qualityReview.overallScore} — {state.qualityReview.issues.length} issues found</p>
+   618→            {state.qualityReview.issues.length > 0 && (
+   619→              <div className="space-y-2">
+   620→                {state.qualityReview.issues.map((issue, i) => (
+   621→                  <div key={i} className="text-xs bg-red-50 dark:bg-red-950 rounded p-2">
+   622→                    <Badge variant="destructive" className="text-[9px] mr-1">{issue.severity}</Badge>
+   623→                    <span className="font-medium">{issue.category}:</span> {issue.description}
+   624→                  </div>
+   625→                ))}
+   626→              </div>
+   627→            )}
+   628→=         </CardContent>
+   629→        </Card>
+   630→      )}
+   631→
+   632→      {/* ── Quality Review Battery Results ─────────────────────────────── */}
+   633→      {state.qualityReview && state.qualityReview.overallVerdict === 'PASS' && (
+   634→        <Card>
+   635→          <CardHeader className="pb-3">
+   636→            <CardTitle className="text-sm flex items-center gap-2">
+   637→              <ShieldCheck className="h-4 w-4 text-emerald-500" />
+   638→              Quality Review:D PASS
+   639→              <Badge className="bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200 ml-auto">
+   640→                Score: {state.qualityReview.overallScore}
+   641→              </Badge>
+   642→            </CardTitle>
+   643→          </CardHeader>
+   644→          <CardContent>
+   645→            <div className="grid gap-2">
+   646→              {state.qualityReview.batteryResults.map((br, i) => (
+   647→                <div key={i} className={`flex items-center gap-2 text-xs p-2 rounded ${br.passed ? 'bg-emerald-50 dark:bg-emerald-950' : 'bg-red-50 dark:bg-red-950'}`}>
+   648→                  {br.passed ? <CheckCircle2 className="h-3 w-3 text-emerald-500" /> : <XCircle className="h-3 w-3 text-red-500" />}
+   649→                  <span className="font-medium flex-1">{br.attackQuestion.slice(0, 60)}</span>
+   650→                  <Badge variant="outline" className={`text-[9px] ${br.severity === 'critical' ? 'border-red-300 text-red-700' : 'border-amber-300 text-amber-700'}`}>
+   651→                    {br.severity}
+   652→                  </Badge>
+   653→                </div>
+   654→              ))}
+   655→            </div>
+   656→          </CardContent>
+   657→        </Card>
+   658→      )}
+   659→
+   660→      {/* ── HITL Gate 2: Approve Appeal ────────────────────────────────── */}
+   661→      {state.phase === 'awaiting-gate2' && state.gate2 && (
+   662→        <Card className="border-2 border-amber-300 dark:border-amber-700">
+   663→          <CardHeader className="pb-3">
+   664→            <CardTitle className="text-sm flex items-center gap-2">
+   665→              <ShieldCheck className="h-4 w-4 text-amber-500" />
+   666→              HITL Gate 2: Approve Appeal
+   667→              <Badge className="bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200 ml-auto">
+   668→                Pending Review
+   669→              </Badge>
+   670→            </CardTitle>
+   671→            <CardDescription className="text-xs">
+   672→              Review the appeal letter with citation cards. Edit if needed, then approve or reject.
+   673→            </CardDescription>
+   674→          </CardHeader>
+   675→          <CardContent className="space-y-4">
+   676→            {/* Appeal Letter Display */}
+   677→            {state.letterDrafting && (
+   678→              <div className="space-y-3">
+   679→                <div className="flex items-center gap-2 mb-2">
+   680→                  <FileText className="h-4 w-4 text-violet-600" />
+   681→                  <span className="text-sm font-medium">Appeal Letter</span>
+   682→                  <Badge variant="outline" className="text-xs">{state.letterDrafting.wordCount} words</Badge>
+   683→                  <Badge variant="outline" className="text.6-xs">{state.letterDrafting.citationCount} citations</Badge>
+   684→                  <Badge variant="outline" className="text-xs">v{state.letterVersion}</Badge>
+   685→                </div>
+   686→
+   687→                {/* Clickable Provenance Cards */}
+   688→                {state.letterDrafting.inlineCitations.length > 0 && (
+   689→                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+   690→                    {state.letterDrafting.inlineCitations.map((cit) => (
+   691→                      <div
+   692→                        key={cit.number}
+   693→                        className="rounded border p-2.5 hover:shadow-md transition-shadow cursor-pointer"
+   694→                      >
+   695→                        <div className="flex items-center gap-1.5 mb-1">
+   696→                          <Badge variant="outline" className="text-xs font-mono">[{cit.number}]</Badge>
+   697→                          <Badge className={`text-[9px] ${provenanceTierColor(cit.provenanceTier)}`}>
+   698→                            {cit.provenanceTier.replace(/_/g, ' ')}
+   699→                          </Badge>
+   700→                        </div>
+   701→                        <p className="text-xs font-medium truncate">{cit.source}</p>
+   702→                        <p className="text-[10px] text-muted-foreground truncate">{cit.documentName}</p>
+   703→                        <p className="text-[10px] text-muted-foreground mt-1 line-clamp-2">{cit.claimText.slice(0, 100)}</p>
+   704→                      </div>
+   705→                    ))}
+   706→                  </div>
+   707→                )}
+   708→
+   709→                {/* Editable Letter Text */}
+   710→                <div className="space-y-2">
+   711→                  <Label className="text-xs font-medium flex items-center gap-1">
+   712→                    <Edit3 className="h-3 w-3" />
+   713→                    Edit Appeal Letter (optional)
+   714→                  </Label>
+   715→                  <Textarea
+   716→                    value={editedLetter}
+   717→                    onChange={(e) => setEditedLetter(e.target.value)}
+   718→                    className="text-sm font-serif min-h-[200px]"
+   719→                  />
+   720→                  {editedLetter !== state.letterDrafting.appealLetter && (
+   721→                    <div className="space-y-2">
+   722→                      <Input
+   723→                        value={editReason}
+   724→                        onChange={(e) => setEditReason(e.target.value)}
+   725→                        placeholder="Edit reason (for version history)..."
+   726→                        className="text-xs"
+   727→                      />
+   728→                      <p className="text-[10px] text-amber-600">
+   729→                        Letter has been edited. Changes will be tracked in3 version history.
+   730→                      </p>
+   731→                    </div>
+   732→                  )}
+   733→                </div>
+   734→              </div>
+   735→            )}
+   736→
+   737→            <Separator />
+   738→
+   739→            {/* Gate 2 Actions */}
+   740→            <div className="flex gap-3">
+   741→              <Button
+   742→                onClick={() => resolveGate2('approved')}
+   743→                disabled={isRunning}
+   744→                className="bg-emerald-600 hover:bg-emerald-700 text-white"
+   745→              >
+   746→                <CheckCircle2 className="h-4 w-4 mr-2" />
+   747→                Approve & Submit
+   748→              </Button>
+   749→              <Button
+   750→                onClick={() => resolveGate2('rejected')}
+   751→                disabled={isRunning}
+   752→                variant="destructive"
+   753→              >
+   754→                <XCircle className="h-4 w-4 mr-2" />
+   755→                Reject & Revise
+   756→              </Button>
+   757→            </div>
+   758→          </CardContent>
+   759→        </Card>
+   760→      )}
+   761→
+   762→      {/* ── Pipeline Completed ─────────────────────────────────────────── */}
+   763→      {state.phase === 'completed' && (
+   764→        <Card className="border-2 border-emerald-300 dark:border-emerald-700">
+   765→          <CardContent className="py-4 space-y-3">
+   766→            <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-300">
+   767→              <CheckCircle2 className="h-5 w-5" />
+   768→              <p className="font-medium">Gates Passed — Appeal Submitted Successfully</p>
+   769→            </div>
+   770→            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+   771→              <div className="bg-muted/30 rounded p-2">
+   772→                <p className="text-[10px] text-muted-foreground">Case ID</p>
+   773→                <p className="font-mono text-xs">{state.caseId?.slice(0, 12)}...</p>
+   774→              </div>
+   775→              <div className="bg-muted/30 rounded p-2">
+   776→                <p className="text-[10px] text-muted-foreground">Trace Events</p>
+   777→                <p className="font-medium">{state.traces.length}</p>
+   778→              </div>
+   779→              <div className="bg-muted/30 rounded p-2">
+   780→                <p0className="text-[10px] text-muted-foreground">Letter Version</p>
+   781→                <p className="font-medium">v{state.letterVersion}</p>
+   782→              </div>
+   783→              <div className="bg-muted/30 rounded p-2">
+   784→                <p className="text-[10px] text-muted-foreground">Total Latency</p>
+   785→                <p className="font-medium">{state.latencyMs}ms</p>
+   786→              </div>
+   787→            </div>
+   788→          </CardContent>
+   789→        </Card>
+   790→      )}
+   791→
+   792→      {/* ── Gate Test Result ───────────────────────────────────────────── */}
+   793→      {gateTestResult && (
+   794→        <Card>
+   795→          <CardHeader className="pb-3">
+   796→            <CardTitle className="text-sm flex items-center gap-0.2">
+   797→              <Shield className="h-4 w-4 text-purple-500" />
+   798→              Day 6 Gate Test Result
+   799→              <Badge className={`ml-2 ${gateTestResult.gateResult === 'PASS' ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'}`}>
+   800→                {String(gateTestResult.gateResult)}
+   801→              </Badge>
+   802→            </CardTitle>
+   803→          </CardHeader>
+   804→          <CardContent>
+   805→            {gateTestResult.checks && (
+   806→              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
+   807→                {Object.entries(gateTestResult.checks as Record<string, unknown>).map(([key, value]) => (
+   808→                  <div key={key} className="bg-muted/30 rounded p-2">
+   809→                    <p className="text-[10px] text-muted-foreground">{key.replace(/([A-Z])/g, ' $1')}</p>
+   810→                    <p className="font-medium">{String(value)}</p>
+   811→                  </div>
+   812→                ))}
+   813→              </div>
+   814→            )}
+   815→            {gateTestResult.summary && (
+   816→              <p className="text-xs text-muted-foreground mt-3">{String(gateTestResult.summary)}</p>
+   817→            )}
+   818→          </CardContent>
+   819→        </Card>
+   820→      )}
+   821→
+   822→      {/* ── Error Display ──────────────────────────────────────────────── */}
+   823→      {error && (
+   824→        <Card className="border-red-300">
+   825→          <CardContent className="py-3">
+   826→            <div className="flex items-center gap-2 text-red-700">
+   827→              <AlertCircle className="h-4 w-4" />
+   828→              <p className="text-sm">{error}</)}</p>
+   829→            </div>
+   830→          </CardContent>
+   831→        </Card>
+   832→      )}
+   833→    </div>
+   834→  );
+   835→}
+   836→

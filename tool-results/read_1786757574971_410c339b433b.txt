@@ -1,0 +1,938 @@
+     1→'use client';
+     2→
+     3→/**
+     4→ * DenialDefender — Six-Agent Pipeline Panel (Day 5)
+     5→ *
+     6→ * Interactive UI showing:
+     7→ * - Input: denial letter + payer + Run button
+     8→ * - All 6 agent steps with color-coded status
+     9→ * - HITL Gate 1: Confirm/Reject buttons
+    10→ * - Appeal letter display with inline [1][2][3][4][5] citations
+    11→ * - Quality Review battery results table (7 rows, each PASS/FAIL)
+    12→ * - Gate test button (runs good + broken drafts, verifies blocking)
+    13→ * - Decision trace
+    14→ */
+    15→
+    16→import { useState, useCallback } from 'react';
+    17→import {
+    18→  Card,
+    19→  CardContent,
+    20→  CardHeader,
+    21→  CardTitle,
+    22→  CardDescription,
+    23→} from '@/components/ui/card';
+    24→import { Badge } from '@/components/ui/badge';
+    25→import { Button } from '@/components/ui/button';
+    26→import { Textarea } from '@/components/ui/textarea';
+    27→import {
+    28→  Select,
+    29→  SelectContent,
+    30→  SelectItem,
+    31→  SelectTrigger,
+    32→  SelectValue,
+    33→} from '@/components/ui/select';
+    34→import {
+    35→  Accordion,
+    36→  AccordionContent,
+    37→  AccordionItem,
+    38→  AccordionTrigger,
+    39→} from '@/components/ui/accordion';
+    40→import { Separator } from '@/components/ui/separator';
+    41→import {
+    42→  Heart,
+    43→  Search,
+    44→  BookOpen,
+    45→  CheckCircle2,
+    46→  XCircle,
+    47→  Clock,
+    48→  Loader2,
+    49→  Shield,
+    50→  AlertCircle,
+    51→  FileText,
+    52→  FlaskConical,
+    53→  PenTool,
+    54→  ShieldCheck,
+    55→  Database,
+    56→  Beaker,
+    57→} from 'lucide-react';
+    58→
+    59→// ─── Types ────────────────────────────────────────────────────────────────
+    60→
+    61→interface CaseFraming {
+    62→  patientSummary: string;
+    63→  denialImpact: string;
+    64→  urgencyLevel: 'critical' | 'high' | 'standard';
+    65→  recommendedActions: string[];
+    66→  deadline: string | null;
+    67→  deadlineDaysRemaining: number | null;
+    68→}
+    69→
+    70→interface AdvocateResult {
+    71→  caseFraming: CaseFraming;
+    72→  empatheticNote: string;
+    73→}
+    74→
+    75→interface DenialJson {
+    76→  payer: string;
+    77→  reasonCode: string;
+    78→  denialType: string;
+    79→  denialTypeLabel: string;
+    80→  category: string;
+    81→  confidence: number;
+    82→  cptCodes: string[];
+    83→  icdCodes: string[];
+    84→  amountDenied: number;
+    85→  deadline: string | null;
+    86→}
+    87→
+    88→interface TriageResult {
+    89→  denialJson: DenialJson;
+    90→  classification: {
+    91→    isAppealable: boolean;
+    92→    appealStrategy: string;
+    93→    estimatedSuccessRate: number;
+    94→    keyFactors: string[];
+    95→  };
+    96→  humanConfirmPrompt: string;
+    97→}
+    98→
+    99→interface PolicyClause {
+   100→  number: number;
+   101→  clauseId: string | null;
+   102→  source: string;
+   103→  documentName: string;
+   104→  section: string | null;
+   105→  contentPreview: string;
+   106→  provenanceTier: string;
+   107→  relevanceScore: number;
+   108→  retrievalWeight: number;
+   109→}
+   110→
+   111→interface PolicyResearchResult {
+   112→  clauses: PolicyClause[];
+   113→  provenanceCards: any[];
+   114→  retrievalLatencyMs: number;
+   115→  withinSla: boolean;
+   116→  summary: string;
+   117→}
+   118→
+   119→interface ClinicalEvidenceItem {
+   120→  id: string;
+   121→  source: string;
+   122→  documentName: string;
+   123→  section: string | null;
+   124→  contentPreview: string;
+   125→  provenanceTier: string;
+   126→  relevanceScore: number;
+   127→  matchesDenialReason: boolean;
+   128→  contentHash: string;
+   129→}
+   130→
+   131→interface DeduplicatedClause {
+   132→  clauseId: string | null;
+   133→  source: string;
+   134→  documentName: string;
+   135→  section: string | null;
+   136→  contentPreview: string;
+   137→  provenanceTier: string;
+   138→  isDuplicate: boolean;
+   139→  duplicateOf: string | null;
+   140→}
+   141→
+   142→interface EvidenceAssemblyResult {
+   143→  clinicalEvidence: ClinicalEvidenceItem[];
+   144→  deduplicatedClauses: DeduplicatedClause[];
+   145→  evidenceStrength: 'strong' | 'moderate' | 'weak';
+   146→  totalEvidenceItems: number;
+   147→  duplicatesRemoved: number;
+   148→}
+   149→
+   150→interface InlineCitation {
+   151→  number: number;
+   152→  evidenceId: string;
+   153→  source: string;
+   154→  documentName: string;
+   155→  contentHash: string;
+   156→  claimText: string;
+   157→  provenanceTier: string;
+   158→}
+   159→
+   160→interface LetterDraftingResult {
+   161→  appealLetter: string;
+   162→  sections: { title: string; content: string }[];
+   163→  inlineCitations: InlineCitation[];
+   164→  wordCount: number;
+   165→  citationCount: number;
+   166→  tone: string;
+   167→  formatCompliant: boolean;
+   168→}
+   169→
+   170→interface BatteryResult {
+   171→  attackQuestion: string;
+   172→  passCondition: string;
+   173→  passed: boolean;
+   174→  details: string;
+   175→  severity: 'critical' | 'warning' | 'info';
+   176→}
+   177→
+   178→interface QualityIssue {
+   179→  category: string;
+   180→  description: string;
+   181→  severity: 'critical' | 'warning';
+   182→  citation?: number;
+   183→  suggestion: string;
+   184→}
+   185→
+   186→interface QualityReviewResult {
+   187→  overallVerdict: 'PASS' | 'FAIL';
+   188→  overallScore: number;
+   189→  batteryResults: BatteryResult[];
+   190→  citationsVerified: number;
+   191→  unsupportedClaims: number;
+   192→  issues: QualityIssue[];
+   193→  canProceed: boolean;
+   194→}
+   195→
+   196→interface TraceEvent {
+   197→  agent: string;
+   198→  step: string;
+   199→  timestamp: string;
+   200→  status: 'started' | 'completed' | 'error' | 'blocked';
+   201→  detail: string;
+   202→  latencyMs?: number;
+   203→}
+   204→
+   205→interface PipelineResult {
+   206→  advocate: AdvocateResult;
+   207→  triage: TriageResult;
+   208→  gate1: {
+   209→    status: 'pending' | 'approved' | 'rejected';
+   210→    gateId: string | null;
+   211→    confirmPrompt: string;
+   212→  };
+   213→  policyResearch: PolicyResearchResult | null;
+   214→  evidenceAssembly: EvidenceAssemblyResult | null;
+   215→  letterDrafting: LetterDraftingResult | null;
+   216→  qualityReview: QualityReviewResult | null;
+   217→  pipelineStatus: 'awaiting_gate1' | 'gate1_rejected' | 'quality_review_failed' | 'completed';
+   218→  caseId: string | null;
+   219→  latencyMs: number;
+   220→  traces: TraceEvent[];
+   221→}
+   222→
+   223→interface GateTestResult {
+   224→  goodDraft: { passed: boolean; verdict: string; score: number; citationsVerified: number };
+   225→  brokenDraft: { blocked: boolean; verdict: string; score: number; failedChecks: string[] };
+   226→  gateResult: 'PASS' | 'FAIL';
+   227→}
+   228→
+   229→// ─── Sample Data ──────────────────────────────────────────────────────────
+   230→
+   231→const SAMPLES = [
+   232→  { id: 'sample-1', label: 'Medicare — Medical Necessity (CO-50, TKA)', payer: 'Medicare' },
+   233→  { id: 'sample-2', label: 'UHC — Prior Auth (CO-197, MRI)', payer: 'UnitedHealthcare' },
+   234→  { id: 'sample-3', label: 'Aetna — Coding (CO-4, E/M)', payer: 'Aetna' },
+   235→];
+   236→
+   237→const PAYERS = ['Medicare', 'UnitedHealthcare', 'Aetna', 'Cigna', 'Humana', 'Anthem', 'Kaiser Permanente', 'Medicaid'];
+   238→
+   239→const SAMPLE_TEXTS: Record<string, string> = {
+   240→  'sample-1': `Medicare\nClaims Adjudication Department\n\nDATE: March 4, 2026\n\nRE: Denial of Claim — 27447 (Total Knee Arthroplasty)\n\nDear Provider,\n\nThis letter is to inform you that the claim submitted for the above-referenced service has been denied.\n\nDENIAL REASON: CO50 — Non-covered services because it is not deemed medically necessary\n\nPAYER STATEMENT: The requested service is not medically necessary for the diagnosed condition. Conservative treatment options have not been adequately documented as exhausted.\n\nPROCEDURE: 27447 — Total Knee Arthroplasty\nDIAGNOSIS: M17.11 — Primary osteoarthritis, right knee\nAMOUNT DENIED: $34,250.00\n\nAPPEAL RIGHTS: You have the right to appeal this denial within 120 days of the date of this notice.`,
+   241→  'sample-2': `UnitedHealthcare\nPrior Authorization Department\n\nDATE: February 28, 2026\n\nRE: Denial of Claim — 70553 (MRI Brain With and Without Contrast)\n\nDear Provider,\n\nDENIAL REASON: CO197 — Precertification/authorization/notification/pre-treatment absent\n\nPROCEDURE: 70553 — MRI brain with and without contrast\nDIAGNOSIS: G43.909 — Migraine, unspecified\nAMOUNT DENIED: $2,890.00\n\nAPPEAL RIGHTS: You have the right to appeal this denial within 180 days of the date of this notice.`,
+   242→  'sample-3': `Aetna\nClaims Adjudication Department\n\nDATE: March 10, 2026\n\nRE: Denial of Claim — 99213 (Office Visit, Established Patient, Level 3)\n\nDear Provider,\n\nDENIAL REASON: CO4 — The procedure code is inconsistent with the modifier used or is inconsistent with the diagnosis\n\nPROCEDURE: 99213 — Office visit, established patient, level 3\nDIAGNOSIS: K21.0 — Gastro-esophageal reflux disease with esophagitis\nAMOUNT DENIED: $156.00\n\nAPPEAL RIGHTS: You have the right to appeal this denial within 60 days of the date of this notice.`,
+   243→};
+   244→
+   245→// ─── Provenance Tier Badge ────────────────────────────────────────────────
+   246→
+   247→function ProvenanceBadge({ tier }: { tier: string }) {
+   248→  switch (tier) {
+   249→    case 'primary_source':
+   250→      return <Badge className="bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-200 border-teal-300 dark:border-teal-700 text-[10px]">Primary</Badge>;
+   251→    case 'secondary_summary':
+   252→      return <Badge className="bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200 border-amber-300 dark:border-amber-700 text-[10px]">Secondary</Badge>;
+   253→    case 'tertiary_commentary':
+   254→      return <Badge variant="outline" className="text-[10px] text-muted-foreground">Tertiary</Badge>;
+   255→    default:
+   256→      return <Badge variant="outline" className="text-[10px]">{tier}</Badge>;
+   257→  }
+   258→}
+   259→
+   260→// ─── Agent Step ────────────────────────────────────────────────────────────
+   261→
+   262→interface AgentStepProps {
+   263→  name: string;
+   264→  icon: React.ReactNode;
+   265→  color: string;
+   266→  status: 'idle' | 'running' | 'completed' | 'failed' | 'blocked' | 'pending';
+   267→  detail?: string;
+   268→  latencyMs?: number;
+   269→}
+   270→
+   271→function AgentStep({ name, icon, color, status, detail, latencyMs }: AgentStepProps) {
+   272→  const statusIcon = {
+   273→    idle: <Clock className="h-3.5 w-3.5 text-muted-foreground" />,
+   274→    running: <Loader2 className="h-3.5 w-3.5 animate-spin text-amber-500" />,
+   275→    completed: <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />,
+   276→    failed: <XCircle className="h-3.5 w-3.5 text-red-500" />,
+   277→    blocked: <AlertCircle className="h-3.5 w-3.5 text-red-500" />,
+   278→    pending: <Clock className="h-3.5 w-3.5 text-amber-500" />,
+   279→  }[status];
+   280→
+   281→  return (
+   282→    <div className="flex items-center gap-2 py-1.5">
+   283→      <div className={`flex items-center justify-center h-7 w-7 rounded-md ${color}`}>
+   284→        {icon}
+   285→      </div>
+   286→      <div className="flex-1 min-w-0">
+   287→        <div className="flex items-center gap-2">
+   288→          <span className="text-sm font-medium truncate">{name}</span>
+   289→          {statusIcon}
+   290→          {latencyMs !== undefined && status === 'completed' && (
+   291→            <span className="text-[10px] text-muted-foreground">{latencyMs}ms</span>
+   292→          )}
+   293→        </div>
+   294→        {detail && (
+   295→          <p className="text-xs text-muted-foreground truncate">{detail}</p>
+   296→        )}
+   297→      </div>
+   298→    </div>
+   299→  );
+   300→}
+   301→
+   302→// ─── Component ────────────────────────────────────────────────────────────
+   303→
+   304→export function SixAgentPipelinePanel() {
+   305→  const [denialText, setDenialText] = useState('');
+   306→  const [payer, setPayer] = useState('Medicare');
+   307→  const [loading, setLoading] = useState(false);
+   308→  const [resuming, setResuming] = useState(false);
+   309→  const [gateTestLoading, setGateTestLoading] = useState(false);
+   310→  const [result, setResult] = useState<PipelineResult | null>(null);
+   311→  const [gateTestResult, setGateTestResult] = useState<GateTestResult | null>(null);
+   312→  const [error, setError] = useState<string | null>(null);
+   313→  const [activeCitation, setActiveCitation] = useState<number | null>(null);
+   314→
+   315→  // Run pipeline
+   316→  const handleRun = useCallback(async () => {
+   317→    if (!denialText.trim()) return;
+   318→    setLoading(true);
+   319→    setError(null);
+   320→    setResult(null);
+   321→    setGateTestResult(null);
+   322→
+   323→    try {
+   324→      const res = await fetch('/api/six-agent-pipeline', {
+   325→        method: 'POST',
+   326→        headers: { 'Content-Type': 'application/json' },
+   327→        body: JSON.stringify({ denialText, payer }),
+   328→      });
+   329→
+   330→      if (!res.ok) {
+   331→        const data = await res.json();
+   332→        throw new Error(data.error || 'Pipeline failed');
+   333→      }
+   334→
+   335→      const data: PipelineResult = await res.json();
+   336→      setResult(data);
+   337→    } catch (err: unknown) {
+   338→      setError(err instanceof Error ? err.message : 'Unknown error');
+   339→    } finally {
+   340→      setLoading(false);
+   341→    }
+   342→  }, [denialText, payer]);
+   343→
+   344→  // Load sample
+   345→  const handleLoadSample = useCallback((sampleId: string) => {
+   346→    const local = SAMPLES.find(s => s.id === sampleId);
+   347→    if (local) setPayer(local.payer);
+   348→    setDenialText(SAMPLE_TEXTS[sampleId] || '');
+   349→  }, []);
+   350→
+   351→  // Gate 1 action
+   352→  const handleGate1 = useCallback(async (action: 'approved' | 'rejected') => {
+   353→    if (!result?.caseId) return;
+   354→    setResuming(true);
+   355→    setError(null);
+   356→
+   357→    try {
+   358→      const res = await fetch('/api/six-agent-pipeline/resume', {
+   359→        method: 'POST',
+   360→        headers: { 'Content-Type': 'application/json' },
+   361→        body: JSON.stringify({
+   362→          caseId: result.caseId,
+   363→          gateStatus: action,
+   364→          triageResult: result.triage,
+   365→          advocateResult: result.advocate,
+   366→        }),
+   367→      });
+   368→
+   369→      if (!res.ok) {
+   370→        const data = await res.json();
+   371→        throw new Error(data.error || 'Resume failed');
+   372→      }
+   373→
+   374→      const data: PipelineResult = await res.json();
+   375→      setResult(data);
+   376→    } catch (err: unknown) {
+   377→      setError(err instanceof Error ? err.message : 'Unknown error');
+   378→    } finally {
+   379→      setResuming(false);
+   380→    }
+   381→  }, [result]);
+   382→
+   383→  // Gate test
+   384→  const handleGateTest = useCallback(async () => {
+   385→    if (!denialText.trim()) return;
+   386→    setGateTestLoading(true);
+   387→    setError(null);
+   388→    setGateTestResult(null);
+   389→
+   390→    try {
+   391→      const res = await fetch('/api/six-agent-pipeline/gate-test', {
+   392→        method: 'POST',
+   393→        headers: { 'Content-Type': 'application/json' },
+   394→        body: JSON.stringify({ denialText, payer }),
+   395→      });
+   396→
+   397→      if (!res.ok) {
+   398→        const data = await res.json();
+   399→        throw new Error(data.error || 'Gate test failed');
+   400→      }
+   401→
+   402→      const data: GateTestResult = await res.json();
+   403→      setGateTestResult(data);
+   404→    } catch (err: unknown) {
+   405→      setError(err instanceof Error ? err.message : 'Unknown error');
+   406→    } finally {
+   407→      setGateTestLoading(false);
+   408→    }
+   409→  }, [denialText, payer]);
+   410→
+   411→  // Determine agent statuses
+   412→  const hasResult = result !== null;
+   413→  const gate1Status = result?.gate1.status;
+   414→  const hasPolicy = result?.policyResearch !== null;
+   415→  const hasEvidence = result?.evidenceAssembly !== null;
+   416→  const hasDraft = result?.letterDrafting !== null;
+   417→  const hasQuality = result?.qualityReview !== null;
+   418→  const qualityPassed = result?.qualityReview?.overallVerdict === 'PASS';
+   419→
+   420→  return (
+   421→    <div className="space-y-6">
+   422→      {/* ── Input Section ─────────────────────────────────────── */}
+   423→      <Card>
+   424→        <CardHeader className="pb-3">
+   425→          <CardTitle className="flex items-center gap-2 text-base">
+   426→            <ShieldCheck className="h-5 w-5 text-emerald-600" />
+   427→            Six-Agent Pipeline — Day 5
+   428→          </CardTitle>
+   429→          <CardDescription>
+   430→            Advocate → Triage → [Gate 1] → Policy → Evidence → Draft → Quality Review
+   431→          </CardDescription>
+   432→        </CardHeader>
+   433→        <CardContent className="space-y-4">
+   434→          {/* Sample selector */}
+   435→          <div className="flex flex-wrap gap-2">
+   436→            <span className="text-sm text-muted-foreground self-center">Samples:</span>
+   437→            {SAMPLES.map(sample => (
+   438→              <Button
+   439→                key={sample.id}
+   440→                variant="outline"
+   441→                size="sm"
+   442→                onClick={() => handleLoadSample(sample.id)}
+   443→                className="text-xs"
+   444→              >
+   445→                {sample.label}
+   446→              </Button>
+   447→            ))}
+   448→          </div>
+   449→
+   450→          {/* Payer selector */}
+   451→          <div className="flex flex-col sm:flex-row gap-3">
+   452→            <div className="w-full sm:w-48">
+   453→              <label className="text-xs font-medium text-muted-foreground mb-1 block">Payer</label>
+   454→              <Select value={payer} onValueChange={setPayer}>
+   455→                <SelectTrigger>
+   456→                  <SelectValue />
+   457→                </SelectTrigger>
+   458→                <SelectContent>
+   459→                  {PAYERS.map(p => (
+   460→                    <SelectItem key={p} value={p}>{p}</SelectItem>
+   461→                  ))}
+   462→                </SelectContent>
+   463→              </Select>
+   464→            </div>
+   465→          </div>
+   466→
+   467→          {/* Denial text */}
+   468→          <div>
+   469→            <label className="text-xs font-medium text-muted-foreground mb-1 block">Denial Letter</label>
+   470→            <Textarea
+   471→              value={denialText}
+   472→              onChange={e => setDenialText(e.target.value)}
+   473→              placeholder="Paste the denial letter text here..."
+   474→              className="min-h-[120px] text-sm"
+   475→            />
+   476→          </div>
+   477→
+   478→          {/* Actions */}
+   479→          <div className="flex flex-wrap gap-3">
+   480→            <Button onClick={handleRun} disabled={loading || !denialText.trim()}>
+   481→              {loading ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Running...</> : 'Run Pipeline'}
+   482→            </Button>
+   483→            <Button
+   484→              variant="outline"
+   485→              onClick={handleGateTest}
+   486→              disabled={gateTestLoading || !denialText.trim()}
+   487→            >
+   488→              {gateTestLoading ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Testing...</> : <><Beaker className="h-4 w-4 mr-2" />Gate Test</>}
+   489→            </Button>
+   490→          </div>
+   491→
+   492→          {error && (
+   493→            <div className="p-3 rounded-md bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 text-sm text-red-700 dark:text-red-300">
+   494→              {error}
+   495→            </div>
+   496→          )}
+   497→        </CardContent>
+   498→      </Card>
+   499→
+   500→      {/* ── Agent Steps ──────────────────────────────────────── */}
+   501→      {hasResult && (
+   502→        <Card>
+   503→          <CardHeader className="pb-3">
+   504→            <CardTitle className="text-base">Pipeline Steps</CardTitle>
+   505→          </CardHeader>
+   506→          <CardContent>
+   507→            <div className="space-y-1">
+   508→              <AgentStep
+   509→                name="Patient Advocate"
+   510→                icon={<Heart className="h-4 w-4 text-white" />}
+   511→                color="bg-rose-500"
+   512→                status={hasResult ? 'completed' : 'idle'}
+   513→                detail={result?.advocate.caseFraming.urgencyLevel ? `Urgency: ${result.advocate.caseFraming.urgencyLevel}` : undefined}
+   514→              />
+   515→              <AgentStep
+   516→                name="Denial Triage"
+   517→                icon={<Search className="h-4 w-4 text-white" />}
+   518→                color="bg-teal-500"
+   519→                status={hasResult ? 'completed' : 'idle'}
+   520→                detail={result?.triage.denialJson.denialTypeLabel}
+   521→              />
+   522→              <AgentStep
+   523→                name="HITL Gate 1"
+   524→                icon={<Shield className="h-4 w-4 text-white" />}
+   525→                color={gate1Status === 'approved' ? 'bg-emerald-500' : gate1Status === 'rejected' ? 'bg-red-500' : 'bg-amber-500'}
+   526→                status={gate1Status === 'pending' ? 'pending' : gate1Status === 'approved' ? 'completed' : gate1Status === 'rejected' ? 'failed' : 'idle'}
+   527→                detail={gate1Status === 'pending' ? 'Awaiting human confirmation' : gate1Status === 'approved' ? 'Approved' : gate1Status === 'rejected' ? 'Rejected' : undefined}
+   528→              />
+   529→              <AgentStep
+   530→                name="Policy Research"
+   531→                icon={<BookOpen className="h-4 w-4 text-white" />}
+   532→                color="bg-emerald-500"
+   533→                status={hasPolicy ? 'completed' : gate1Status === 'approved' ? 'running' : 'idle'}
+   534→                detail={hasPolicy ? `${result!.policyResearch!.clauses.length} clauses retrieved` : undefined}
+   535→                latencyMs={hasPolicy ? result!.policyResearch!.retrievalLatencyMs : undefined}
+   536→              />
+   537→              <AgentStep
+   538→                name="Evidence Assembly"
+   539→                icon={<Database className="h-4 w-4 text-white" />}
+   540→                color="bg-cyan-500"
+   541→                status={hasEvidence ? 'completed' : hasPolicy ? 'running' : 'idle'}
+   542→                detail={hasEvidence ? `${result!.evidenceAssembly!.totalEvidenceItems} items, ${result!.evidenceAssembly!.evidenceStrength} strength` : undefined}
+   543→              />
+   544→              <AgentStep
+   545→                name="Letter Drafting"
+   546→                icon={<PenTool className="h-4 w-4 text-white" />}
+   547→                color="bg-violet-500"
+   548→                status={hasDraft ? 'completed' : hasEvidence ? 'running' : 'idle'}
+   549→                detail={hasDraft ? `${result!.letterDrafting!.wordCount} words, ${result!.letterDrafting!.citationCount} citations` : undefined}
+   550→              />
+   551→              <AgentStep
+   552→                name="Quality Review"
+   553→                icon={<ShieldCheck className="h-4 w-4 text-white" />}
+   554→                color={hasQuality && qualityPassed ? 'bg-emerald-500' : hasQuality && !qualityPassed ? 'bg-red-500' : 'bg-orange-500'}
+   555→                status={hasQuality ? (qualityPassed ? 'completed' : 'failed') : hasDraft ? 'running' : 'idle'}
+   556→                detail={hasQuality ? `${result!.qualityReview!.overallVerdict} (${result!.qualityReview!.citationsVerified}/5 citations verified)` : undefined}
+   557→              />
+   558→            </div>
+   559→
+   560→            {/* Gate 1 buttons */}
+   561→            {gate1Status === 'pending' && (
+   562→              <div className="mt-4 space-y-3">
+   563→                <Separator />
+   564→                <div className="p-3 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800">
+   565→                  <p className="text-sm font-medium text-amber-800 dark:text-amber-200 mb-1">HITL Gate 1 — Confirm Denial Classification</p>
+   566→                  <p className="text-xs text-amber-700 dark:text-amber-300 mb-3">{result!.gate1.confirmPrompt}</p>
+   567→                  <div className="flex gap-3">
+   568→                    <Button
+   569→                      size="sm"
+   570→                      onClick={() => handleGate1('approved')}
+   571→                      disabled={resuming}
+   572→                      className="bg-emerald-600 hover:bg-emerald-700 text-white"
+   573→                    >
+   574→                      {resuming ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />}
+   575→                      Approve — Run Agents 4-6
+   576→                    </Button>
+   577→                    <Button
+   578→                      size="sm"
+   579→                      variant="outline"
+   580→                      onClick={() => handleGate1('rejected')}
+   581→                      disabled={resuming}
+   582→                      className="border-red-300 text-red-600 hover:bg-red-50 dark:border-red-700 dark:text-red-400 dark:hover:bg-red-950/30"
+   583→                    >
+   584→                      <XCircle className="h-3.5 w-3.5 mr-1.5" />
+   585→                      Reject
+   586→                    </Button>
+   587→                  </div>
+   588→                </div>
+   589→              </div>
+   590→            )}
+   591→
+   592→            {/* Pipeline status */}
+   593→            <div className="mt-4 flex items-center gap-2">
+   594→              <span className="text-xs text-muted-foreground">Status:</span>
+   595→              <Badge variant={result!.pipelineStatus === 'completed' ? 'default' : result!.pipelineStatus === 'quality_review_failed' ? 'destructive' : 'outline'}>
+   596→                {result!.pipelineStatus === 'awaiting_gate1' ? 'Awaiting Gate 1' :
+   597→                 result!.pipelineStatus === 'gate1_rejected' ? 'Gate 1 Rejected' :
+   598→                 result!.pipelineStatus === 'quality_review_failed' ? 'Quality Review Failed' :
+   599→                 'Completed'}
+   600→              </Badge>
+   601→              <span className="text-xs text-muted-foreground">({result!.latencyMs}ms)</span>
+   602→            </div>
+   603→          </CardContent>
+   604→        </Card>
+   605→      )}
+   606→
+   607→      {/* ── Appeal Letter ────────────────────────────────────── */}
+   608→      {hasDraft && (
+   609→        <Card>
+   610→          <CardHeader className="pb-3">
+   611→            <CardTitle className="flex items-center gap-2 text-base">
+   612→              <FileText className="h-5 w-5 text-violet-600" />
+   613→              Appeal Letter Draft
+   614→            </CardTitle>
+   615→            <CardDescription>
+   616→              {result!.letterDrafting!.wordCount} words • {result!.letterDrafting!.citationCount} citations • {result!.letterDrafting!.tone}
+   617→            </CardDescription>
+   618→          </CardHeader>
+   619→          <CardContent className="space-y-4">
+   620→            {/* Letter text with clickable citations */}
+   621→            <div className="p-4 rounded-md bg-muted/50 border text-sm whitespace-pre-wrap leading-relaxed max-h-96 overflow-y-auto">
+   622→              {result!.letterDrafting!.appealLetter.split(/(\[\d+\])/).map((part, idx) => {
+   623→                const citationMatch = part.match(/^\[(\d+)\]$/);
+   624→                if (citationMatch) {
+   625→                  const num = parseInt(citationMatch[1], 10);
+   626→                  return (
+   627→                    <button
+   628→                      key={idx}
+   629→                      onClick={() => setActiveCitation(activeCitation === num ? null : num)}
+   630→                      className={`inline-flex items-center justify-center px-1.5 py-0.5 rounded text-xs font-bold transition-colors cursor-pointer ${
+   631→                        activeCitation === num
+   632→                          ? 'bg-emerald-600 text-white'
+   633→                          : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300 hover:bg-emerald-200 dark:hover:bg-emerald-800'
+   634→                      }`}
+   635→                    >
+   636→                      [{num}]
+   637→                    </button>
+   638→                  );
+   639→                }
+   640→                return <span key={idx}>{part}</span>;
+   641→              })}
+   642→            </div>
+   643→
+   644→            {/* Citation details */}
+   645→            {activeCitation !== null && (() => {
+   646→              const citation = result!.letterDrafting!.inlineCitations.find(ic => ic.number === activeCitation);
+   647→              if (!citation) return null;
+   648→              return (
+   649→                <div className="p-3 rounded-md bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 text-sm">
+   650→                  <div className="flex items-center gap-2 mb-2">
+   651→                    <span className="font-bold text-emerald-700 dark:text-emerald-300">[{citation.number}]</span>
+   652→                    <ProvenanceBadge tier={citation.provenanceTier} />
+   653→                  </div>
+   654→                  <p className="text-xs text-muted-foreground mb-1">
+   655→                    <span className="font-medium">Source:</span> {citation.source}
+   656→                  </p>
+   657→                  <p className="text-xs text-muted-foreground mb-1">
+   658→                    <span className="font-medium">Document:</span> {citation.documentName}
+   659→                  </p>
+   660→                  <p className="text-xs text-muted-foreground mb-1">
+   661→                    <span className="font-medium">Claim:</span> {citation.claimText}
+   662→                  </p>
+   663→                  <p className="text-[10px] text-muted-foreground font-mono">
+   664→                    Hash: {citation.contentHash}
+   665→                  </p>
+   666→                </div>
+   667→              );
+   668→            })()}
+   669→
+   670→            {/* Inline citations summary */}
+   671→            <div className="flex flex-wrap gap-2">
+   672→              {result!.letterDrafting!.inlineCitations.map(ic => (
+   673→                <div
+   674→                  key={ic.number}
+   675→                  className="flex items-center gap-1 px-2 py-1 rounded-md bg-muted text-xs cursor-pointer hover:bg-muted/80"
+   676→                  onClick={() => setActiveCitation(activeCitation === ic.number ? null : ic.number)}
+   677→                >
+   678→                  <span className="font-bold">[{ic.number}]</span>
+   679→                  <span className="text-muted-foreground truncate max-w-[120px]">{ic.source}</span>
+   680→                  <ProvenanceBadge tier={ic.provenanceTier} />
+   681→                </div>
+   682→              ))}
+   683→            </div>
+   684→          </CardContent>
+   685→        </Card>
+   686→      )}
+   687→
+   688→      {/* ── Quality Review Battery ───────────────────────────── */}
+   689→      {hasQuality && (
+   690→        <Card>
+   691→          <CardHeader className="pb-3">
+   692→            <CardTitle className="flex items-center gap-2 text-base">
+   693→              <ShieldCheck className="h-5 w-5 text-orange-600" />
+   694→              Quality Review — Adversarial Battery
+   695→            </CardTitle>
+   696→            <CardDescription>
+   697→              {result!.qualityReview!.overallVerdict} • Score: {result!.qualityReview!.overallScore} • {result!.qualityReview!.citationsVerified}/5 citations verified • {result!.qualityReview!.unsupportedClaims} unsupported claims
+   698→            </CardDescription>
+   699→          </CardHeader>
+   700→          <CardContent className="space-y-4">
+   701→            {/* Overall verdict */}
+   702→            <div className={`p-3 rounded-md ${qualityPassed ? 'bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800' : 'bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800'}`}>
+   703→              <div className="flex items-center gap-2">
+   704→                {qualityPassed ? <CheckCircle2 className="h-5 w-5 text-emerald-600" /> : <XCircle className="h-5 w-5 text-red-600" />}
+   705→                <span className={`font-semibold ${qualityPassed ? 'text-emerald-700 dark:text-emerald-300' : 'text-red-700 dark:text-red-300'}`}>
+   706→                  {qualityPassed ? 'ALL CHECKS PASSED — Draft can proceed to Gate 2' : 'QUALITY REVIEW FAILED — Draft blocked'}
+   707→                </span>
+   708→              </div>
+   709→            </div>
+   710→
+   711→            {/* Battery results table */}
+   712→            <div className="overflow-x-auto">
+   713→              <table className="w-full text-sm">
+   714→                <thead>
+   715→                  <tr className="border-b">
+   716→                    <th className="text-left py-2 px-2 text-xs font-medium text-muted-foreground">#</th>
+   717→                    <th className="text-left py-2 px-2 text-xs font-medium text-muted-foreground">Attack Question</th>
+   718→                    <th className="text-left py-2 px-2 text-xs font-medium text-muted-foreground">Pass Condition</th>
+   719→                    <th className="text-center py-2 px-2 text-xs font-medium text-muted-foreground">Result</th>
+   720→                    <th className="text-left py-2 px-2 text-xs font-medium text-muted-foreground">Severity</th>
+   721→                  </tr>
+   722→                </thead>
+   723→                <tbody>
+   724→                  {result!.qualityReview!.batteryResults.map((br, idx) => (
+   725→                    <tr key={idx} className="border-b last:border-0">
+   726→                      <td className="py-2 px-2 text-xs text-muted-foreground">{idx + 1}</td>
+   727→                      <td className="py-2 px-2 text-xs max-w-[200px]">{br.attackQuestion}</td>
+   728→                      <td className="py-2 px-2 text-xs text-muted-foreground max-w-[150px]">{br.passCondition}</td>
+   729→                      <td className="py-2 px-2 text-center">
+   730→                        {br.passed ? (
+   731→                          <Badge className="bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200 text-[10px]">PASS</Badge>
+   732→                        ) : (
+   733→                          <Badge className="bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200 text-[10px]">FAIL</Badge>
+   734→                        )}
+   735→                      </td>
+   736→                      <td className="py-2 px-2">
+   737→                        <Badge variant="outline" className="text-[10px]">
+   738→                          {br.severity === 'critical' ? '🔴' : br.severity === 'warning' ? '🟡' : 'ℹ️'} {br.severity}
+   739→                        </Badge>
+   740→                      </td>
+   741→                    </tr>
+   742→                  ))}
+   743→                </tbody>
+   744→              </table>
+   745→            </div>
+   746→
+   747→            {/* Details accordion */}
+   748→            <Accordion type="multiple" className="w-full">
+   749→              {result!.qualityReview!.batteryResults.map((br, idx) => (
+   750→                <AccordionItem key={idx} value={`check-${idx}`}>
+   751→                  <AccordionTrigger className="text-xs py-2">
+   752→                    <span className="flex items-center gap-2">
+   753→                      {br.passed ? <CheckCircle2 className="h-3 w-3 text-emerald-500" /> : <XCircle className="h-3 w-3 text-red-500" />}
+   754→                      Check {idx + 1}: {br.attackQuestion.slice(0, 50)}...
+   755→                    </span>
+   756→                  </AccordionTrigger>
+   757→                  <AccordionContent className="text-xs text-muted-foreground">
+   758→                    <p><span className="font-medium">Details:</span> {br.details}</p>
+   759→                  </AccordionContent>
+   760→                </AccordionItem>
+   761→              ))}
+   762→            </Accordion>
+   763→
+   764→            {/* Issues */}
+   765→            {result!.qualityReview!.issues.length > 0 && (
+   766→              <div className="space-y-2">
+   767→                <h4 className="text-sm font-semibold">Issues ({result!.qualityReview!.issues.length})</h4>
+   768→                {result!.qualityReview!.issues.map((issue, idx) => (
+   769→                  <div key={idx} className={`p-2 rounded-md text-xs ${issue.severity === 'critical' ? 'bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800' : 'bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800'}`}>
+   770→                    <div className="flex items-center gap-2 mb-1">
+   771→                      <Badge variant={issue.severity === 'critical' ? 'destructive' : 'outline'} className="text-[10px]">{issue.severity}</Badge>
+   772→                      <span className="font-medium">{issue.category}</span>
+   773→                      {issue.citation && <span className="text-muted-foreground">[{issue.citation}]</span>}
+   774→                    </div>
+   775→                    <p className="text-muted-foreground mb-1">{issue.description}</p>
+   776→                    <p className="text-muted-foreground"><span className="font-medium">Suggestion:</span> {issue.suggestion}</p>
+   777→                  </div>
+   778→                ))}
+   779→              </div>
+   780→            )}
+   781→          </CardContent>
+   782→        </Card>
+   783→      )}
+   784→
+   785→      {/* ── Evidence Assembly Detail ─────────────────────────── */}
+   786→      {hasEvidence && (
+   787→        <Card>
+   788→          <CardHeader className="pb-3">
+   789→            <CardTitle className="flex items-center gap-2 text-base">
+   790→              <Database className="h-5 w-5 text-cyan-600" />
+   791→              Evidence Assembly
+   792→            </CardTitle>
+   793→            <CardDescription>
+   794→              {result!.evidenceAssembly!.totalEvidenceItems} items • {result!.evidenceAssembly!.evidenceStrength} strength • {result!.evidenceAssembly!.duplicatesRemoved} duplicates removed
+   795→            </CardDescription>
+   796→          </CardHeader>
+   797→          <CardContent>
+   798→            <div className="space-y-2 max-h-64 overflow-y-auto">
+   799→              {result!.evidenceAssembly!.clinicalEvidence.map((ev, idx) => (
+   800→                <div key={ev.id} className="flex items-start gap-2 p-2 rounded-md bg-muted/50 text-xs">
+   801→                  <span className="font-bold text-muted-foreground min-w-[16px]">{idx + 1}</span>
+   802→                  <div className="flex-1 min-w-0">
+   803→                    <div className="flex items-center gap-2 mb-0.5">
+   804→                      <span className="font-medium truncate">{ev.source}</span>
+   805→                      <ProvenanceBadge tier={ev.provenanceTier} />
+   806→                      {ev.matchesDenialReason && (
+   807→                        <Badge className="bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200 text-[10px]">Match</Badge>
+   808→                      )}
+   809→                    </div>
+   810→                    <p className="text-muted-foreground truncate">{ev.contentPreview}</p>
+   811→                    <p className="text-[10px] text-muted-foreground font-mono mt-0.5">Hash: {ev.contentHash}</p>
+   812→                  </div>
+   813→                </div>
+   814→              ))}
+   815→            </div>
+   816→
+   817→            {/* Deduplication info */}
+   818→            {result!.evidenceAssembly!.deduplicatedClauses.length > 0 && (
+   819→              <div className="mt-3">
+   820→                <h4 className="text-xs font-medium text-muted-foreground mb-2">Deduplicated Policy Clauses</h4>
+   821→                <div className="space-y-1">
+   822→                  {result!.evidenceAssembly!.deduplicatedClauses.map((dc, idx) => (
+   823→                    <div key={idx} className="flex items-center gap-2 text-xs">
+   824→                      {dc.isDuplicate ? (
+   825→                        <XCircle className="h-3 w-3 text-amber-500" />
+   826→                      ) : (
+   827→                        <CheckCircle2 className="h-3 w-3 text-emerald-500" />
+   828→                      )}
+   829→                      <span className="truncate">{dc.source}</span>
+   830→                      {dc.isDuplicate && (
+   831→                        <span className="text-amber-600 dark:text-amber-400 text-[10px]">dup of {dc.duplicateOf?.slice(0, 12)}</span>
+   832→                      )}
+   833→                    </div>
+   834→                  ))}
+   835→                </div>
+   836→              </div>
+   837→            )}
+   838→          </CardContent>
+   839→        </Card>
+   840→      )}
+   841→
+   842→      {/* ── Gate Test Results ────────────────────────────────── */}
+   843→      {gateTestResult && (
+   844→        <Card>
+   845→          <CardHeader className="pb-3">
+   846→            <CardTitle className="flex items-center gap-2 text-base">
+   847→              <FlaskConical className="h-5 w-5 text-orange-600" />
+   848→              Gate Test Results
+   849→            </CardTitle>
+   850→            <CardDescription>
+   851→              Adversarial gate test: verifies Quality Review blocks a deliberately-broken draft
+   852→            </CardDescription>
+   853→          </CardHeader>
+   854→          <CardContent className="space-y-4">
+   855→            {/* Good draft */}
+   856→            <div className={`p-3 rounded-md ${gateTestResult.goodDraft.passed ? 'bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800' : 'bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800'}`}>
+   857→              <div className="flex items-center gap-2 mb-1">
+   858→                {gateTestResult.goodDraft.passed ? <CheckCircle2 className="h-4 w-4 text-emerald-600" /> : <XCircle className="h-4 w-4 text-red-600" />}
+   859→                <span className="font-semibold text-sm">Good Draft</span>
+   860→              </div>
+   861→              <p className="text-xs text-muted-foreground">
+   862→                Verdict: {gateTestResult.goodDraft.verdict} • Score: {gateTestResult.goodDraft.score} • Citations: {gateTestResult.goodDraft.citationsVerified}/5
+   863→              </p>
+   864→            </div>
+   865→
+   866→            {/* Broken draft */}
+   867→            <div className={`p-3 rounded-md ${gateTestResult.brokenDraft.blocked ? 'bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800' : 'bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800'}`}>
+   868→              <div className="flex items-center gap-2 mb-1">
+   869→                {gateTestResult.brokenDraft.blocked ? <CheckCircle2 className="h-4 w-4 text-emerald-600" /> : <XCircle className="h-4 w-4 text-red-600" />}
+   870→                <span className="font-semibold text-sm">Broken Draft (fake citation injected)</span>
+   871→              </div>
+   872→              <p className="text-xs text-muted-foreground mb-1">
+   873→                Verdict: {gateTestResult.brokenDraft.verdict} • Score: {gateTestResult.brokenDraft.score}
+   874→              </p>
+   875→              {gateTestResult.brokenDraft.failedChecks.length > 0 && (
+   876→                <div className="mt-1">
+   877→                  <p className="text-[10px] font-medium text-muted-foreground mb-0.5">Failed checks:</p>
+   878→                  <ul className="list-disc list-inside text-[10px] text-muted-foreground">
+   879→                    {gateTestResult.brokenDraft.failedChecks.map((fc, idx) => (
+   880→                      <li key={idx}>{fc}</li>
+   881→                    ))}
+   882→                  </ul>
+   883→                </div>
+   884→              )}
+   885→            </div>
+   886→
+   887→            {/* Gate verdict */}
+   888→            <div className={`p-4 rounded-md ${gateTestResult.gateResult === 'PASS' ? 'bg-emerald-100 dark:bg-emerald-950/50 border-2 border-emerald-300 dark:border-emerald-700' : 'bg-red-100 dark:bg-red-950/50 border-2 border-red-300 dark:border-red-700'}`}>
+   889→              <div className="flex items-center gap-3">
+   890→                {gateTestResult.gateResult === 'PASS' ? (
+   891→                  <CheckCircle2 className="h-6 w-6 text-emerald-600" />
+   892→                ) : (
+   893→                  <XCircle className="h-6 w-6 text-red-600" />
+   894→                )}
+   895→                <div>
+   896→                  <p className={`font-bold ${gateTestResult.gateResult === 'PASS' ? 'text-emerald-700 dark:text-emerald-300' : 'text-red-700 dark:text-red-300'}`}>
+   897→                    Gate Result: {gateTestResult.gateResult}
+   898→                  </p>
+   899→                  <p className="text-xs text-muted-foreground">
+   900→                    {gateTestResult.gateResult === 'PASS'
+   901→                      ? 'The adversarial battery correctly blocked the broken draft. Quality Review is working as intended.'
+   902→                      : 'The adversarial battery FAILED to block the broken draft. The battery needs to be tightened before Day 6.'}
+   903→                  </p>
+   904→                </div>
+   905→              </div>
+   906→            </div>
+   907→          </CardContent>
+   908→        </Card>
+   909→      )}
+   910→
+   911→      {/* ── Decision Trace ───────────────────────────────────── */}
+   912→      {hasResult && result!.traces.length > 0 && (
+   913→        <Card>
+   914→          <CardHeader className="pb-3">
+   915→            <CardTitle className="text-base">Decision Trace</CardTitle>
+   916→          </CardHeader>
+   917→          <CardContent>
+   918→            <div className="space-y-1 max-h-64 overflow-y-auto">
+   919→              {result!.traces.map((trace, idx) => (
+   920→                <div key={idx} className="flex items-start gap-2 text-xs">
+   921→                  <Badge variant="outline" className="text-[10px] min-w-[80px] justify-center">
+   922→                    {trace.agent.slice(0, 14)}
+   923→                  </Badge>
+   924→                  <span className="text-muted-foreground min-w-[60px]">{trace.step.slice(0, 20)}</span>
+   925→                  <span className={trace.status === 'completed' ? 'text-emerald-600' : trace.status === 'error' ? 'text-red-600' : trace.status === 'blocked' ? 'text-red-600' : 'text-amber-600'}>
+   926→                    {trace.status}
+   927→                  </span>
+   928→                  <span className="text-muted-foreground flex-1 truncate">{trace.detail.slice(0, 80)}</span>
+   929→                </div>
+   930→              ))}
+   931→            </div>
+   932→          </CardContent>
+   933→        </Card>
+   934→      )}
+   935→    </div>
+   936→  );
+   937→}
+   938→

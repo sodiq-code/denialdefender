@@ -1,0 +1,706 @@
+     1→'use client';
+     2→
+     3→/**
+     4→ * DenialDefender — Day 7 Panel: Outcome Learning + Eval Service + Execution Paths
+     5→ *
+     6→ * Day 7 features:
+     7→ * 1. Eval Service — 10 held-out cases, 5 metrics, determinism gate
+     8→ * 2. Outcome Ingestion — weight updates, Memory Bank status
+     9→ * 3. Execution Paths — Live / Fallback / Demo-safe with reliability test
+    10→ * 4. Before-Scores Snapshot — baseline measurements
+    11→ */
+    12→
+    13→import React, { useState, useCallback } from 'react';
+    14→import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+    15→import { Button } from '@/components/ui/button';
+    16→import { Badge } from '@/components/ui/badge';
+    17→import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+    18→import { Progress } from '@/components/ui/progress';
+    19→import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+    20→import { Separator } from '@/components/ui/separator';
+    21→import {
+    22→  FlaskConical, CheckCircle2, XCircle, Clock, Activity, Shield,
+    23→  ArrowRight, Play, Database, Zap, Server, AlertTriangle,
+    24→  BarChart3, Target, FileCheck, GitBranch, Loader2,
+    25→} from 'lucide-react';
+    26→
+    27→// ─── Types ──────────────────────────────────────────────────────────────────
+    28→
+    29→interface MetricScore {
+    30→  metric: string;
+    31→  value: number;
+    32→  details: string;
+    33→}
+    34→
+    35→interface CaseResult {
+    36→  caseId: string;
+    37→  caseName: string;
+    38→  metrics: Record<string, number>;
+    39→  error: string | null;
+    40→  latencyMs: number;
+    41→}
+    42→
+    43→interface EvalSnapshot {
+    44→  runId: string;
+    45→  timestamp: string;
+    46→  temperature: number;
+    47→  totalCases: number;
+    48→  determinismHash: string;
+    49→  aggregateMetrics: Record<string, number>;
+    50→  caseSummaries: CaseResult[];
+    51→}
+    52→
+    53→interface DeterminismResult {
+    54→  gatePassed: boolean;
+    55→  hashes: string[];
+    56→  detail: string;
+    57→  aggregateMetrics: Record<string, number>;
+    58→}
+    59→
+    60→interface OutcomeIngestResult {
+    61→  success: boolean;
+    62→  outcomeId?: string;
+    63→  weightUpdates?: number;
+    64→  memoryBankStatus?: string;
+    65→  durationMs?: number;
+    66→}
+    67→
+    68→interface ExecutionPathResult {
+    69→  path: string;
+    70→  success: boolean;
+    71→  appealLetterLength: number;
+    72→  citationCount: number;
+    73→  qualityScore: number;
+    74→  latencyMs: number;
+    75→  strategy: string;
+    76→  error: string | null;
+    77→}
+    78→
+    79→interface DemoReliabilityResult {
+    80→  gateResult: string;
+    81→  gateDetail: string;
+    82→  livePath: { passed: boolean; latencyMs: number; error: string | null };
+    83→  fallbackPath: { passed: boolean; latencyMs: number; engagedWithin5s: boolean; error: string | null };
+    84→  demoSafePath: { passed: boolean; latencyMs: number; under10s: boolean; error: string | null };
+    85→  allPathsProduceUsableAppeal: boolean;
+    86→}
+    87→
+    88→// ─── Metric Labels ──────────────────────────────────────────────────────────
+    89→
+    90→const METRIC_LABELS: Record<string, string> = {
+    91→  top1_accuracy: 'Top-1 Accuracy',
+    92→  top3_accuracy: 'Top-3 Accuracy',
+    93→  citation_grounding: 'Citation Grounding',
+    94→  argument_selection: 'Argument Selection',
+    95→  appeal_quality: 'Appeal Quality',
+    96→};
+    97→
+    98→const METRIC_COLORS: Record<string, string> = {
+    99→  top1_accuracy: 'text-emerald-600',
+   100→  top3_accuracy: 'text-blue-600',
+   101→  citation_grounding: 'text-amber-600',
+   102→  argument_selection: 'text-purple-600',
+   103→  appeal_quality: 'text-rose-600',
+   104→};
+   105→
+   106→// ─── Main Component ────────────────────────────────────────────────────────
+   107→
+   108→export default function Day7Panel() {
+   109→  // Eval state
+   110→  const [heldOutCases, setHeldOutCases] = useState<any[]>([]);
+   111→  const [evalSnapshot, setEvalSnapshot] = useState<EvalSnapshot | null>(null);
+   112→  const [evalRunning, setEvalRunning] = useState(false);
+   113→  const [determinismResult, setDeterminismResult] = useState<DeterminismResult | null>(null);
+   114→  const [determinismRunning, setDeterminismRunning] = useState(false);
+   115→
+   116→  // Outcome state
+   117→  const [outcomeResult, setOutcomeResult] = useState<OutcomeIngestResult | null>(null);
+   118→  const [outcomeRunning, setOutcomeRunning] = useState(false);
+   119→
+   120→  // Execution paths state
+   121→  const [pathResult, setPathResult] = useState<ExecutionPathResult | null>(null);
+   122→  const [pathRunning, setPathRunning] = useState(false);
+   123→  const [demoReliability, setDemoReliability] = useState<DemoReliabilityResult | null>(null);
+   124→  const [demoRunning, setDemoRunning] = useState(false);
+   125→  const [appealLetter, setAppealLetter] = useState('');
+   126→
+   127→  // ─── Load Held-Out Cases ──────────────────────────────────────────────
+   128→
+   129→  const loadCases = useCallback(async () => {
+   130→    try {
+   131→      const res = await fetch('/api/eval');
+   132→      const data = await res.json();
+   133→      if (data.success) setHeldOutCases(data.cases || []);
+   134→    } catch (e) {
+   135→      console.error('Failed to load held-out cases:', e);
+   136→    }
+   137→  }, []);
+   138→
+   139→  // ─── Run Full Eval ────────────────────────────────────────────────────
+   140→
+   141→  const runEval = useCallback(async () => {
+   142→    setEvalRunning(true);
+   143→    try {
+   144→      const res = await fetch('/api/eval', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ saveToDisk: true }) });
+   145→      const data = await res.json();
+   146→      if (data.success) {
+   147→        setEvalSnapshot(data.snapshot);
+   148→      }
+   149→    } catch (e: any) {
+   150→      console.error('Eval failed:', e);
+   151→    } finally {
+   152→      setEvalRunning(false);
+   153→    }
+   154→  }, []);
+   155→
+   156→  // ─── Verify Determinism ───────────────────────────────────────────────
+   157→
+   158→  const verifyDeterminism = useCallback(async () => {
+   159→    setDeterminismRunning(true);
+   160→    try {
+   161→      const res = await fetch('/api/eval/determinism', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ runs: 2 }) });
+   162→      const data = await res.json();
+   163→      if (data.success) {
+   164→        setDeterminismResult(data);
+   165→      }
+   166→    } catch (e: any) {
+   167→      console.error('Determinism check failed:', e);
+   168→    } finally {
+   169→      setDeterminismRunning(false);
+   170→    }
+   171→  }, []);
+   172→
+   173→  // ─── Ingest Outcomes ──────────────────────────────────────────────────
+   174→
+   175→  const ingestPublicOutcomes = useCallback(async () => {
+   176→    setOutcomeRunning(true);
+   177→    try {
+   178→      const res = await fetch('/api/outcome-ingest', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ingestPublic: true }) });
+   179→      const data = await res.json();
+   180→      setOutcomeResult(data);
+   181→    } catch (e: any) {
+   182→      setOutcomeResult({ success: false });
+   183→    } finally {
+   184→      setOutcomeRunning(false);
+   185→    }
+   186→  }, []);
+   187→
+   188→  const ingestSyntheticOutcomes = useCallback(async () => {
+   189→    setOutcomeRunning(true);
+   190→    try {
+   191→      const res = await fetch('/api/outcome-ingest', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ingestSynthetic: true, count: 10 }) });
+   192→      const data = await res.json();
+   193→      setOutcomeResult(data);
+   194→    } catch (e: any) {
+   195→      setOutcomeResult({ success: false });
+   196→    } finally {
+   197→      setOutcomeRunning(false);
+   198→    }
+   199→  }, []);
+   200→
+   201→  // ─── Test Execution Paths ─────────────────────────────────────────────
+   202→
+   203→  const testPath = useCallback(async (path: string) => {
+   204→    setPathRunning(true);
+   205→    try {
+   206→      const res = await fetch('/api/execution-paths', {
+   207→        method: 'POST',
+   208→        headers: { 'Content-Type': 'application/json' },
+   209→        body: JSON.stringify({
+   210→          path,
+   211→          denialText: 'UnitedHealthcare\nClaims Adjudication Department\n\nDATE: January 15, 2026\n\nRE: Denial of Claim — 27447\n\nDENIAL REASON: CO50 — Not medically necessary',
+   212→          payer: 'UnitedHealthcare',
+   213→          denialCategory: 'medical_necessity',
+   214→          cptCode: '27447',
+   215→        }),
+   216→      });
+   217→      const data = await res.json();
+   218→      if (data.success) {
+   219→        setPathResult(data.result);
+   220→        setAppealLetter(data.appealLetter || '');
+   221→      }
+   222→    } catch (e: any) {
+   223→      console.error('Path test failed:', e);
+   224→    } finally {
+   225→      setPathRunning(false);
+   226→    }
+   227→  }, []);
+   228→
+   229→  // ─── Test Demo Reliability ────────────────────────────────────────────
+   230→
+   231→  const testDemoReliabilityGate = useCallback(async () => {
+   232→    setDemoRunning(true);
+   233→    try {
+   234→      const res = await fetch('/api/execution-paths/demo-test', {
+   235→        method: 'POST',
+   236→        headers: { 'Content-Type': 'application/json' },
+   237→        body: JSON.stringify({
+   238→          denialText: 'UnitedHealthcare\n\nDENIAL REASON: CO50 — Not medically necessary',
+   239→          payer: 'UnitedHealthcare',
+   240→          denialCategory: 'medical_necessity',
+   241→        }),
+   242→      });
+   243→      const data = await res.json();
+   244→      if (data.success) {
+   245→        setDemoReliability(data);
+   246→      }
+   247→    } catch (e: any) {
+   248→      console.error('Demo reliability test failed:', e);
+   249→    } finally {
+   250→      setDemoRunning(false);
+   251→    }
+   252→  }, []);
+   253→
+   254→  // ─── Render ───────────────────────────────────────────────────────────
+   255→
+   256→  return (
+   257→    <div className="space-y-6">
+   258→      <div className="flex items-center gap-3">
+   259→        <FlaskConical className="h-6 w-6 text-emerald-600" />
+   260→        <div>
+   261→          <h2 className="text-xl font-semibold">Day 7: Outcome Learning + Eval + Execution Paths</h2>
+   262→          <p className="text-sm text-muted-foreground">
+   263→            Evaluation harness, outcome ingestion, demo reliability — 3 execution paths
+   264→          </p>
+   265→        </div>
+   266→      </div>
+   267→
+   268→      <Tabs defaultValue="eval" className="w-full">
+   269→        <TabsList className="grid w-full grid-cols-3">
+   270→          <TabsTrigger value="eval">
+   271→            <BarChart3 className="h-4 w-4 mr-1" />
+   272→            Eval Service
+   273→          </TabsTrigger>
+   274→          <TabsTrigger value="outcome">
+   275→            <GitBranch className="h-4 w-4 mr-1" />
+   276→            Outcome Learning
+   277→          </TabsTrigger>
+   278→          <TabsTrigger value="paths">
+   279→            <Server className="h-4 w-4 mr-1" />
+   280→            Execution Paths
+   281→          </TabsTrigger>
+   282→        </TabsList>
+   283→
+   284→        {/* ─── EVAL SERVICE TAB ─────────────────────────────────────────── */}
+   285→        <TabsContent value="eval" className="space-y-4">
+   286→          {/* Held-Out Cases */}
+   287→          <Card>
+   288→            <CardHeader className="pb-3">
+   289→              <CardTitle className="text-base flex items-center gap-2">
+   290→                <Database className="h-4 w-4" />
+   291→                10 Held-Out Cases
+   292→              </CardTitle>
+   293→              <CardDescription>
+   294→                Fixed, deterministic test cases — not randomly generated
+   295→              </CardDescription>
+   296→            </CardHeader>
+   297→            <CardContent>
+   298→              {heldOutCases.length === 0 ? (
+   299→                <Button onClick={loadCases} variant="outline" size="sm">
+   300→                  Load Held-Out Cases
+   301→                </Button>
+   302→              ) : (
+   303→                <div className="space-y-2">
+   304→                  <div className="flex items-center gap-2 mb-3">
+   305→                    <Badge variant="outline">{heldOutCases.length} cases loaded</Badge>
+   306→                    <Badge variant="outline">temperature = 0</Badge>
+   307→                  </div>
+   308→                  <div className="max-h-64 overflow-y-auto space-y-1">
+   309→                    {heldOutCases.map((c, i) => (
+   310→                      <div key={c.id} className="flex items-center gap-3 p-2 rounded-md bg-muted/50 text-sm">
+   311→                        <span className="font-mono text-xs text-muted-foreground w-6">{i + 1}.</span>
+   312→                        <span className="font-medium flex-1">{c.name}</span>
+   313→                        <Badge variant="secondary" className="text-xs">{c.payer}</Badge>
+   314→                        <Badge variant="outline" className="text-xs">{c.category}</Badge>
+   315→                        <Badge className={`text-xs ${c.shouldAppeal ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'}`}>
+   316→                          {c.shouldAppeal ? 'Appealable' : 'Not Appealable'}
+   317→                        </Badge>
+   318→                      </div>
+   319→                    ))}
+   320→                  </div>
+   321→                </div>
+   322→              )}
+   323→            </CardContent>
+   324→          </Card>
+   325→
+   326→          {/* Run Eval */}
+   327→          <Card>
+   328→            <CardHeader className="pb-3">
+   329→              <CardTitle className="text-base flex items-center gap-2">
+   330→                <Play className="h-4 w-4" />
+   331→                Before-Scores Eval Run
+   332→              </CardTitle>
+   333→              <CardDescription>
+   334→                Run the evaluation pipeline on all 10 held-out cases (temp=0)
+   335→              </CardDescription>
+   336→            </CardHeader>
+   337→            <CardContent className="space-y-4">
+   338→              <div className="flex gap-2">
+   339→                <Button onClick={runEval} disabled={evalRunning} size="sm">
+   340→                  {evalRunning ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Play className="h-4 w-4 mr-1" />}
+   341→                  {evalRunning ? 'Running Eval...' : 'Run Full Eval'}
+   342→                </Button>
+   343→                <Button onClick={verifyDeterminism} disabled={determinismRunning} variant="outline" size="sm">
+   344→                  {determinismRunning ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Shield className="h-4 w-4 mr-1" />}
+   345→                  {determinismRunning ? 'Checking...' : 'Verify Determinism'}
+   346→                </Button>
+   347→              </div>
+   348→
+   349→              {/* Determinism Result */}
+   350→              {determinismResult && (
+   351→                <Alert variant={determinismResult.gatePassed ? 'default' : 'destructive'}>
+   352→                  {determinismResult.gatePassed ? <CheckCircle2 className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}
+   353→                  <AlertTitle>Determinism Gate {determinismResult.gatePassed ? 'PASSED' : 'FAILED'}</AlertTitle>
+   354→                  <AlertDescription className="text-xs mt-1">
+   355→                    {determinismResult.detail}
+   356→                    <div className="mt-1 font-mono">
+   357→                      Hashes: {determinismResult.hashes.join(' | ')}
+   358→                    </div>
+   359→                  </AlertDescription>
+   360→                </Alert>
+   361→              )}
+   362→
+   363→              {/* Aggregate Metrics */}
+   364→              {evalSnapshot && (
+   365→                <div className="space-y-3">
+   366→                  <div className="flex items-center gap-2">
+   367→                    <Badge variant="outline">Run: {evalSnapshot.runId}</Badge>
+   368→                    <Badge variant="outline">Hash: {evalSnapshot.determinismHash}</Badge>
+   369→                    <Badge variant="outline">Temp: {evalSnapshot.temperature}</Badge>
+   370→                  </div>
+   371→
+   372→                  <div className="grid grid-cols-5 gap-3">
+   373→                    {Object.entries(evalSnapshot.aggregateMetrics).map(([metric, value]) => (
+   374→                      <div key={metric} className="text-center p-3 rounded-lg bg-muted/50">
+   375→                        <div className={`text-lg font-bold ${METRIC_COLORS[metric] || 'text-foreground'}`}>
+   376→                          {(value as number * 100).toFixed(1)}%
+   377→                        </div>
+   378→                        <div className="text-xs text-muted-foreground mt-1">
+   379→                          {METRIC_LABELS[metric] || metric}
+   380→                        </div>
+   381→                        <Progress value={(value as number) * 100} className="h-1.5 mt-2" />
+   382→                      </div>
+   383→                    ))}
+   384→                  </div>
+   385→
+   386→                  {/* Per-Case Breakdown */}
+   387→                  <div className="space-y-2 mt-4">
+   388→                    <h4 className="text-sm font-medium">Per-Case Breakdown</h4>
+   389→                    <div className="max-h-48 overflow-y-auto">
+   390→                      <table className="w-full text-xs">
+   391→                        <thead>
+   392→                          <tr className="border-b">
+   393→                            <th className="text-left py-1 pr-2">Case</th>
+   394→                            <th className="text-center py-1 px-1">Top-1</th>
+   395→                            <th className="text-center py-1 px-1">Top-3</th>
+   396→                            <th className="text-center py-1 px-1">Cite</th>
+   397→                            <th className="text-center py-1 px-1">Arg</th>
+   398→                            <th className="text-center py-1 px-1">Quality</th>
+   399→                            <th className="text-right py-1 pl-1">ms</th>
+   400→                          </tr>
+   401→                        </thead>
+   402→                        <tbody>
+   403→                          {evalSnapshot.caseSummaries.map((c) => (
+   404→                            <tr key={c.caseId} className="border-b border-muted/50">
+   405→                              <td className="py-1 pr-2 font-medium max-w-[200px] truncate">{c.caseName}</td>
+   406→                              <td className="text-center py-1 px-1">{((c.metrics.top1_accuracy || 0) * 100).toFixed(0)}%</td>
+   407→                              <td className="text-center py-1 px-1">{((c.metrics.top3_accuracy || 0) * 100).toFixed(0)}%</td>
+   408→                              <td className="text-center py-1 px-1">{((c.metrics.citation_grounding || 0) * 100).toFixed(0)}%</td>
+   409→                              <td className="text-center py-1 px-1">{((c.metrics.argument_selection || 0) * 100).toFixed(0)}%</td>
+   410→                              <td className="text-center py-1 px-1">{((c.metrics.appeal_quality || 0) * 100).toFixed(0)}%</td>
+   411→                              <td className="text-right py-1 pl-1 text-muted-foreground">{c.latencyMs}</td>
+   412→                            </tr>
+   413→                          ))}
+   414→                        </tbody>
+   415→                      </table>
+   416→                    </div>
+   417→                  </div>
+   418→                </div>
+   419→              )}
+   420→            </CardContent>
+   421→          </Card>
+   422→        </TabsContent>
+   423→
+   424→        {/* ─── OUTCOME LEARNING TAB ────────────────────────────────────── */}
+   425→        <TabsContent value="outcome" className="space-y-4">
+   426→          <Card>
+   427→            <CardHeader className="pb-3">
+   428→              <CardTitle className="text-base flex items-center gap-2">
+   429→                <GitBranch className="h-4 w-4" />
+   430→                Outcome Ingestion Path
+   431→              </CardTitle>
+   432→              <CardDescription>
+   433→                Outcome record → Memory Bank weight update (Firestore fallback)
+   434→              </CardDescription>
+   435→            </CardHeader>
+   436→            <CardContent className="space-y-4">
+   437→              {/* Architecture diagram */}
+   438→              <div className="flex items-center gap-2 text-sm bg-muted/50 p-3 rounded-lg">
+   439→                <span className="px-2 py-1 bg-amber-100 text-amber-800 rounded text-xs font-medium">Verdict</span>
+   440→                <ArrowRight className="h-4 w-4 text-muted-foreground" />
+   441→                <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs font-medium">Weight Delta</span>
+   442→                <ArrowRight className="h-4 w-4 text-muted-foreground" />
+   443→                <span className="px-2 py-1 bg-emerald-100 text-emerald-800 rounded text-xs font-medium">Memory Bank</span>
+   444→                <ArrowRight className="h-4 w-4 text-muted-foreground" />
+   445→                <span className="px-2 py-1 bg-purple-100 text-purple-800 rounded text-xs font-medium">Better Retrieval</span>
+   446→              </div>
+   447→
+   448→              {/* Weight rules */}
+   449→              <div className="grid grid-cols-3 gap-3 text-center">
+   450→                <div className="p-3 rounded-lg bg-emerald-50 border border-emerald-200">
+   451→                  <div className="text-lg font-bold text-emerald-700">+0.05</div>
+   452→                  <div className="text-xs text-emerald-600">WON</div>
+   453→                </div>
+   454→                <div className="p-3 rounded-lg bg-amber-50 border border-amber-200">
+   455→                  <div className="text-lg font-bold text-amber-700">+0.02</div>
+   456→                  <div className="text-xs text-amber-600">PARTIAL</div>
+   457→                </div>
+   458→                <div className="p-3 rounded-lg bg-red-50 border border-red-200">
+   459→                  <div className="text-lg font-bold text-red-700">-0.03</div>
+   460→                  <div className="text-xs text-red-600">LOST</div>
+   461→                </div>
+   462→              </div>
+   463→
+   464→              <Separator />
+   465→
+   466→              {/* Ingest buttons */}
+   467→              <div className="flex gap-2">
+   468→                <Button onClick={ingestPublicOutcomes} disabled={outcomeRunning} size="sm">
+   469→                  {outcomeRunning ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <FileCheck className="h-4 w-4 mr-1" />}
+   470→                  Ingest Public Records (5)
+   471→                </Button>
+   472→                <Button onClick={ingestSyntheticOutcomes} disabled={outcomeRunning} variant="outline" size="sm">
+   473→                  Ingest Synthetic (10)
+   474→                </Button>
+   475→              </div>
+   476→
+   477→              {/* Result */}
+   478→              {outcomeResult && (
+   479→                <Alert variant={outcomeResult.success ? 'default' : 'destructive'}>
+   480→                  {outcomeResult.success ? <CheckCircle2 className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}
+   481→                  <AlertTitle>Outcome Ingestion {outcomeResult.success ? 'Complete' : 'Failed'}</AlertTitle>
+   482→                  <AlertDescription className="text-xs mt-1">
+   483→                    {outcomeResult.success && (
+   484→                      <div className="space-y-1">
+   485→                        <div>Weight Updates: {outcomeResult.weightUpdates}</div>
+   486→                        <div>Memory Bank: <Badge variant="outline" className="text-xs">{outcomeResult.memoryBankStatus}</Badge></div>
+   487→                        <div>Duration: {outcomeResult.durationMs}ms</div>
+   488→                      </div>
+   489→                    )}
+   490→                  </AlertDescription>
+   491→                </Alert>
+   492→              )}
+   493→            </CardContent>
+   494→          </Card>
+   495→
+   496→          {/* Outcome Loop Explanation */}
+   497→          <Card>
+   498→            <CardHeader className="pb-3">
+   499→              <CardTitle className="text-base">Outcome Learning Loop</CardTitle>
+   500→            </CardHeader>
+   501→            <CardContent>
+   502→              <div className="flex items-center gap-3 text-sm flex-wrap">
+   503→                <div className="flex items-center gap-1">
+   504→                  <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-800 flex items-center justify-center text-xs font-bold">1</span>
+   505→                  <span>Case → Pipeline</span>
+   506→                </div>
+   507→                <ArrowRight className="h-3 w-3" />
+   508→                <div className="flex items-center gap-1">
+   509→                  <span className="w-6 h-6 rounded-full bg-amber-100 text-amber-800 flex items-center justify-center text-xs font-bold">2</span>
+   510→                  <span>Appeal Submitted</span>
+   511→                </div>
+   512→                <ArrowRight className="h-3 w-3" />
+   513→                <div className="flex items-center gap-1">
+   514→                  <span className="w-6 h-6 rounded-full bg-rose-100 text-rose-800 flex items-center justify-center text-xs font-bold">3</span>
+   515→                  <span>Real-World Verdict</span>
+   516→                </div>
+   517→                <ArrowRight className="h-3 w-3" />
+   518→                <div className="flex items-center gap-1">
+   519→                  <span className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center text-xs font-bold">4</span>
+   520→                  <span>Outcome Ingested</span>
+   521→                </div>
+   522→                <ArrowRight className="h-3 w-3" />
+   523→                <div className="flex items-center gap-1">
+   524→                  <span className="w-6 h-6 rounded-full bg-purple-100 text-purple-800 flex items-center justify-center text-xs font-bold">5</span>
+   525→                  <span>Better Retrieval</span>
+   526→                </div>
+   527→              </div>
+   528→            </CardContent>
+   529→          </Card>
+   530→        </TabsContent>
+   531→
+   532→        {/* ─── EXECUTION PATHS TAB ─────────────────────────────────────── */}
+   533→        <TabsContent value="paths" className="space-y-4">
+   534→          {/* Three Paths */}
+   535→          <Card>
+   536→            <CardHeader className="pb-3">
+   537→              <CardTitle className="text-base flex items-center gap-2">
+   538→                <Server className="h-4 w-4" />
+   539→                Three Execution Paths
+   540→              </CardTitle>
+   541→              <CardDescription>
+   542→                Live → Fallback → Demo-safe — automatic degradation
+   543→              </CardDescription>
+   544→            </CardHeader>
+   545→            <CardContent className="space-y-4">
+   546→              <div className="grid grid-cols-3 gap-3">
+   547→                <div className="p-4 rounded-lg border-2 border-emerald-200 bg-emerald-50">
+   548→                  <div className="flex items-center gap-2 mb-2">
+   549→                    <Zap className="h-4 w-4 text-emerald-600" />
+   550→                    <span className="font-semibold text-emerald-800">LIVE</span>
+   551→                  </div>
+   552→                  <div className="text-xs text-emerald-700 space-y-1">
+   553→                    <div>Full Gemini API pipeline</div>
+   554→                    <div>Real agent orchestration</div>
+   555→                    <div className="font-medium">Max: 90s</div>
+   556→                  </div>
+   557→                  <Button onClick={() => testPath('live')} disabled={pathRunning} size="sm" className="mt-3 w-full" variant="outline">
+   558→                    Test Live
+   559→                  </Button>
+   560→                </div>
+   561→
+   562→                <div className="p-4 rounded-lg border-2 border-amber-200 bg-amber-50">
+   563→                  <div className="flex items-center gap-2 mb-2">
+   564→                    <Shield className="h-4 w-4 text-amber-600" />
+   565→                    <span className="font-semibold text-amber-800">FALLBACK</span>
+   566→                  </div>
+   567→                  <div className="text-xs text-amber-700 space-y-1">
+   568→                    <div>Template-based appeal</div>
+   569→                    <div>Pre-built for payer×denial</div>
+   570→                    <div className="font-medium">Max: 5s</div>
+   571→                  </div>
+   572→                  <Button onClick={() => testPath('fallback')} disabled={pathRunning} size="sm" className="mt-3 w-full" variant="outline">
+   573→                    Test Fallback
+   574→                  </Button>
+   575→                </div>
+   576→
+   577→                <div className="p-4 rounded-lg border-2 border-blue-200 bg-blue-50">
+   578→                  <div className="flex items-center gap-2 mb-2">
+   579→                    <Activity className="h-4 w-4 text-blue-600" />
+   580→                    <span className="font-semibold text-blue-800">DEMO-SAFE</span>
+   581→                  </div>
+   582→                  <div className="text-xs text-blue-700 space-y-1">
+   583→                    <div>Canned data + pre-written</div>
+   584→                    <div>Instant, offline-safe</div>
+   585→                    <div className="font-medium">Max: 10s</div>
+   586→                  </div>
+   587→                  <Button onClick={() => testPath('demo_safe')} disabled={pathRunning} size="sm" className="mt-3 w-full" variant="outline">
+   588→                    Test Demo-Safe
+   589→                  </Button>
+   590→                </div>
+   591→              </div>
+   592→
+   593→              {/* Auto-select */}
+   594→              <div className="flex gap-2">
+   595→                <Button onClick={() => testPath('auto')} disabled={pathRunning}>
+   596→                  {pathRunning ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Play className="h-4 w-4 mr-1" />}
+   597→                  Auto-Select (Best Available)
+   598→                </Button>
+   599→              </div>
+   600→
+   601→              {/* Path Result */}
+   602→              {pathResult && (
+   603→                <div className="space-y-3">
+   604→                  <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+   605→                    <div className="text-center p-2 rounded-lg bg-muted/50">
+   606→                      <div className="text-lg font-bold">{pathResult.path.toUpperCase()}</div>
+   607→                      <div className="text-xs text-muted-foreground">Path</div>
+   608→                    </div>
+   609→                    <div className="text-center p-2 rounded-lg bg-muted/50">
+   610→                      <div className="text-lg font-bold">{pathResult.latencyMs}ms</div>
+   611→                      <div className="text-xs text-muted-foreground">Latency</div>
+   612→                    </div>
+   613→                    <div className="text-center p-2 rounded-lg bg-muted/50">
+   614→                      <div className="text-lg font-bold">{pathResult.citationCount}</div>
+   615→                      <div className="text-xs text-muted-foreground">Citations</div>
+   616→                    </div>
+   617→                    <div className="text-center p-2 rounded-lg bg-muted/50">
+   618→                      <div className="text-lg font-bold">{(pathResult.qualityScore * 100).toFixed(0)}%</div>
+   619→                      <div className="text-xs text-muted-foreground">Quality</div>
+   620→                    </div>
+   621→                    <div className="text-center p-2 rounded-lg bg-muted/50">
+   622→                      <div className="text-lg font-bold">{pathResult.appealLetterLength}</div>
+   623→                      <div className="text-xs text-muted-foreground">Chars</div>
+   624→                    </div>
+   625→                  </div>
+   626→
+   627→                  {appealLetter && (
+   628→                    <div className="p-3 rounded-lg bg-muted/50 border max-h-48 overflow-y-auto">
+   629→                      <h4 className="text-xs font-medium mb-2 text-muted-foreground">Generated Appeal Letter</h4>
+   630→                      <pre className="text-xs whitespace-pre-wrap font-mono">{appealLetter}</pre>
+   631→                    </div>
+   632→                  )}
+   633→                </div>
+   634→              )}
+   635→            </CardContent>
+   636→          </Card>
+   637→
+   638→          {/* Demo Reliability Test */}
+   639→          <Card>
+   640→            <CardHeader className="pb-3">
+   641→              <CardTitle className="text-base flex items-center gap-2">
+   642→                <Shield className="h-4 w-4" />
+   643→                Validation Gate 3: Demo Reliability
+   644→              </CardTitle>
+   645→              <CardDescription>
+   646→                Does the demo survive a failed API call? Does the 90s wow moment hold up?
+   647→              </CardDescription>
+   648→            </CardHeader>
+   649→            <CardContent className="space-y-4">
+   650→              <Button onClick={testDemoReliabilityGate} disabled={demoRunning} size="sm">
+   651→                {demoRunning ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Target className="h-4 w-4 mr-1" />}
+   652→                {demoRunning ? 'Testing...' : 'Run Demo Reliability Test'}
+   653→              </Button>
+   654→
+   655→              {demoReliability && (
+   656→                <div className="space-y-3">
+   657→                  {/* GO/NO-GO */}
+   658→                  <Alert variant={demoReliability.gateResult === 'GO' ? 'default' : 'destructive'}>
+   659→                    {demoReliability.gateResult === 'GO' ? <CheckCircle2 className="h-4 w-4" /> : <AlertTriangle className="h-4 w-4" />}
+   660→                    <AlertTitle>Gate Result: {demoReliability.gateResult}</AlertTitle>
+   661→                    <AlertDescription className="text-xs mt-1">{demoReliability.gateDetail}</AlertDescription>
+   662→                  </Alert>
+   663→
+   664→                  {/* Path results */}
+   665→                  <div className="grid grid-cols-3 gap-3">
+   666→                    <div className={`p-3 rounded-lg border ${demoReliability.livePath.passed ? 'border-emerald-200 bg-emerald-50' : 'border-red-200 bg-red-50'}`}>
+   667→                      <div className="font-semibold text-sm mb-1">Live Path</div>
+   668→                      <div className="text-xs">
+   669→                        <div>Passed: {demoReliability.livePath.passed ? '✓' : '✗'}</div>
+   670→                        <div>Latency: {demoReliability.livePath.latencyMs}ms</div>
+   671→                        <div>Target: &lt;90s</div>
+   672→                      </div>
+   673→                    </div>
+   674→                    <div className={`p-3 rounded-lg border ${demoReliability.fallbackPath.passed ? 'border-emerald-200 bg-emerald-50' : 'border-red-200 bg-red-50'}`}>
+   675→                      <div className="font-semibold text-sm mb-1">Fallback Path</div>
+   676→                      <div className="text-xs">
+   677→                        <div>Passed: {demoReliability.fallbackPath.passed ? '✓' : '✗'}</div>
+   678→                        <div>Engaged &lt;5s: {demoReliability.fallbackPath.engagedWithin5s ? '✓' : '✗'}</div>
+   679→                        <div>Latency: {demoReliability.fallbackPath.latencyMs}ms</div>
+   680→                      </div>
+   681→                    </div>
+   682→                    <div className={`p-3 rounded-lg border ${demoReliability.demoSafePath.passed ? 'border-emerald-200 bg-emerald-50' : 'border-red-200 bg-red-50'}`}>
+   683→                      <div className="font-semibold text-sm mb-1">Demo-Safe Path</div>
+   684→                      <div className="text-xs">
+   685→                        <div>Passed: {demoReliability.demoSafePath.passed ? '✓' : '✗'}</div>
+   686→                        <div>&lt;10s: {demoReliability.demoSafePath.under10s ? '✓' : '✗'}</div>
+   687→                        <div>Latency: {demoReliability.demoSafePath.latencyMs}ms</div>
+   688→                      </div>
+   689→                    </div>
+   690→                  </div>
+   691→
+   692→                  <div className="text-sm">
+   693→                    All paths produce usable appeal: <Badge variant={demoReliability.allPathsProduceUsableAppeal ? 'default' : 'destructive'}>
+   694→                      {demoReliability.allPathsProduceUsableAppeal ? 'Yes' : 'No'}
+   695→                    </Badge>
+   696→                  </div>
+   697→                </div>
+   698→              )}
+   699→            </CardContent>
+   700→          </Card>
+   701→        </TabsContent>
+   702→      </Tabs>
+   703→    </div>
+   704→  );
+   705→}
+   706→

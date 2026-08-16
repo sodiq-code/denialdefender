@@ -1,0 +1,252 @@
+  2551→
+  2552→Eight items verified before recording the demo video: (1) Cloud Run min-instances=1 for the duration of recording; (2) Gemini API quota confirmed at &gt;10x expected demo usage; (3) Cloud SQL instance has sufficient connections; (4) Pub/Sub topics exist and have at least one subscriber each; (5) GEAP Memory Bank seeded with all payer templates; (6) pgvector tables seeded with policy corpus + 50 synthetic outcomes; (7) Demo-safe path tested end-to-end at least once; (8) Recording setup includes a backup screen-capture in case the primary fails. The 90-second wow moment is rehearsed at least 10 times, with each rehearsal verifying all three paths work (live, fallback, demo-safe).
+  2553→
+  2554→## 28.5 The "Demo Survives a Failed API Call" Test
+  2555→
+  2556→The single most important reliability test, run before submission: (1) start a live demo run; (2) at the 30-second mark (mid-Letter Drafting), kill the Gemini API key in Secret Manager; (3) verify the pipeline falls back to deterministic templates within 5 seconds; (4) verify the UI shows the fallback indicator; (5) verify the demo completes within 90 seconds; (6) restore the API key; (7) re-run and verify live path resumes. A project that passes this test is demo-ready. A project that fails this test is not. This test is non-negotiable and must pass before the demo video is recorded.
+  2557→
+  2558→# 29. Infrastructure &amp; Deployment
+  2559→
+  2560→
+  2561→## 29.1 Cloud Run Services
+  2562→
+  2563→DenialDefender deploys 4 Cloud Run services, not 8 (one per agent is over-engineering for the hackathon scale). The 4 services are: (1) denialdefender-api — the API Gateway + ADK orchestrator running all 8 agents in-process (single shared service for simplicity, scale-to-zero, faster dev cycle); (2) denialdefender-mcp — the MCP server exposure (separate service for isolation and independent scaling); (3) denialdefender-frontend — Next.js frontend served via Cloud Run or Firebase Hosting; (4) denialdefender-worker — async worker consuming Pub/Sub events for Outcome Learning and Deadline Tracker (separate service to isolate long-running work from request-response path). Justification: Cloud Run's per-service concurrency (configurable, default 80) handles the demo's traffic; one service per agent would add 8 deploy artifacts with no isolation benefit since agents share the same ADK process anyway. Phase B is explicit that Cloud Run is sufficient for hackathon-scale workloads [B-7].
+  2564→
+  2565→## 29.2 Firestore
+  2566→
+  2567→Firestore (Native mode) stores session state, case state, HITL approvals, deadline events, and learning update audit trail. Collections: patients, cases, denial_letters, appeal_letters, medical_records, outcomes (metadata only; embeddings in pgvector), deadline_events, learning_updates. Security rules enforce clinic isolation: request.auth.token.clinic_id == resource.data.clinic_id for clinic-tier reads/writes; guest cases have no clinic_id and are TTL'd. Real-time onSnapshot listeners drive the live UI. Firestore's free tier (50K reads, 20K writes, 1GB storage per day) is sufficient for the demo; cost beyond free tier is sub-dollar for 100 demo appeals.
+  2568→
+  2569→## 29.3 Cloud SQL pgvector
+  2570→
+  2571→Cloud SQL for PostgreSQL with the pgvector extension stores two tables: payer_policy_embeddings (semantic memory — ~100 rows for 3 payers × 5 denial types × ~7 clauses each) and outcome_embeddings (outcome corpus — 50 seeded synthetic outcomes + real outcomes over time). HNSW index for ANN. Connection pooling via Cloud SQL Connector (Python). IAM-based auth (no passwords in env vars). Cloud SQL's minimum cost is ~$30/month for a db-g1-small instance; for the hackathon, this is the largest single line item but well within the $150 GCP credit. The instance is set to scale-to-zero off-hours via scheduling where possible (Cloud SQL doesn't natively scale to zero, but can be stopped manually post-demo).
+  2572→
+  2573→## 29.4 Pub/Sub Topics
+  2574→
+  2575→Ten Pub/Sub topics (Section 24.4): case.created, triage.done, policy.done, evidence.done, letter.drafted, review.done, case.approved, deadline.fire, outcome.record, learning.updated. Each topic has at least one subscription; topics are clinic-scoped via message attributes for isolation. Pub/Sub's free tier (10GB/month data volume) is far beyond the demo's needs.
+  2576→
+  2577→## 29.5 Secret Manager
+  2578→
+  2579→Secret Manager stores: gemini-api-key, gemma-endpoint-key, veo-api-key, lyria-api-key, cloud-sql-connection-string, firebase-service-account-key. Cloud Run services mount secrets at runtime via Secret Manager integration (no env var pollution). Secret rotation is manual for the hackathon; automated post-hackathon. Versioning enabled for audit.
+  2580→
+  2581→## 29.6 Artifact Registry and Cloud Build
+  2582→
+  2583→Container images are pushed to Artifact Registry (denialdefender-api, denialdefender-mcp, denialdefender-frontend, denialdefender-worker). Cloud Build triggers on push to main branch build and deploy all 4 services to Cloud Run. Build pipeline: lint → test → build container → push to Artifact Registry → deploy to Cloud Run → smoke test. Build time target: &lt;5 minutes for full pipeline. CI also runs pip-audit, gitleaks, and SBOM generation.
+  2584→
+  2585→## 29.7 Observability — Cloud Monitoring + Cloud Logging + Cloud Trace
+  2586→
+  2587→Cloud Monitoring: dashboards for Cloud Run request count, latency, error rate; Cloud SQL connection count; Pub/Sub message backlog; Gemini API call count and cost. Cloud Logging: structured logs from all 4 services with correlation IDs; log-based alerts for error rate spikes. Cloud Trace: distributed tracing across API Gateway → ADK agents → pgvector → Gemini, with OpenTelemetry spans. GEAP Agent Observability feeds the reasoning-trace UI directly — agent thoughts, tool calls, model responses, all surfaced in real time. This is the SurgAgent reasoning-trace differentiator [C-5] made infrastructural.
+  2588→
+  2589→## 29.8 Local Dev Environment
+  2590→
+  2591→Local dev uses the Firebase Emulator Suite (Firestore + Auth + Pub/Sub local emulators), a local PostgreSQL with pgvector extension (Docker), and direct Gemini API calls (no Cloud Run needed locally). make dev starts all emulators + the 4 services in dev mode. make seed seeds the local pgvector with the curated policy corpus + 50 synthetic outcomes. make demo runs the demo-safe path locally for rehearsal. Local dev is fully offline-capable except for Gemini API calls.
+  2592→
+  2593→## 29.9 Production Configuration
+  2594→
+  2595→Production config (for the live demo): Cloud Run min-instances=1 for denialdefender-api (eliminates cold start); min-instances=0 for denialdefender-mcp, denialdefender-frontend, denialdefender-worker (scale to zero off-hours). Cloud SQL db-g1-small instance with auto-increase-storage enabled. Firestore in Native mode with multi-region (Nam5) for HA. Pub/Sub with at-least-once delivery and 7-day message retention. Secret Manager with automatic replication. All services behind HTTPS (Cloud Run default TLS). Cloud Armor (separate from Model Armor) for DDoS protection on the public API.
+  2596→
+  2597→## 29.10 Cost Optimization
+  2598→
+  2599→Total estimated cost for 14-day dev + demo: Gemini API ~$20–50 (estimate based on ~100 demo runs × ~$0.15 + dev iterations), Cloud SQL ~$15 (db-g1-small × 14 days), Cloud Run ~$5 (mostly free tier + min-instances for demo day), Firestore ~$0 (free tier), Pub/Sub ~$0 (free tier), Secret Manager ~$0 (free tier), Artifact Registry ~$0 (free tier), Cloud Build ~$0 (free tier), Veo ~$5 (10 videos × $0.30), Lyria ~$1 (20 tracks × $0.05), Gemma on Vertex AI ~$1 (low-volume inference), Cloud Monitoring/Logging/Trace ~$0 (free tier). Total: ~$50–80, well within the $150 GCP credit. Post-demo: scale all services to zero, stop Cloud SQL instance, total ongoing cost ~$0 until commercialization.
+  2600→
+  2601→# 30. UX / UI Blueprint
+  2602→
+  2603→
+  2604→## 30.1 Screen Inventory
+  2605→
+  2606→DenialDefender has 8 screens across the two journeys. Both journeys share the backend; the UX diverges at the surface. The patient journey is mobile-first, single-case, empathetic; the clinic journey is desktop-first, multi-case, operational. Every screen exposes the reasoning-trace panel as a persistent right-side or bottom drawer — the SurgAgent reasoning-trace differentiator [C-5] is not a separate screen, it is a substrate that lives across all screens.
+  2607→
+  2608→## 30.2 Screen 1 — Landing Page
+  2609→
+  2610→The landing page is the first thing a judge sees on the Devpost submission's hosted URL. Layout: hero section with the tagline "The agent that fights your insurance company for you" in 48px+ type; sub-headline "Drop your denial letter. Get a winning appeal in 90 seconds."; a single primary CTA button "Upload your denial letter" (no signup friction); below the fold, a 30-second Veo-generated explainer video (the same Veo integration that earns the +0.2 bonus does double duty as the landing-page explainer); below the video, a 3-step diagram (upload → agents work → appeal ready); below that, a footer with the "not medical advice" disclaimer and a "For clinics" link to the clinic dashboard. Color palette: deep navy + clinical white + a single accent color (warm coral — signals empathy and urgency without being alarmist). Typography: Inter for body, a slightly humanist sans for headings.
+  2611→
+  2612→## 30.3 Screen 2 — Denial Letter Upload
+  2613→
+  2614→Drag-drop zone dominates the screen. Accepted formats listed below: PDF, PNG, JPG. File size limit: 10MB. Once a file is dropped, a thumbnail preview appears with a "Parse with Gemini" button. Clicking the button triggers the Denial Triage Agent; the reasoning-trace panel slides in from the right showing live agent thoughts ("Reading denial letter... detected UnitedHealth logo... parsing denial reason code... confidence 0.92"). Once parsing completes, the structured JSON is displayed in a clean card: payer, denial reason, deadline, submission channel, confidence score. HITL gate #1 is here: a "Confirm and continue" button + an "Edit parsed values" link for the patient to correct any misparse. Below the card, the Patient Advocate chat window opens with an empathetic message: "I've read your denial letter. UnitedHealth denied your claim for [reason]. Let's fight this. Can you tell me if you received prior authorization for this service?"
+  2615→
+  2616→## 30.4 Screen 3 — Case Dashboard (Single-Case Patient View)
+  2617→
+  2618→The case dashboard is the patient's home base. Layout: top status bar showing the case's current state-machine position (Intake → Triaging → Researching → Drafting → Reviewing → Awaiting Approval → Approved → Submitted → Awaiting Outcome → Closed); middle section with three columns — Denial Letter (left, with parsed summary), Appeal Letter (center, with drafted text), Reasoning Trace (right, live agent thoughts); bottom section with the Patient Advocate chat for ongoing questions. Each state transition animates the status bar; each agent's thoughts stream into the trace panel in real time. The 90-second wow moment happens here: the patient watches the trace fill with thoughts as the appeal letter materializes in the center column.
+  2619→
+  2620→## 30.5 Screen 4 — Reasoning Trace Panel (GEAP Observability Substrate)
+  2621→
+  2622→The reasoning trace panel is not a separate screen but a persistent substrate. It occupies the right ~30% of the screen on desktop and slides up as a bottom drawer on mobile. Contents: chronological list of agent events, each with timestamp, agent name, event type (thought, tool call, tool response, model response, state transition), and expandable detail. Color-coded by agent (Patient Advocate = coral, Denial Triage = blue, Policy Research = green, Evidence Assembly = teal, Letter Drafting = purple, Quality Review = orange, Deadline Tracker = yellow, Outcome Learning = pink). Each event is clickable to expand the full prompt/response/tool I/O. This is the SurgAgent pattern made infrastructural: every decision is logged and explained, in real time, visible to the user.
+  2623→
+  2624→## 30.6 Screen 5 — Appeal Letter Review + HITL Approval Gate
+  2625→
+  2626→The HITL approval screen is where the human exercises final authority. Layout: split view — drafted appeal letter on the left (editable rich-text area), cited policy clauses on the right (each clause is a card with the clause text, source URL, and a "verify" link that opens the source in a new tab). Below the split view: the Quality Review Agent's report (quality score, flags, recommendations) in a collapsible panel. Bottom: three buttons — "Approve and download" (primary, green), "Request revision" (secondary, with a feedback textarea), "Reject" (destructive, red). The patient can edit the letter directly in the rich-text area; edits are tracked and the version history is saved. The "Approve and download" button produces a properly-formatted PDF download and shows the payer's submission address + channel (no auto-submission). This screen is the canonical "agent does the work, human approves the action" pattern Phase C forensics identifies as winning [C-1, C-2].
+  2627→
+  2628→## 30.7 Screen 6 — Deadline Tracker Calendar
+  2629→
+  2630→The deadline calendar shows the multi-stage appeal pipeline visually. Layout: horizontal timeline with the current date marked, and future milestones plotted — "Internal appeal filing deadline (Oct 15)", "Expected payer response window (Nov 14)", "External review filing deadline (Dec 14)", "State DOI filing deadline (Jan 13, 2027)". Each milestone is clickable for details. Below the timeline: a list of upcoming deadlines sorted by urgency, with color coding (red = within 3 days, yellow = within 7 days, green = beyond 7 days). Each deadline has a "remind me" toggle that triggers Pub/Sub-based email reminders. This screen demonstrates the ADK 2.0 Workflow Runtime long-running execution pattern (Aug 13 webinar theme [A-5]) — a single case's pipeline runs across days and weeks, not seconds.
+  2631→
+  2632→## 30.8 Screen 7 — Clinic Dashboard (Multi-Case View)
+  2633→
+  2634→The clinic dashboard is the billing specialist's home base. Layout: top KPI bar (open cases, awaiting approval, deadlines this week, win rate this quarter); main table of cases (sortable by deadline urgency, dollar amount, payer, denial type, status) with batch-select checkboxes; right side panel with three tabs — "New intake" (batch upload denial letters), "Outcome insights" (the heat map and learning insights), "Per-payer stats" (win rate per payer × denial type). Batch actions: "Run pipeline" (triggers full agent pipeline for selected cases), "Approve all" (bulk HITL approval with per-letter flag surface), "Record outcomes" (bulk CSV upload). This screen demonstrates the B2B expansion thesis — DenialDefender as a clinic-scale coordination tool, not just a single-case drafting tool.
+  2635→
+  2636→## 30.9 Screen 8 — Outcome Learning Insights Panel
+  2637→
+  2638→The outcome insights panel is the most differentiated screen — it visualizes the Outcome Learning Agent's work. Layout: top — win-rate heat map (rows = payers, columns = denial types, cell color = win rate, cell label = "n=X, win% = Y"); middle — "Top winning arguments" list (per selected payer × denial type cell, the top 5 clauses by retrieval weight, with the weight value and the number of cases contributing); bottom — "Recent learning updates" feed (chronological list of weight updates with case ID, clause ID, weight before/after, and timestamp). This screen makes the Outcome Learning Agent's work visible and judgeable — a judge can see the system getting smarter in real time as new outcomes are recorded. This is the demo's secondary wow moment (after the primary 90-second wow) and the single strongest embodiment of the Aug 20 self-evolving webinar theme [A-5].
+  2639→
+  2640→## 30.10 Multimodal UX Considerations
+  2641→
+  2642→DenialDefender's UX is multimodal in three senses. First, input modality: text (chat), file (PDF/image upload), structured (CSV bulk upload for clinic). Second, output modality: text (appeal letter), document (PDF download), video (Veo explainer), audio (Lyria calming track), structured data (insights panel). Third, attention modality: the patient may be reading the appeal letter, watching the reasoning trace stream, listening to the calming audio, and chatting with the Patient Advocate simultaneously. The UX must handle all three without overwhelming. Solution: progressive disclosure — the reasoning trace is collapsed by default, the Veo video is on-demand (not auto-played), the Lyria audio is opt-in with a clear toggle, the chat is collapsed to a corner when not active. The primary focus is always the appeal letter; everything else is supporting.
+  2643→
+  2644→## 30.11 Accessibility
+  2645→
+  2646→Accessibility is non-negotiable. WCAG 2.1 AA compliance: all interactive elements keyboard-navigable; all images have alt text; all videos have captions; color contrast ratios meet AA; the reasoning trace panel is screen-reader-compatible with appropriate ARIA roles. The appeal letter editable area supports screen readers and has a "plain text" fallback view. The Veo video includes audio description track. The Lyria audio is opt-in (never autoplays). Accessibility is both a compliance requirement and a judge-appeal signal — Phase C forensics noted that accessibility-themed winners (VITE VERE, Gaze Link, Menu buddy, Ally) are disproportionately represented in recent hackathon results [C-5].
+  2647→
+  2648→## 30.12 Visual Design Language
+  2649→
+  2650→Visual design: clean, clinical, trustworthy. Color palette: deep navy (#0F2540) for primary surfaces, clinical white (#FAFBFC) for backgrounds, warm coral (#E85D5D) for primary CTAs and emotional accent, slate gray (#5A6478) for secondary text, the 8 agent colors (Section 30.5) for trace panel coding. Typography: Inter for body (excellent screen readability at all sizes), a humanist sans (e.g., Source Serif Pro or similar) for headings to add warmth and avoid the "AI-generated generic" look. Iconography: Lucide icons (open-source, consistent, lightweight). Imagery: real de-identified denial letter examples (in demo, synthetic) shown as document previews, not stock photos of "doctors looking at tablets" (the anti-pattern Phase C warns against [C-11]). The overall feel should be: serious, competent, on the patient's side — like a good lawyer's office, not like a healthcare startup landing page.
+  2651→
+  2652→# Bibliography
+  2653→
+  2654→Sources cited in this document extend the bibliography established in Sections 1-15 (Subagent E). All [A-N], [B-N], [C-N], [D-N] references resolve to the same sources already enumerated in /home/z/my-project/research/sections_01_15.md Bibliography. The following additional sources are introduced for Sections 16-30:
+  2655→
+  2656→## Phase B — Additional Google Stack Sources
+  2657→
+  2658→•  [B-16] Google Cloud — Cloud Run min-instances configuration. https://docs.cloud.run/docs/configure-min-instances (retrieved 2026-08-14). Source for min-instances to eliminate cold starts.
+  2659→•  [B-17] Google Cloud — Cloud SQL Connector for Python. https://docs.cloud.google.com/sql/docs/postgres/connect-connect-cloud-shell (retrieved 2026-08-14). Source for IAM-based Cloud SQL auth pattern.
+  2660→•  [B-18] Google Cloud — Secret Manager integration with Cloud Run. https://docs.cloud.run/docs/secrets (retrieved 2026-08-14). Source for runtime secret mounting pattern.
+  2661→•  [B-19] Google Cloud — Cloud Build triggers and deploy to Cloud Run. https://docs.cloud.google.com/build/docs/deploying-builds/deploy-cloud-run (retrieved 2026-08-14). Source for CI/CD pipeline.
+  2662→•  [B-20] Google Cloud — Agent Observability OpenTelemetry integration. https://docs.cloud.google.com/gemini-enterprise-agent-platform/optimize/observability (retrieved 2026-08-14). Source for trace substrate feeding the reasoning-trace UI.
+  2663→•  [B-21] Google Cloud — Model Armor configuration. https://docs.cloud.google.com/gemini-enterprise-agent-platform/govern/configure-model-armor (retrieved 2026-08-14). Source for prompt-injection filtering and PII detection on denial letter inputs.
+  2664→•  [B-22] Google Cloud — Agent Gateway egress control. https://docs.cloud.google.com/gemini-enterprise-agent-platform/govern/gateways/agent-gateway-overview (retrieved 2026-08-14). Source for per-agent egress policy.
+  2665→•  [B-23] Google Cloud — Agent Identity X.509 cert issuance. https://docs.cloud.google.com/gemini-enterprise-agent-platform/govern/agent-identity-overview (retrieved 2026-08-14). Source for per-agent zero-trust credentials.
+  2666→•  [B-24] ADK 2.0 — Human Input nodes in GraphWorkflow. https://adk.dev/workflows/graph-workflows/human-input (retrieved 2026-08-14). Source for HITL gate implementation pattern.
+  2667→•  [B-25] ADK 2.0 — LoopAgent iterative refinement. https://adk.dev/agents/workflow-agents (retrieved 2026-08-14). Source for Letter Drafting ↔ Quality Review loop.
+  2668→•  [B-26] ADK 2.0 — Evaluation framework. https://adk.dev/evaluation (retrieved 2026-08-14). Source for appeal letter quality metrics.
+  2669→
+  2670→## Cross-References to Internal Project Files
+  2671→
+  2672→•  Project Decision Brief: /home/z/my-project/research/PROJECT_DECISION_BRIEF.md (LOCKED source of truth).
+  2673→•  Sections 1-15: /home/z/my-project/research/sections_01_15.md (strategic foundation).
+  2674→•  Phase A full bibliography: /home/z/my-project/research/phase_A_rules_judging.md §16.
+  2675→•  Phase B full bibliography: /home/z/my-project/research/phase_B_google_stack.md §17.
+  2676→•  Phase C full bibliography: /home/z/my-project/research/phase_C_winner_forensics.md §10.
+  2677→•  Phase D full bibliography: /home/z/my-project/research/phase_D_ecosystem_landscape.md §11.
+  2678→End of Sections 16-30. Prepared by Writing Subagent F (Task 8-F) on 2026-08-15. Subsequent sections (31-50) will cover: demo script, pitch narrative, repo structure, deployment runbook, Q&amp;A prep, post-hackathon roadmap, operational risk register, team &amp; timeline, and final submission checklist.
+  2679→Project: DenialDefender — "The agent that fights your insurance company for you." Target hackathon: All Things Agentic Hackathon ("Ready, Set, Agent!") — Google LLC sole sponsor Submission track: The Fortified Enterprise Fleet (primary), engineered to win Grand Prize Author: Writing Subagent G (Task 9-G) Confidence legend: VERIFIED FACT (direct quote from official source) · EVIDENCE-BASED INFERENCE (≥2 sources combined) · STRATEGIC HYPOTHESIS (analyst judgement) · SPECULATION (weak signal). Continuity: Sections 1-15 (Subagent E, 7-E) locked the strategic thesis; Sections 16-30 (Subagent F, 8-F) locked product definition, architecture, agent design, MVP scope, reliability, infra, and UX. This document covers Phases 30-50 of the war-room methodology — engineering strategy, execution plan, validation, metrics, business model, investment narrative, ecosystem/sponsor narrative, open-source strategy, demo design, demo script, demo failure plan, pitch deck, judge Q&amp;A prep, hostile competitor analysis, red-team review, kill-your-darlings, refinement, final decision matrix, final Grand Prize recommendation, and immediate next actions. Every architectural claim inherits from PROJECT_DECISION_BRIEF.md (LOCKED) and Sections 1-30.
+  2680→
+  2681→# 31. Engineering Strategy
+  2682→
+  2683→The repository must look like "a serious product that happened to be built during a hackathon" — clean structure, reproducible setup, real tests, real CI, real documentation, real secrets management. Phase C forensics is explicit that judges look for "robust, production-minded agents, not brittle scripts" [A-6] and that the public repo must feature "a clean architecture diagram and reproducible setup instructions" [A-7]. Phase C anti-pattern #4 warns against "over-engineered architecture with no visible demo payoff" [C-3]; the engineering strategy threads this needle by keeping the architecture real but minimal, with every line of code traceable to either (a) the 12 MUST features or (b) demo reliability.
+  2684→
+  2685→## 31.1 Repository Structure
+  2686→
+  2687→The repository is a monorepo organized by concern, not by agent. Eight agents do not get eight top-level directories; they live under apps/agents/ as siblings, sharing the orchestration graph definition. This avoids the "one service per agent" over-engineering that Section 29.1 already rejected.
+  2688→denialdefender/
+  2689→├── apps/
+  2690→│   ├── api/                      # Cloud Run: API gateway + ADK orchestrator
+  2691→│   │   ├── agents/               # 8 ADK agents (one module each)
+  2692→│   │   │   ├── patient_advocate.py
+  2693→│   │   │   ├── denial_triage.py
+  2694→│   │   │   ├── policy_research.py
+  2695→│   │   │   ├── evidence_assembly.py
+  2696→│   │   │   ├── letter_drafting.py
+  2697→│   │   │   ├── quality_review.py
+  2698→│   │   │   ├── deadline_tracker.py
+  2699→│   │   │   └── outcome_learning.py
+  2700→│   │   ├── graph/                # ADK GraphWorkflow definition
+  2701→│   │   │   └── workflow.py
+  2702→│   │   ├── routes/               # FastAPI route handlers
+  2703→│   │   ├── tools/                # Function tools + MCP tool wrappers
+  2704→│   │   ├── models/               # Pydantic schemas (case, denial, appeal)
+  2705→│   │   └── main.py
+  2706→│   ├── worker/                   # Cloud Run: async consumer (outcome + deadline)
+  2707→│   ├── mcp/                      # Cloud Run: MCP server exposure (1 tool)
+  2708→│   └── frontend/                 # Next.js 14 + Firebase Hosting
+  2709→│       ├── components/
+  2710→│       ├── screens/              # 8 screens per Section 30
+  2711→│       ├── lib/                  # Firebase SDK + API client
+  2712→│       └── pages/
+  2713→├── packages/
+  2714→│   ├── prompts/                  # Prompt templates (versioned, diffable)
+  2715→│   ├── schemas/                  # OpenAPI + JSON Schema (single source of truth)
+  2716→│   ├── eval/                     # Appeal letter quality eval rubric + datasets
+  2717→│   └── shared-types/             # TS types mirrored from Pydantic
+  2718→├── infra/
+  2719→│   ├── terraform/                # GCP infra (Cloud Run, Firestore, SQL, Pub/Sub)
+  2720→│   ├── cloudbuild.yaml           # CI/CD pipeline
+  2721→│   └── seed/                     # Curated payer policy corpus + 50 synthetic outcomes
+  2722→├── demo/
+  2723→│   ├── denial_letters/           # 5 synthetic de-identified denial letters
+  2724→│   ├── expected_outputs/         # Pre-validated appeal letters for demo-safe path
+  2725→│   ├── reasoning_traces/         # Recorded trace replays
+  2726→│   └── demo_safe_runner.py       # Demo-safe path orchestrator
+  2727→├── docs/
+  2728→│   ├── ARCHITECTURE.md           # Architecture diagram + rationale
+  2729→│   ├── CONTRIBUTING.md
+  2730→│   ├── COMPLIANCE_POSTURE.md     # HIPAA + "not medical advice" section
+  2731→│   ├── DEMO_RUNBOOK.md           # Pre-flight + recording checklist
+  2732→│   └── api/                      # Generated OpenAPI docs
+  2733→├── tests/
+  2734→│   ├── unit/                     # Per-agent unit tests (mock Gemini)
+  2735→│   ├── integration/              # Multi-agent end-to-end on emulators
+  2736→│   ├── e2e/                      # Demo-flow replay tests
+  2737→│   └── golden/                   # Golden appeal letters per payer × denial-type
+  2738→├── .github/workflows/            # PR checks (lint, type, test, security)
+  2739→├── Makefile                      # make dev / make seed / make demo / make deploy
+  2740→├── pyproject.toml                # Ruff + mypy + pytest config
+  2741→├── package.json                  # Root workspace config (pnpm)
+  2742→├── README.md                     # Spin-up instructions (mandatory per Rules §6)
+  2743→└── LICENSE                       # Apache 2.0
+  2744→
+  2745→## 31.2 Branch Strategy — Trunk-Based with Short-Lived Feature Branches
+  2746→
+  2747→Trunk-based development is chosen over git-flow because the team is small (3-4 engineers), the timeline is 14 days, and CI/CD must ship continuously. main is always deployable; feature branches live &lt;24 hours; PRs require 1 reviewer + green CI. Hotfixes commit directly to main with a hotfix: prefix. A single release/aug31 tag marks the submission snapshot; after submission, development continues on a fork (per Rules §6 — "no edits to repo after deadline" [A-2]).
+  2748→
+  2749→## 31.3 Testing — Unit / Integration / E2E / Golden
+  2750→
+  2751→Four test layers. Unit tests mock Gemini and verify each agent's input validation, output schema, fallback logic, and tool selection. Target: 80% line coverage on apps/api/agents/ and apps/api/graph/. Integration tests run on Firebase emulators + local PostgreSQL+pgvector Docker container, exercising 2-3 agent interactions (e.g., Triage → Policy → Letter) with real pgvector queries against the seeded corpus. E2E tests replay the full 8-agent pipeline against the demo-safe path, asserting the 90-second latency budget and the presence of every required artifact (parsed JSON, retrieved policy clause, drafted letter, quality report). Golden tests compare drafted appeal letters against per-payer × per-denial-type reference letters; semantic similarity &gt;0.85 (via Gemini text-embedding-005) passes. ADK's built-in evaluation framework [B-26] is used for agent-level evals.
+  2752→
+  2753→## 31.4 CI/CD — Cloud Build Pipeline
+  2754→
+  2755→infra/cloudbuild.yaml triggers on every push to main and every PR. Pipeline stages: (1) lint — Ruff (Python) + ESLint + Prettier (TS); (2) typecheck — mypy strict + tsc strict; (3) security — pip-audit, pnpm audit, gitleaks (secret scanning), SBOM generation via syft; (4) unit — pytest + vitest; (5) integration — pytest with emulator containers; (6) build — Docker build for 4 services (api, worker, mcp, frontend); (7) push — to Artifact Registry with commit-SHA tags; (8) deploy — to Cloud Run (staging env automatically; production on tag); (9) smoke — health check + demo-safe path replay against the deployed staging URL. Total target: &lt;6 minutes. Stage failures block merge to main.
+  2756→
+  2757→## 31.5 Environment Management
+  2758→
+  2759→Three environments. Local uses Firebase Emulator Suite (Firestore + Auth + Pub/Sub), a local PostgreSQL+pgvector Docker container, direct Gemini API calls (no Cloud Run), and make dev to orchestrate. Staging is a separate GCP project (denialdefender-staging) mirroring production with smaller Cloud SQL instance and min-instances=0; staging is the CI deploy target and the team's daily-use environment. Production (denialdefender-prod) is the demo-recorded environment with min-instances=1 on api to eliminate cold starts. Environment config is via Secret Manager + per-env env.yaml files (no secrets in env vars). Staging and prod share the same code, differentiated only by config.
+  2760→
+  2761→## 31.6 Secrets — Secret Manager
+  2762→
+  2763→All secrets live in Google Secret Manager and mount into Cloud Run as runtime-mounted volumes (not env vars) per Section 29.5: gemini-api-key, gemma-endpoint-key, veo-api-key, lyria-api-key, cloud-sql-connection-string, firebase-service-account-key. Secret rotation is manual for the hackathon; the gcloud secrets versions add command is the rotation path. Access is scoped per Cloud Run service account via IAM (least-privilege). gitleaks runs in CI to prevent accidental secret commits; pre-commit hooks run gitleaks locally. The repo's .gitignore excludes any file matching *.key, *.pem, service-account*.json, .env*.
+  2764→
+  2765→## 31.7 Logging, Monitoring, Observability
+  2766→
+  2767→Three layers. Cloud Logging receives structured JSON logs from all 4 Cloud Run services, with correlation_id propagated across services for distributed tracing; log-based alerts fire on error-rate &gt;2% sustained 5 minutes. Cloud Monitoring dashboards display Cloud Run request count / latency / error rate, Cloud SQL connection count, Pub/Sub backlog, Gemini API call count + cost, and a custom "appeals drafted per hour" metric. Cloud Trace + GEAP Agent Observability feed the reasoning-trace UI substrate directly — every agent thought, tool call, tool response, and model response is an OpenTelemetry span [B-20]. Logs are scrubbed of PHI via a Cloud Logging exclusion filter (regex matching SSN, MRN, DOB patterns); the scrubbing is logged itself for audit. Cloud Run request logs auto-expire after 30 days; trace data 14 days; metrics 6 weeks.
+  2768→
+  2769→## 31.8 Error Handling
+  2770→
+  2771→Errors are categorized into four classes with distinct handling. Retryable transient errors (Gemini 429, Cloud SQL connection blip, Pub/Sub timeout) retry with exponential backoff (3 attempts, jitter, max 10s). Schema validation errors (model returned malformed JSON) retry with a stricter prompt; if still failing, fall back to deterministic output for that agent. Domain errors (denial letter unreadable, no matching payer policy, missing medical records) surface to the user via the Patient Advocate chat with a clear next action; the pipeline pauses at the appropriate HITL gate rather than failing. Catastrophic errors (Gemini fully down, Cloud SQL unreachable) trigger the demo-safe path with a visible UI banner per Section 28. Every error is logged with correlation_id, agent_name, error_class, and stack_trace. The user never sees a raw stack trace; they see a humanized message + a "Show technical details" expander.
+  2772→
+  2773→## 31.9 Code Quality
+  2774→
+  2775→ruff (Python) with line-length 100, select rules = E, F, I, N, UP, B, SIM, RUF; mypy --strict for type checking; no Any types in production code. eslint + tsc --strict for TypeScript; prettier for formatting. Pre-commit hooks (husky for TS, pre-commit for Python) enforce lint + format + gitleaks on every commit. PRs require 1 reviewer approval + green CI. Code review checklist includes: (1) every agent has a fallback path; (2) every external call has a timeout; (3) every user-facing string is humanized (no stack traces); (4) every new feature has a test. AI-generated code (Cursor/Copilot) is permitted per the hackathon FAQ [A-8] but every line is human-reviewed per Phase C anti-pattern #12 [C-3].
+  2776→
+  2777→## 31.10 Documentation
+  2778→
+  2779→README.md is the front door — it must satisfy Rules §6's "step-by-step guide for local setup or cloud deployment" [A-2]. Structure: (1) project one-liner + tagline; (2) 30-second demo GIF; (3) architecture diagram (the one from Section 21.2); (4) Prerequisites (Node 20, Python 3.12, Docker, gcloud CLI); (5) Quickstart (make dev in 5 commands); (6) Demo-safe path (make demo); (7) Production deployment (make deploy); (8) Project structure overview; (9) Compliance posture summary; (10) License + contributing. docs/ARCHITECTURE.md expands with full rationale per architectural choice (Section 21.3 table). docs/COMPLIANCE_POSTURE.md is the HIPAA + "not medical advice" section that preempts the #1 judge concern. docs/DEMO_RUNBOOK.md is the demo-day pre-flight checklist (Section 41).
+  2780→
+  2781→## 31.11 API Contracts — OpenAPI
+  2782→
+  2783→FastAPI auto-generates OpenAPI 3.1 spec from Pydantic models; the spec is committed to packages/schemas/openapi.yaml and is the single source of truth. TypeScript types in packages/shared-types/ are generated from the OpenAPI spec via openapi-typescript, ensuring frontend and backend never drift. The spec is published at /openapi.json on the deployed API and linked from the README. Webhook contracts (deadline escalation, outcome ingestion) are documented as AsyncAPI alongside OpenAPI. Versioning: API path /v1/... from day one; breaking changes require /v2/ and a migration note.
+  2784→
+  2785→## 31.12 Local Development Setup
+  2786→
+  2787→make dev orchestrates: (1) start Firebase Emulator Suite (Firestore 8080, Auth 9099, Pub/Sub 8085); (2) start local PostgreSQL+pgvector Docker container on 5432; (3) seed pgvector with curated policy corpus + 50 synthetic outcomes (make seed); (4) start 4 services in dev mode (uvicorn for api, worker, mcp; next dev for frontend); (5) open localhost:3000. Total cold-start: &lt;60 seconds. make demo runs the same orchestration but forces demo-safe path and replays the recorded reasoning trace. make test runs all 4 test layers. make deploy ENV=staging deploys to staging. Every Make target is documented in README.md.
+  2788→
+  2789→## 31.13 Production Configuration
+  2790→
+  2791→Production Cloud Run config: api service min-instances=1, max-instances=10, concurrency=80, cpu=2, memory=2Gi, timeout=300s; worker min-instances=0, max-instances=5, concurrency=1 (long-running), timeout=600s; mcp min-instances=0, max-instances=3, concurrency=80; frontend min-instances=0, max-instances=3, concurrency=80. Cloud SQL db-g1-small, auto-increase-storage, availability-type=ZONAL (cost discipline; HA not needed for hackathon). Firestore in Native mode, multi-region Nam5. Pub/Sub 7-day retention. All services behind HTTPS. Cloud Armor in front of api for DDoS protection. Cloud DNS + managed SSL cert for denialdefender.app (or fallback *.run.app). All services emit correlation_id header. Cost budget alert at $100 in GCP Billing. Post-demo: min-instances=0 on all services, Cloud SQL stopped, ongoing cost ~$0.
+  2792→
+  2793→# 32. Day-by-Day Execution Plan
+  2794→
+  2795→The methodology's priority sequence is non-negotiable: Core innovation → Platform integration → Persistence/learning → Critical user workflow → Demo → Reliability → UX polish → Documentation → Stretch features. Stretch features never start before the core demo works end-to-end. Today is Aug 13, 2026; setup occupies Aug 13-17; 14 working days span Aug 18-31 with submission at Aug 31 17:00 PT [A-3]. Buffer days are explicit. The table below is the war-room execution plan; every row is a contract.
+  2796→
+  2797→## 32.1 Day-by-Day Plan (Aug 18 — Aug 31, 2026)
+  2798→
+  2799→Day
+  2800→Date
+
+[showing lines 2551-2800 of 4434; use offset=2801 with limit to continue reading]
