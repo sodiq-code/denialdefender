@@ -12,13 +12,13 @@ screenshots/
 upload/
 download/
 agent-ctx/
-day*
-production-*
-governance-platform-*
-platform-card-*
-grand_prize_*
-DenialDefender_*
-ultimate_*
+day*.png
+production-*.png
+governance-platform-*.png
+platform-card-*.png
+grand_prize_*.txt
+DenialDefender_*.docx
+ultimate_*.txt
 db/*.db
 
 mini-services/agent-fleet/node_modules
