@@ -2,10 +2,13 @@
  * DenialDefender — Database Client
  *
  * Supports both local SQLite and Turso (libSQL) for Cloud Run persistence:
- * - libsql://... → Turso (persistent cloud SQLite via Prisma adapter)
- * - file:... → Local SQLite (development / ephemeral)
+ * - TURSO_DB_URL + TURSO_DB_TOKEN → Turso (persistent cloud SQLite via Prisma adapter)
+ * - DATABASE_URL=file:... → Local SQLite (development / ephemeral)
  *
- * Auto-creates tables on first query using raw SQL.
+ * Prisma's SQLite provider validates DATABASE_URL starts with "file:" at startup.
+ * So we use separate TURSO_DB_URL/TURSO_DB_TOKEN env vars for the Turso connection,
+ * while keeping DATABASE_URL as a valid file: path for Prisma's schema validation.
+ * When the adapter is provided, Prisma uses it for queries (ignoring DATABASE_URL).
  */
 
 import { PrismaClient } from '@prisma/client'
@@ -15,56 +18,8 @@ const globalForPrisma = globalThis as unknown as {
   dbInitialized: boolean | undefined
 }
 
-const DATABASE_URL = process.env.DATABASE_URL || ''
-const IS_TURSO = DATABASE_URL.startsWith('libsql://')
-
-async function createPrismaClient(): Promise<PrismaClient> {
-  if (IS_TURSO) {
-    try {
-      const { PrismaLibSQL } = await import('@prisma/adapter-libsql')
-      const { createClient } = await import('@libsql/client')
-
-      const libsql = createClient({
-        url: DATABASE_URL,
-        authToken: process.env.DATABASE_AUTH_TOKEN || '',
-      })
-
-      const adapter = new PrismaLibSQL(libsql)
-      const client = new PrismaClient({ adapter } as any)
-      console.log('[db] Connected to Turso (persistent)')
-      return client
-    } catch (err) {
-      console.error('[db] Turso adapter failed, falling back to SQLite:', err)
-    }
-  }
-
-  return new PrismaClient({
-    log: process.env.NODE_ENV === 'development' ? ['query'] : [],
-  })
-}
-
-// Synchronous init: if not Turso, create immediately; if Turso, defer
-let prismaClient: PrismaClient
-let prismaReady: Promise<void>
-
-if (IS_TURSO) {
-  // For Turso, we need async init — create a placeholder and swap when ready
-  prismaClient = new PrismaClient({ log: [] }) // temporary
-  prismaReady = createPrismaClient().then(client => {
-    prismaClient = client
-    if (process.env.NODE_ENV !== 'production') {
-      (globalThis as any).__prisma = client
-    }
-  })
-} else {
-  prismaClient = new PrismaClient({
-    log: process.env.NODE_ENV === 'development' ? ['query'] : [],
-  })
-  if (process.env.NODE_ENV !== 'production') {
-    (globalThis as any).__prisma = prismaClient
-  }
-  prismaReady = Promise.resolve()
-}
+const TURSO_URL = process.env.TURSO_DB_URL || ''
+const USE_TURSO = TURSO_URL.startsWith('libsql://') || TURSO_URL.startsWith('https://')
 
 // DDL statements for auto-initialization
 const INIT_SQL = `
@@ -213,6 +168,51 @@ CREATE INDEX IF NOT EXISTS "CaseMemoryState_case_id_idx" ON "CaseMemoryState"("c
 CREATE INDEX IF NOT EXISTS "CaseMemoryState_state_idx" ON "CaseMemoryState"("state");
 `
 
+async function createPrismaClient(): Promise<PrismaClient> {
+  if (USE_TURSO) {
+    try {
+      const { PrismaLibSQL } = await import('@prisma/adapter-libsql')
+      const { createClient } = await import('@libsql/client')
+
+      const libsql = createClient({
+        url: TURSO_URL,
+        authToken: process.env.TURSO_DB_TOKEN || '',
+      })
+
+      const adapter = new PrismaLibSQL(libsql)
+      // DATABASE_URL must be a valid file: path for Prisma's SQLite validation,
+      // but the adapter overrides the actual connection to Turso
+      const client = new PrismaClient({ adapter } as any)
+      console.log('[db] Connected to Turso (persistent):', TURSO_URL.replace(/\/\/.*@/, '//***@'))
+      return client
+    } catch (err) {
+      console.error('[db] Turso adapter failed, falling back to SQLite:', err)
+    }
+  }
+
+  console.log('[db] Using SQLite (local/ephemeral)')
+  return new PrismaClient({
+    log: process.env.NODE_ENV === 'development' ? ['query'] : [],
+  })
+}
+
+// Create PrismaClient — async for Turso, sync for SQLite
+let prismaClient: PrismaClient
+let prismaReady: Promise<void>
+
+if (USE_TURSO) {
+  // Placeholder — will be replaced when Turso adapter is ready
+  prismaClient = null as any
+  prismaReady = createPrismaClient().then(client => {
+    prismaClient = client
+  })
+} else {
+  prismaClient = new PrismaClient({
+    log: process.env.NODE_ENV === 'development' ? ['query'] : [],
+  })
+  prismaReady = Promise.resolve()
+}
+
 let initPromise: Promise<void> | null = null
 
 async function initializeSchema(): Promise<void> {
@@ -251,29 +251,35 @@ async function initializeSchema(): Promise<void> {
 
 /**
  * Export a proxy that auto-initializes on first property access.
+ * Also waits for Turso adapter to be ready before any query.
  */
-export const db = new Proxy(prismaClient, {
-  get(target, prop, receiver) {
+export const db = new Proxy({} as PrismaClient, {
+  get(_target, prop, _receiver) {
     if (typeof prop === 'string' && prop !== '$transaction' && prop !== '$connect' && prop !== '$disconnect' && prop !== '$extends' && prop !== '$executeRawUnsafe' && prop !== '$queryRawUnsafe') {
-      const original = Reflect.get(target, prop, receiver)
-      if (original && typeof original === 'object') {
-        return new Proxy(original, {
-          get(modelTarget, modelProp, modelReceiver) {
-            const method = Reflect.get(modelTarget, modelProp, modelReceiver)
-            if (typeof method === 'function') {
-              return async function (...args: any[]) {
-                await initializeSchema()
-                return method.apply(modelTarget, args)
-              }
-            }
-            return method
+      return new Proxy({}, {
+        get(_modelTarget, modelProp, _modelReceiver) {
+          const methodRef = { current: null as any }
+          return async function (...args: any[]) {
+            await prismaReady
+            await initializeSchema()
+            // Get the actual model method at call time (after prismaClient is set)
+            const model = (prismaClient as any)[prop]
+            if (!model) throw new Error(`[db] Model ${String(prop)} not found`)
+            const method = model[modelProp]
+            if (!method) throw new Error(`[db] Method ${String(modelProp)} not found on ${String(prop)}`)
+            return method.apply(model, args)
           }
-        })
-      }
+        }
+      })
     }
-    return original
+    // For $executeRawUnsafe etc.
+    return async function (...args: any[]) {
+      await prismaReady
+      await initializeSchema()
+      return (prismaClient as any)[prop](...args)
+    }
   }
 }) as PrismaClient
 
-/** Whether the database is Turso (persistent) or local SQLite (ephemeral) */
-export const isTurso = IS_TURSO
+/** Whether using Turso (persistent) or local SQLite (ephemeral) */
+export const isTurso = USE_TURSO
