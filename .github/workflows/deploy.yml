@@ -6,8 +6,8 @@
 #
 # Setup:
 #   1. Add these secrets to your GitHub repo (Settings > Secrets):
-#      - GCP_PROJECT_ID: Your GCP project ID (e.g., project-8a09278a-5593-4289-b2e)
-#      - GCP_SA_KEY: Service account JSON key (the actual JSON, NOT a gcloud command!)
+#      - GCP_PROJECT_ID: denialdefender
+#      - GCP_SA_KEY: Service account JSON key for json-775@denialdefender.iam.gserviceaccount.com
 #
 # The service account needs these roles:
 #   - roles/run.admin
