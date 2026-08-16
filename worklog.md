@@ -1805,3 +1805,29 @@ Stage Summary:
 - Trace stream accepting connections from production web service
 - Web service connected to both agent-fleet and trace-stream
 - Google Agent Platform integration enabled (GOOGLE_AGENT_PLATFORM_ENABLED=true)
+---
+Task ID: deploy-3
+Agent: main
+Task: Fix dashboard showing "Offline" for agent fleet and trace stream on production
+
+Work Log:
+- Analyzed user screenshot: dashboard showed "Offline" badge + "Connection error" for trace stream, and "Offline" for agent fleet
+- Root cause 1: `/api/agents/[...path]/route.ts` hardcoded `AGENT_FLEET_URL = 'http://localhost:3004'` instead of using env var
+- Root cause 2: `NEXT_PUBLIC_TRACE_STREAM_URL` was set via Cloud Run env var but Next.js inlines NEXT_PUBLIC_* at BUILD TIME, not runtime
+- Root cause 3: Multiple `gcloud run services update --set-env-vars` calls REPLACED env vars instead of adding — only 2 of 11 vars remained
+- Fix 1: Updated `/api/agents/[...path]/route.ts` to use `process.env.AGENT_FLEET_URL || 'http://localhost:3004'`
+- Fix 2: Created `/api/config` route that returns runtime config (traceStreamUrl, agentFleetUrl, isCloudRun) from server-side env vars
+- Fix 3: Updated `useTraceStream.ts` hook to fetch `/api/config` at runtime before connecting Socket.io
+- Fix 4: Set ALL 11 env vars in single `gcloud run deploy` command (not `update`)
+- Fix 5: Rebuilt and redeployed web service image with all code fixes
+- Verified all 8 API endpoints return correct data
+- Browser verification: Agent Fleet shows "Online" (green), Trace Stream connected (1 client), no red/offline badges
+- VLM analysis of screenshot confirms: "Agent Fleet: Online (green circle), Trace Stream: connected, No red/offline badges"
+
+Stage Summary:
+- Dashboard now shows ALL GREEN: Agent Fleet Online, Trace Stream Connected
+- Runtime config API (/api/config) eliminates need for build-time NEXT_PUBLIC_* vars
+- All 11 env vars correctly set on Cloud Run
+- Trace stream WebSocket working: connectedClients: 1
+- Agent fleet running in LIVE mode: mock_mode: false, model: gemini-3.5-flash
+- Zero console errors in browser

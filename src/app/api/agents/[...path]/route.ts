@@ -14,7 +14,7 @@ import { NextRequest, NextResponse } from 'next/server';
  *   GET  /api/agents/gcp/status      → http://localhost:3004/gcp/status
  */
 
-const AGENT_FLEET_URL = 'http://localhost:3004';
+const AGENT_FLEET_URL = process.env.AGENT_FLEET_URL || 'http://localhost:3004';
 
 export async function GET(
   request: NextRequest,

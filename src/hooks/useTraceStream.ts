@@ -4,10 +4,10 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { io, Socket } from "socket.io-client";
 
 // ─── Gateway Pattern ──────────────────────────────────────────
-// In production (Cloud Run), use NEXT_PUBLIC_TRACE_STREAM_URL directly.
+// In production (Cloud Run), use the trace stream URL from runtime config.
 // In sandbox/development, use relative path + XTransformPort for gateway routing.
-const TRACE_STREAM_URL = process.env.NEXT_PUBLIC_TRACE_STREAM_URL || "";
-const IS_CLOUD_RUN = TRACE_STREAM_URL !== "";
+// NEXT_PUBLIC_* vars are inlined at build time, so we read the URL from /api/config
+// at runtime to support Cloud Run env vars set after deployment.
 
 // ─── Types ────────────────────────────────────────────────────
 export interface TraceEvent {
@@ -101,18 +101,34 @@ export function useTraceStream(): TraceStreamState {
 
   // ── Initialize socket connection ──────────────────────────
   useEffect(() => {
-    const socket: Socket = io(IS_CLOUD_RUN ? TRACE_STREAM_URL : "/", {
-      transports: ["polling", "websocket"], // Polling first — works through Caddy gateway
-      upgrade: true, // Will upgrade to websocket if available
-      // Only use XTransformPort in sandbox mode (not Cloud Run)
-      ...(IS_CLOUD_RUN ? {} : { query: { XTransformPort: "3003" } }),
-      reconnection: true,
-      reconnectionAttempts: 10,
-      reconnectionDelay: 1000,
-      reconnectionDelayMax: 10000,
-      timeout: 10000,
-      autoConnect: true,
-    });
+    const connectSocket = async () => {
+      // Fetch runtime config to get the trace stream URL
+      // This works even when NEXT_PUBLIC_* vars aren't set at build time
+      let traceStreamUrl = "";
+      let isCloudRun = false;
+      try {
+        const configRes = await fetch("/api/config");
+        if (configRes.ok) {
+          const config = await configRes.json();
+          traceStreamUrl = config.traceStreamUrl || "";
+          isCloudRun = config.isCloudRun || false;
+        }
+      } catch {
+        // Config fetch failed — use defaults (sandbox mode)
+      }
+
+      const socket: Socket = io(isCloudRun ? traceStreamUrl : "/", {
+        transports: ["polling", "websocket"], // Polling first — works through Caddy gateway
+        upgrade: true, // Will upgrade to websocket if available
+        // Only use XTransformPort in sandbox mode (not Cloud Run)
+        ...(isCloudRun ? {} : { query: { XTransformPort: "3003" } }),
+        reconnection: true,
+        reconnectionAttempts: 10,
+        reconnectionDelay: 1000,
+        reconnectionDelayMax: 10000,
+        timeout: 10000,
+        autoConnect: true,
+      });
 
     socketRef.current = socket;
 
@@ -200,6 +216,9 @@ export function useTraceStream(): TraceStreamState {
       socket.disconnect();
       socketRef.current = null;
     };
+    };
+
+    connectSocket();
   }, []);
 
   // ── Subscribe to a case ──────────────────────────────────
