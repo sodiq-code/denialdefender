@@ -1,8 +1,10 @@
 # DenialDefender
 
-**1 in 7 insured Americans get a claim denied each year. Appeals win 50–75% of the time — but most patients don't know how to write one.** DenialDefender is a 6-agent pipeline that reads your denial letter, finds the payer policy that contradicts the reason code, assembles citation-backed evidence, and drafts an appeal letter ready for human review.
+**DenialDefender does not replace the human. It replaces the hours of work around the human** — turning a 6-hour, error-prone appeal-drafting ordeal into a 90-second, evidence-backed, independently verified, human-approved appeal package that measurably improves after every recorded outcome.
 
-> The agent that fights your insurance company for you.
+> A verified appeal workflow that learns from outcomes, implemented by eight specialists.
+
+1 in 7 insured Americans get a claim denied each year. Appeals win 50–75% of the time — but most patients never file one. DenialDefender reads the denial letter, finds the payer policy that contradicts the reason code, assembles citation-backed evidence, and drafts an appeal letter ready for human review — all in under 90 seconds.
 
 ---
 
@@ -123,4 +125,4 @@ Built for the [**All Things Agentic Hackathon**](https://allthingsagentichackath
 
 ## License
 
-MIT
+This project is licensed under the [MIT License](./LICENSE).
