@@ -125,7 +125,7 @@
 
 /* ─── Premium UI Utilities ─────────────────────────────────────────────── */
 
-/* Subtle noise texture overlay for premium depth (both modes) */
+/* Noise texture overlay for premium depth (both modes) */
 .premium-bg {
   position: relative;
 }
@@ -136,40 +136,55 @@
   inset: 0;
   pointer-events: none;
   z-index: 0;
-  opacity: 0.025;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+  opacity: 0.04;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
   background-repeat: repeat;
   background-size: 256px 256px;
 }
 
-/* Gradient mesh accent for header area */
+/* Gradient mesh accent for header area — clearly visible premium gradient */
 .gradient-mesh {
   background:
-    radial-gradient(ellipse 60% 40% at 20% 50%, oklch(0.72 0.19 165 / 0.08), transparent),
-    radial-gradient(ellipse 50% 50% at 80% 50%, oklch(0.55 0.12 195 / 0.06), transparent),
+    radial-gradient(ellipse 80% 60% at 15% 50%, oklch(0.72 0.19 165 / 0.15), transparent),
+    radial-gradient(ellipse 60% 60% at 85% 50%, oklch(0.55 0.12 195 / 0.12), transparent),
+    radial-gradient(ellipse 40% 40% at 50% 80%, oklch(0.62 0.14 180 / 0.08), transparent),
     var(--background);
 }
 
 .dark .gradient-mesh {
   background:
-    radial-gradient(ellipse 60% 40% at 20% 50%, oklch(0.72 0.19 165 / 0.06), transparent),
-    radial-gradient(ellipse 50% 50% at 80% 50%, oklch(0.55 0.12 195 / 0.04), transparent),
+    radial-gradient(ellipse 80% 60% at 15% 50%, oklch(0.72 0.19 165 / 0.12), transparent),
+    radial-gradient(ellipse 60% 60% at 85% 50%, oklch(0.55 0.12 195 / 0.08), transparent),
+    radial-gradient(ellipse 40% 40% at 50% 80%, oklch(0.62 0.14 180 / 0.06), transparent),
     var(--background);
 }
 
-/* Glass card effect for dark mode depth */
+/* Glass card effect for premium depth */
 .glass-card {
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px) saturate(1.2);
+  -webkit-backdrop-filter: blur(8px) saturate(1.2);
+  border-color: oklch(0.72 0.19 165 / 0.12);
 }
 
-/* Smooth transition for interactive cards */
+.dark .glass-card {
+  border-color: oklch(0.72 0.19 165 / 0.08);
+  background: oklch(0.14 0.01 240 / 0.6);
+}
+
+/* Smooth transition for interactive cards — premium hover feedback */
 .card-lift {
   transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
 }
 
 .card-lift:hover {
-  transform: translateY(-1px);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 16px oklch(0.52 0.17 163 / 0.12);
+  border-color: oklch(0.52 0.17 163 / 0.3);
+}
+
+.dark .card-lift:hover {
+  box-shadow: 0 4px 16px oklch(0.72 0.19 165 / 0.15);
+  border-color: oklch(0.72 0.19 165 / 0.25);
 }
 
 /* Refined scrollbar for premium feel */

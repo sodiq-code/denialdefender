@@ -181,7 +181,9 @@ export default function Home() {
   return (
     <div className="min-h-screen flex flex-col bg-background premium-bg">
       {/* ── Header ──────────────────────────────────────────────── */}
-      <header className="border-b gradient-mesh">
+      <header className="gradient-mesh border-b border-emerald-200/40 dark:border-emerald-800/30">
+        {/* Premium emerald accent line */}
+        <div className="h-1 bg-gradient-to-r from-emerald-600 via-teal-500 to-emerald-600" />
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4">
           <div className="flex items-center justify-between flex-wrap gap-3">
             <div className="flex items-center gap-3">
@@ -685,7 +687,7 @@ Agents Online
       </main>
 
       {/* ── Footer ──────────────────────────────────────────────── */}
-      <footer className="border-t border-border/50 mt-auto">
+      <footer className="border-t border-emerald-200/30 dark:border-emerald-800/20 mt-auto bg-muted/30">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3">
           <div className="flex items-center justify-between text-xs text-muted-foreground flex-wrap gap-2">
             <span>DenialDefender &bull; Evidence-Grounded Denial Appeal Operations</span>
