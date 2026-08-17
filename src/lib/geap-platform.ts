@@ -12,14 +12,14 @@
  *    without compromising the demo."
  *
  * Gate results:
- *   ✅ Memory Bank   — PASSES (replaces custom wrapper with real GEAP Memory)
- *   ✅ Policies      — PASSES (replaces regex fallback with real GEAP Policies)
- *   ✅ Agent Registry — PASSES (replaces Map<> with real GEAP Registry)
- *   ❌ Deployments    — CUT (keep Cloud Run per blueprint)
- *   ❌ Sessions       — CUT (Firestore handles session state)
- *   ❌ Gateways       — CUT ("no visible demo payoff")
- *   ❌ MCP Servers    — CUT ("protocols without partners")
- *   💡 Agent Garden   — STUDY ONLY (reference architecture, zero integration)
+ *   [PASS] Memory Bank   — PASSES (replaces custom wrapper with real GEAP Memory)
+ *   [PASS] Policies      — PASSES (replaces regex fallback with real GEAP Policies)
+ *   [PASS] Agent Registry — PASSES (replaces Map<> with real GEAP Registry)
+ *   [CUT]  Deployments    — CUT (keep Cloud Run per blueprint)
+ *   [CUT]  Sessions       — CUT (Firestore handles session state)
+ *   [CUT]  Gateways       — CUT ("no visible demo payoff")
+ *   [CUT]  MCP Servers    — CUT ("protocols without partners")
+ *   [STUDY] Agent Garden   — STUDY ONLY (reference architecture, zero integration)
  *
  * The 3 adopted components each serve a NON-SUBSTITUTABLE role:
  *   - Memory:     Cross-case learning (second-case ranking change)

@@ -464,7 +464,7 @@ function mockPolicy(inputData: Record<string, unknown>): PolicyResult {
       "Ambiguity Doctrine: Policy gaps should be interpreted in favor of the insured",
       "Mental Health Parity: If applicable, parity requirements may apply",
     ],
-    overall_policy_assessment: `The policy analysis reveals 2 contradictions between ${carrier}'s medical policy and authoritative clinical guidelines. The strongest argument is that the payer's conservative therapy requirement exceeds the standard of care established by ACR 2024. Combined with the policy gap for this specific diagnosis-procedure combination, these findings substantially support the ${strategy} appeal strategy.`,
+    overall_policy_assessment: `The policy analysis reveals 2 contradictions between ${carrier}'s medical policy and authoritative clinical guidelines. The strongest argument is that the payer's conservative therapy requirement exceeds the standard of care established by ACR 2024. Combined with the policy gap for this specific diagnosis-procedure combination, these findings support the ${strategy} appeal strategy.`,
   };
 }
 

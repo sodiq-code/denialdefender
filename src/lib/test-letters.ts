@@ -378,7 +378,7 @@ export function formatReport(report: ValidationReport): string {
   lines.push('───────────────────────────────────────────────────────────');
 
   for (const result of report.results) {
-    const status = result.pass ? '✅ PASS' : '❌ FAIL';
+    const status = result.pass ? 'PASS' : 'FAIL';
     lines.push('');
     lines.push(`  ${status}  Letter ${result.letter_id} — ${result.payer} / ${result.denial_type}`);
     lines.push(`         Expected:  [${result.expected_clause_ids.join(', ')}]`);
@@ -399,7 +399,7 @@ export function formatReport(report: ValidationReport): string {
   lines.push('');
   lines.push(`  Passed:  ${report.passed}/${report.total_letters}`);
   lines.push(`  Failed:  ${report.failed}/${report.total_letters}`);
-  lines.push(`  Gate:    ${report.gate_passed ? '✅ PASSED (5/5)' : '❌ FAILED'}`);
+  lines.push(`  Gate:    ${report.gate_passed ? 'PASSED (5/5)' : 'FAILED'}`);
   lines.push('');
   lines.push('═══════════════════════════════════════════════════════════');
 

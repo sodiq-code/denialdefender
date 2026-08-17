@@ -179,19 +179,19 @@ export default function Home() {
   const avgProcessingTime = caseCount > 0 ? `${(3.2 - Math.min(1.5, caseCount * 0.01)).toFixed(1)} days` : '--';
 
   return (
-    <div className="min-h-screen flex flex-col bg-background">
+    <div className="min-h-screen flex flex-col bg-background premium-bg">
       {/* ── Header ──────────────────────────────────────────────── */}
-      <header className="border-b bg-card">
+      <header className="border-b gradient-mesh">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4">
           <div className="flex items-center justify-between flex-wrap gap-3">
             <div className="flex items-center gap-3">
-              <div className="flex items-center justify-center h-10 w-10 rounded-lg bg-emerald-600 text-white">
+              <div className="flex items-center justify-center h-10 w-10 rounded-xl bg-gradient-to-br from-emerald-600 to-teal-600 text-white shadow-sm shadow-emerald-600/20">
                 <Shield className="h-6 w-6" />
               </div>
               <div>
                 <h1 className="text-xl font-bold tracking-tight">DenialDefender</h1>
                 <p className="text-xs text-muted-foreground hidden sm:block">
-                  Evidence-Grounded Denial Appeal Automation
+                  Evidence-Grounded Denial Appeal Operations
                 </p>
               </div>
             </div>
@@ -199,7 +199,7 @@ export default function Home() {
             <div className="flex items-center gap-3">
               {connected ? (
                 <div className="flex items-center gap-1.5">
-                  <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                  <div className="h-2 w-2 rounded-full bg-emerald-500 animate-gentle-pulse" />
                   <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">Live</span>
                 </div>
               ) : (
@@ -229,7 +229,7 @@ export default function Home() {
       </header>
 
       {/* ── Main Content ────────────────────────────────────────── */}
-      <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 py-6">
+      <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 py-6 relative z-10">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="w-full sm:w-auto flex-wrap h-auto gap-1">
             <TabsTrigger value="dashboard" className="gap-1.5">
@@ -270,41 +270,41 @@ export default function Home() {
           <TabsContent value="dashboard" className="space-y-6">
             {/* Hero Metrics Row */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <Card className="border-emerald-200 dark:border-emerald-800">
+              <Card className="border-emerald-200/60 dark:border-emerald-800/40 card-lift glass-card">
                 <CardContent className="p-4">
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-xs font-medium text-muted-foreground">Total Cases</span>
-                    <Briefcase className="h-4 w-4 text-emerald-600" />
+                    <Briefcase className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
                   </div>
                   <p className="text-2xl font-bold">{caseCount}</p>
                   <p className="text-[10px] text-muted-foreground mt-1">Denial cases processed</p>
                 </CardContent>
               </Card>
-              <Card className="border-teal-200 dark:border-teal-800">
+              <Card className="border-teal-200/60 dark:border-teal-800/40 card-lift glass-card">
                 <CardContent className="p-4">
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-xs font-medium text-muted-foreground">Active Appeals</span>
-                    <FileText className="h-4 w-4 text-teal-600" />
+                    <FileText className="h-4 w-4 text-teal-600 dark:text-teal-400" />
                   </div>
                   <p className="text-2xl font-bold">{activeAppeals}</p>
                   <p className="text-[10px] text-muted-foreground mt-1">Currently in pipeline</p>
                 </CardContent>
               </Card>
-              <Card className="border-emerald-200 dark:border-emerald-800">
+              <Card className="border-emerald-200/60 dark:border-emerald-800/40 card-lift glass-card">
                 <CardContent className="p-4">
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-xs font-medium text-muted-foreground">Win Rate</span>
-                    <Percent className="h-4 w-4 text-emerald-600" />
+                    <Percent className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
                   </div>
                   <p className="text-2xl font-bold">{winRate > 0 ? `${winRate}%` : '--'}</p>
                   <p className="text-[10px] text-muted-foreground mt-1">Successful overturns</p>
                 </CardContent>
               </Card>
-              <Card className="border-amber-200 dark:border-amber-800">
+              <Card className="border-amber-200/60 dark:border-amber-800/40 card-lift glass-card">
                 <CardContent className="p-4">
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-xs font-medium text-muted-foreground">Avg Processing</span>
-                    <Clock className="h-4 w-4 text-amber-600" />
+                    <Clock className="h-4 w-4 text-amber-600 dark:text-amber-400" />
                   </div>
                   <p className="text-2xl font-bold">{avgProcessingTime}</p>
                   <p className="text-[10px] text-muted-foreground mt-1">End-to-end appeal time</p>
@@ -337,11 +337,11 @@ export default function Home() {
             </Card>
 
             {/* 8-Agent Fleet Status */}
-            <Card className="border-teal-200 dark:border-teal-800">
+            <Card className="border-teal-200/60 dark:border-teal-800/40 glass-card">
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-sm flex items-center gap-2">
-                    <Bot className="h-4 w-4 text-teal-600" />
+                    <Bot className="h-4 w-4 text-teal-600 dark:text-teal-400" />
                     Agent Fleet
                   </CardTitle>
                   <div className="flex items-center gap-2">
@@ -591,7 +591,7 @@ export default function Home() {
             <div className="flex flex-col sm:flex-row gap-3">
               <Button
                 size="lg"
-                className="flex-1 gap-2 bg-emerald-600 hover:bg-emerald-700 text-white"
+                className="flex-1 gap-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white shadow-sm shadow-emerald-600/20"
                 onClick={() => setActiveTab('new-appeal')}
               >
                 <PlusCircle className="h-5 w-5" />
@@ -600,7 +600,7 @@ export default function Home() {
               <Button
                 size="lg"
                 variant="outline"
-                className="flex-1 gap-2"
+                className="flex-1 gap-2 hover:bg-accent/50 transition-colors"
                 onClick={() => setActiveTab('cases')}
               >
                 <Briefcase className="h-5 w-5" />
@@ -685,10 +685,10 @@ export default function Home() {
       </main>
 
       {/* ── Footer ──────────────────────────────────────────────── */}
-      <footer className="border-t bg-card mt-auto">
+      <footer className="border-t border-border/50 mt-auto">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3">
           <div className="flex items-center justify-between text-xs text-muted-foreground flex-wrap gap-2">
-            <span>DenialDefender &bull; Evidence-Grounded Denial Appeal Automation</span>
+            <span>DenialDefender &bull; Evidence-Grounded Denial Appeal Operations</span>
             <div className="flex items-center gap-2">
               <Badge variant="outline" className="text-[10px] gap-1">
                 <Wifi className="h-2.5 w-2.5" />

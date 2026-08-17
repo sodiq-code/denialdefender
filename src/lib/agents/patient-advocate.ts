@@ -273,7 +273,7 @@ function buildRecommendedActions(
   actions.push('Submit the appeal with all supporting evidence before the deadline');
 
   if (deadlineDays !== null && deadlineDays <= 30) {
-    actions.push('⚠️ URGENT: Deadline approaching — prioritize immediate appeal submission');
+    actions.push('URGENT: Deadline approaching — prioritize immediate appeal submission');
   }
 
   return actions;
@@ -294,7 +294,7 @@ function generateEmpatheticNote(
     high: [
       'Facing a denial for a significant medical procedure can be overwhelming — we are here to help navigate this process.',
       'Many denials for major procedures are successfully appealed with proper documentation and clinical evidence.',
-      'We will build the strongest possible appeal to support your access to this treatment.',
+      'We will build a well-evidenced appeal to support your access to this treatment.',
     ],
     standard: [
       'Denials can be frustrating, but most are successfully appealed with the right supporting evidence.',

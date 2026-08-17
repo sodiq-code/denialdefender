@@ -495,7 +495,7 @@ export async function verifyPhiGuardGate(caseId: string): Promise<{
  */
 export const SENSITIVE_TEST_DOCUMENT = {
   id: 'sensitive-test-1',
-  label: '⚠️ Sensitive Document — Contains PHI (should be BLOCKED)',
+  label: 'SENSITIVE: Document contains PHI (should be BLOCKED)',
   text: `CONFIDENTIAL MEDICAL RECORDS
 
 Patient Name: Sarah Johnson
@@ -527,7 +527,7 @@ Address: 742 Evergreen Terrace, Springfield, IL 62704`,
  */
 export const SYNTHETIC_TEST_DOCUMENT = {
   id: 'synthetic-test-1',
-  label: '✅ Synthetic Case — No PHI (should be ALLOWED)',
+  label: 'CLEAN: Synthetic Case — No PHI (should be ALLOWED)',
   text: `MEDICARE
 Claims Adjudication Department
 

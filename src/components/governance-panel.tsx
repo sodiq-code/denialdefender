@@ -153,7 +153,7 @@ function DomainValidationTab() {
           </CardTitle>
           <CardDescription className="text-xs">
             Validates every agent output against 20 authoritative domain rules from CMS, AMA, and payer databases.
-            Stronger than one-time human review — continuous, automated, measurable.
+Continuous, automated, measurable — validates every agent output on every run.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -466,7 +466,7 @@ export default function Day11GovernancePanel() {
                     {/* Clean content */}
                     <div className={`p-3 rounded-lg border-2 ${demoResult.modelArmor.cleanResult.verdict === 'ALLOW' ? 'border-emerald-200 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-950' : 'border-red-200 bg-red-50'}`}>
                       <div className="flex items-center justify-between mb-1">
-                        <span className="text-xs font-medium">✅ Clean Policy Content</span>
+                        <span className="text-xs font-medium flex items-center gap-1"><CheckCircle2 className="h-3 w-3 text-emerald-500" /> Clean Policy Content</span>
                         <Badge variant={demoResult.modelArmor.cleanResult.verdict === 'ALLOW' ? 'default' : 'destructive'}>
                           {demoResult.modelArmor.cleanResult.verdict}
                         </Badge>
@@ -480,7 +480,7 @@ export default function Day11GovernancePanel() {
                     {/* Adversarial content */}
                     <div className={`p-3 rounded-lg border-2 ${demoResult.modelArmor.adversarialResult.verdict === 'BLOCK' ? 'border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-950' : 'border-amber-200 bg-amber-50'}`}>
                       <div className="flex items-center justify-between mb-1">
-                        <span className="text-xs font-medium">⚠️ Adversarial Content</span>
+                        <span className="text-xs font-medium flex items-center gap-1"><AlertTriangle className="h-3 w-3 text-amber-500" /> Adversarial Content</span>
                         <Badge variant={demoResult.modelArmor.adversarialResult.verdict === 'BLOCK' ? 'destructive' : 'default'}>
                           {demoResult.modelArmor.adversarialResult.verdict}
                         </Badge>

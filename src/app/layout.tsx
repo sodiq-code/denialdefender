@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "DenialDefender — Evidence-Grounded Denial Appeal Operations",
-  description: "8-agent ADK fleet that turns medical insurance claim denials into evidence-backed appeal letters. Evidence-Grounded, Human-Governed Autonomous Denial-Appeal Operations.",
+  description: "8-agent ADK fleet that turns medical insurance claim denials into evidence-backed appeal letters. Evidence-Grounded, Human-Governed Denial-Appeal Operations.",
   keywords: ["DenialDefender", "medical insurance", "denial appeal", "ADK", "AI agents", "evidence-based", "HITL"],
   authors: [{ name: "DenialDefender Team" }],
   icons: {

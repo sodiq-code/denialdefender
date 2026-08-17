@@ -735,7 +735,7 @@ export function SixAgentPipelinePanel() {
                       </td>
                       <td className="py-2 px-2">
                         <Badge variant="outline" className="text-[10px]">
-                          {br.severity === 'critical' ? '🔴' : br.severity === 'warning' ? '🟡' : 'ℹ️'} {br.severity}
+                          {br.severity === 'critical' ? 'CRIT' : br.severity === 'warning' ? 'WARN' : 'INFO'} {br.severity}
                         </Badge>
                       </td>
                     </tr>
