@@ -1,9 +1,10 @@
 /**
- * DenialDefender — Citation Classifier API (Day 12)
+ * DenialDefender — Citation Classifier API
  * GET: Run citation classifier demo
  * POST: Classify specific citations
  *
- * Tries the Gemini-backed agent fleet's citation agent first; falls back to local classifier.
+ * Tries the agent fleet's Gemini-backed citation agent first (when available);
+ * falls back to the local rule-based classifier (deterministic heuristics, no ML).
  * Response includes `dataSource: 'live' | 'mock'` to indicate which was used.
  */
 

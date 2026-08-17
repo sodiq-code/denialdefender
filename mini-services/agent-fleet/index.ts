@@ -158,7 +158,7 @@ Given evidence items and the drafted letter, return a JSON object:
   "citations": [{ "id": string, "source": string, "verified": boolean, "provenance_tier": string, "classification": string }],
   "all_verified": boolean,
   "unverified_count": number,
-  "model_used": "gemini-citation-classifier-v1"
+  "model_used": "gemini-3.5-flash"
 }
 Return ONLY the JSON object.`,
 };

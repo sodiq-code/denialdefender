@@ -1,19 +1,22 @@
 /**
- * DenialDefender — Citation Classifier (Day 12)
+ * DenialDefender — Citation Classifier
  *
- * Gemma-based local citation classifier for on-device credibility scoring.
- * Per Section 12 of the Ultimate Blueprint:
- * - "Only Gemma belongs in the core narrative (a local citation classifier
- *    is a credible on-device story)"
- * - "Integrate Gemma, Veo, and Lyria only if the bonus is actually available"
- * - Gemma citation classifier = credible on-device credibility story
+ * Rule-based citation credibility scorer using weighted heuristic dimensions.
  *
- * This classifier runs locally (no external API call) and scores evidence
- * citations on credibility dimensions:
- * - Source authority (government > peer-reviewed > commercial)
- * - Recency (current > stale)
- * - Specificity (clause-level > section-level > document-level)
- * - Corroboration (multiple sources > single source)
+ * This is a deterministic, rule-based classifier (NOT an ML model) that scores
+ * evidence citations on credibility using curated authority maps and weighted
+ * heuristics. It runs locally with zero external API calls and produces
+ * reproducible scores for any identical input.
+ *
+ * Scoring dimensions:
+ * - Source authority (government > peer-reviewed > commercial) — weight 0.35
+ * - Specificity (clause-level > section-level > document-level) — weight 0.25
+ * - Recency (current > stale) — weight 0.20
+ * - Corroboration (multiple sources > single source) — weight 0.20
+ *
+ * For ML-backed citation analysis, the agent fleet's citation agent calls
+ * Gemini 3.5 Flash via the /agents/citation endpoint (when GEMINI_API_KEY
+ * is set). This local classifier serves as the fast, zero-dependency fallback.
  */
 
 // ─── Types ────────────────────────────────────────────────────────────────
@@ -51,7 +54,7 @@ export interface CitationClassificationResult {
     averageScore: number;
     recommendedForAppeal: number;
   };
-  /** Gemma model used (narrative only, per blueprint) */
+  /** Classifier identifier — reports actual classifier type (rule-based or gemini-backed) */
   modelUsed: string;
   /** Processing time in ms */
   latencyMs: number;
@@ -239,7 +242,8 @@ export interface ClassifyCitationInput {
 
 /**
  * Classify a single citation for credibility.
- * This is the Gemma-based local classifier — runs on-device, no external API.
+ * Pure rule-based scorer — deterministic, no ML model, no external API.
+ * Scores are computed from weighted heuristics (see module-level docs).
  */
 export function classifyCitation(input: ClassifyCitationInput): CitationScore {
   const sourceAuthority = scoreSourceAuthority(input.source);
@@ -321,7 +325,7 @@ export function classifyCitations(inputs: ClassifyCitationInput[]): CitationClas
       averageScore,
       recommendedForAppeal,
     },
-    modelUsed: 'gemma-citation-classifier-v1 (on-device)',
+    modelUsed: 'rule-based-citation-classifier-v1',
     latencyMs: Date.now() - startMs,
   };
 }
