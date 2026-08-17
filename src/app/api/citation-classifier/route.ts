@@ -10,8 +10,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { classifyCitations, runCitationClassifierDemo, type ClassifyCitationInput } from '@/lib/citation-classifier';
 
-const FLEET_URL = 'http://localhost:3004';
-const FLEET_TIMEOUT_MS = 10_000;
+const FLEET_URL = process.env.AGENT_FLEET_URL || 'http://localhost:3004';
+const FLEET_TIMEOUT_MS = 30_000;
 
 export async function GET() {
   try {

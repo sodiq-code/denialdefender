@@ -2,20 +2,20 @@
  * DenialDefender Agent Fleet — TypeScript/Bun Mini-Service.
  *
  * A robust Bun HTTP server on port 3004 that:
- *  - Handles simple agent requests directly with mock data (instant responses)
- *  - For workflow requests, spawns a Python subprocess when GEMINI_API_KEY is set,
- *    or returns mock data when in mock mode
+ *  - Handles agent requests via Gemini LLM when GEMINI_API_KEY is set,
+ *    falling back to mock data when Gemini is unavailable or in mock mode
+ *  - For workflow requests, runs agents sequentially via Gemini (or mock)
  *  - Provides CORS headers, in-memory workflow store, and GCP status endpoint
  *
  * Endpoints:
  *  GET  /health                    — Health check
- *  POST /agents/triage             — Triage Agent (mock)
- *  POST /agents/evidence           — Evidence Agent (mock)
- *  POST /agents/drafter            — Draft Agent (mock)
- *  POST /agents/reviewer           — Reviewer Agent (mock)
- *  POST /agents/coder              — Medical Coder Agent (mock)
- *  POST /agents/policy             — Policy Analyst Agent (mock)
- *  POST /agents/citation           — Citation Agent (mock)
+ *  POST /agents/triage             — Triage Agent
+ *  POST /agents/evidence           — Evidence Agent
+ *  POST /agents/drafter            — Draft Agent
+ *  POST /agents/reviewer           — Reviewer Agent
+ *  POST /agents/coder              — Medical Coder Agent
+ *  POST /agents/policy             — Policy Analyst Agent
+ *  POST /agents/citation           — Citation Agent
  *  POST /agents/orchestrator       — Orchestrator (delegates to workflow)
  *  POST /workflow/run              — Run full appeal workflow
  *  GET  /workflow/status/:case_id  — Get workflow status
@@ -23,6 +23,7 @@
  */
 
 import { randomUUID } from "crypto";
+import { getLLM } from "./llm_backend";
 
 // ─── Configuration ──────────────────────────────────────────────────────
 
@@ -42,6 +43,125 @@ const CORS_ORIGINS = [
   "http://localhost:3004",
   "http://127.0.0.1:3004",
 ];
+
+// ─── Agent System Prompts ───────────────────────────────────────────────
+
+const AGENT_PROMPTS: Record<string, string> = {
+  triage: `You are the Denial Triage Agent for DenialDefender, a medical insurance denial appeal system. Your job is to classify denial letters and determine the appeal strategy.
+
+Given the denial information, you must return a JSON object with this exact structure:
+{
+  "classification": "APPEALABLE" | "PARTIALLY_APPEALABLE" | "NOT_APPEALABLE",
+  "confidence": number (0-1),
+  "factors": string[],
+  "strategy": "MEDICAL_NECESSITY" | "CODING_ERROR" | "PRIOR_AUTH" | "OUT_OF_NETWORK" | "EXPERIMENTAL",
+  "reasoning": string,
+  "appeal_urgency": "high" | "medium" | "low",
+  "estimated_success_rate": number (0-1),
+  "recommended_next_steps": string[]
+}
+
+Key denial codes:
+- CO-50/CO-236: Non-covered service → MEDICAL_NECESSITY strategy, APPEALABLE
+- CO-4: Code inconsistency → CODING_ERROR strategy, PARTIALLY_APPEALABLE
+- CO-197: Precertification/authorization not obtained → PRIOR_AUTH strategy
+- PR-1: Out of network → OUT_OF_NETWORK strategy
+- CO-11: Diagnosis inconsistent with procedure → CODING_ERROR strategy
+
+Always classify accurately. Return ONLY the JSON object, no other text.`,
+
+  evidence: `You are the Evidence Assembly Agent for DenialDefender. Your job is to gather and assess clinical evidence that supports a medical appeal.
+
+Given the denial information and triage results, return a JSON object:
+{
+  "clinical_question": string,
+  "evidence_items": [
+    {
+      "id": string,
+      "title": string,
+      "description": string,
+      "source": string,
+      "provenance_tier": "TIER_1_SYSTEMATIC_REVIEW" | "TIER_2_RCT" | "TIER_3_OBSERVATIONAL" | "TIER_4_GUIDELINE" | "TIER_5_EXPERT_OPINION",
+      "relevance_score": number (0-1),
+      "supports_appeal": boolean,
+      "key_findings": string[],
+      "year": number
+    }
+  ],
+  "guideline_references": string[],
+  "overall_evidence_strength": "strong" | "moderate" | "weak",
+  "evidence_summary": string,
+  "gaps": string[]
+}
+
+Provide realistic evidence items based on standard medical evidence hierarchies. Return ONLY the JSON object.`,
+
+  drafter: `You are the Letter Drafting Agent for DenialDefender. Your job is to compose a complete, citation-backed appeal letter in payer-required format.
+
+Given the denial info, triage, evidence, and policy research, return a JSON object:
+{
+  "appeal_letter": string (full formatted letter),
+  "sections": [{ "title": string, "content": string }],
+  "citations_used": [{ "number": number, "id": string, "provenance_tier": string, "short_ref": string }],
+  "word_count": number,
+  "format_compliance": { "payer_format": boolean, "required_sections_present": boolean, "deadline_mentioned": boolean },
+  "tone_score": number (0-1),
+  "quality_flags": string[]
+}
+
+The letter MUST have these sections: HEADER, RE:, INTRODUCTION, DENIAL_SUMMARY, CLINICAL_RATIONALE, EVIDENCE_CITATIONS, POLICY_ARGUMENTS, CONCLUSION, SIGNATURE.
+Never make unsupported claims. Never say "will win". Return ONLY the JSON object.`,
+
+  reviewer: `You are the Quality Review Agent for DenialDefender. Your job is to independently validate the appeal letter against payer requirements, checking for completeness, citations, deadlines, and risk flags.
+
+Given the drafted letter and case info, return a JSON object:
+{
+  "quality_score": number (0-5),
+  "checks": [
+    { "name": string, "passed": boolean, "detail": string }
+  ],
+  "flags": [{ "type": string, "severity": "high"|"medium"|"low", "description": string }],
+  "recommendations": string[],
+  "ready_for_submission": boolean
+}
+
+Run these 7 checks: (1) All citations resolve to real sources, (2) Every claim traced to evidence, (3) Policy supports argument, (4) Deadline correct, (5) No medical advice, (6) No unsupported claims, (7) Payer format satisfied. Return ONLY the JSON object.`,
+
+  coder: `You are the Medical Coder Agent for DenialDefender. You validate CPT and ICD-10 codes in denial letters.
+
+Given denial info, return a JSON object:
+{
+  "cpt_valid": boolean,
+  "icd10_valid": boolean,
+  "code_description": string,
+  "code_issues": string[],
+  "suggested_corrections": string[],
+  "coding_confidence": number (0-1)
+}
+Return ONLY the JSON object.`,
+
+  policy: `You are the Policy Research Agent for DenialDefender. You retrieve payer-specific appeal policies and applicable patient protections.
+
+Given the payer name and denial category, return a JSON object:
+{
+  "payer_policies": [{ "clause_id": string, "title": string, "text": string, "supports_appeal": boolean }],
+  "patient_protections": [{ "source": string, "clause": string, "text": string }],
+  "strongest_lever": string,
+  "policy_summary": string
+}
+Return ONLY the JSON object.`,
+
+  citation: `You are the Citation Agent for DenialDefender. You classify and verify citations in appeal letters.
+
+Given evidence items and the drafted letter, return a JSON object:
+{
+  "citations": [{ "id": string, "source": string, "verified": boolean, "provenance_tier": string, "classification": string }],
+  "all_verified": boolean,
+  "unverified_count": number,
+  "model_used": "gemini-citation-classifier-v1"
+}
+Return ONLY the JSON object.`,
+};
 
 // ─── In-Memory Workflow Store ───────────────────────────────────────────
 
@@ -758,49 +878,118 @@ function mockWorkflow(inputData: Record<string, unknown>) {
   };
 }
 
-// ─── Python Subprocess Runner ───────────────────────────────────────────
+// ─── Gemini-Powered Agent Runner ────────────────────────────────────────
 
-async function runPythonWorkflow(inputData: Record<string, unknown>): Promise<Record<string, unknown>> {
-  const pythonScript = `
-import asyncio, json, sys
-from agents.orchestrator import OrchestratorAgent
-async def main():
-    agent = OrchestratorAgent()
-    result = await agent.run(json.loads(sys.argv[1]))
-    print(json.dumps(result))
-asyncio.run(main())
-`;
-
-  const proc = Bun.spawn(["python3", "-c", pythonScript, JSON.stringify(inputData)], {
-    cwd: "/home/z/my-project/mini-services/agent-fleet",
-    stdout: "pipe",
-    stderr: "pipe",
-  });
-
-  // Set timeout
-  const timeoutPromise = new Promise<never>((_, reject) => {
-    setTimeout(() => {
-      proc.kill();
-      reject(new Error("Python subprocess timed out after 60 seconds"));
-    }, SUBPROCESS_TIMEOUT_MS);
-  });
+async function runAgentWithGemini(
+  agentName: string,
+  systemPrompt: string,
+  inputData: Record<string, unknown>,
+  mockFn: (input: Record<string, unknown>) => Record<string, unknown>
+): Promise<{ data: Record<string, unknown>; mode: 'live' | 'mock'; tokensUsed?: number }> {
+  if (MOCK_MODE) {
+    return { data: mockFn(inputData), mode: 'mock' };
+  }
 
   try {
-    const exitCode = await Promise.race([proc.exited, timeoutPromise]);
-
-    if (exitCode !== 0) {
-      const stderr = await new Response(proc.stderr).text();
-      console.error(`[workflow] Python subprocess exited with code ${exitCode}: ${stderr}`);
-      throw new Error(`Python subprocess failed with exit code ${exitCode}`);
+    const llm = getLLM();
+    if (!llm.geminiAvailable) {
+      console.warn(`[${agentName}] Gemini not available, falling back to mock`);
+      return { data: mockFn(inputData), mode: 'mock' };
     }
 
-    const stdout = await new Response(proc.stdout).text();
-    return JSON.parse(stdout) as Record<string, unknown>;
+    const userPrompt = JSON.stringify(inputData, null, 2);
+    const response = await llm.generate(userPrompt, {
+      systemPrompt,
+      temperature: 0.3,
+      maxTokens: 4096,
+    });
+
+    if (!response.success || !response.content) {
+      console.warn(`[${agentName}] Gemini call failed: ${response.error}, falling back to mock`);
+      return { data: mockFn(inputData), mode: 'mock' };
+    }
+
+    // Parse JSON from response (handle ```json blocks)
+    let jsonStr = response.content.trim();
+    if (jsonStr.startsWith('```json')) {
+      jsonStr = jsonStr.slice(7);
+    }
+    if (jsonStr.startsWith('```')) {
+      jsonStr = jsonStr.slice(3);
+    }
+    if (jsonStr.endsWith('```')) {
+      jsonStr = jsonStr.slice(0, -3);
+    }
+    jsonStr = jsonStr.trim();
+
+    const data = JSON.parse(jsonStr) as Record<string, unknown>;
+    console.log(`[${agentName}] Gemini call succeeded (${response.tokensUsed} tokens)`);
+    return { data, mode: 'live', tokensUsed: response.tokensUsed };
   } catch (err) {
-    console.error(`[workflow] Python subprocess error: ${err}`);
-    // Fall back to mock data
-    return mockWorkflow(inputData);
+    console.warn(`[${agentName}] Gemini parsing failed: ${err}, falling back to mock`);
+    return { data: mockFn(inputData), mode: 'mock' };
   }
+}
+
+// ─── Live Workflow Runner (replaces Python subprocess) ──────────────────
+
+async function runLiveWorkflow(inputData: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const start = Date.now();
+  const traces: Record<string, unknown>[] = [];
+  let currentData = { ...inputData };
+
+  // Step 1: Triage
+  const triageResult = await runAgentWithGemini("triage", AGENT_PROMPTS.triage, currentData, mockTriage);
+  currentData.triage = triageResult.data;
+  traces.push({ agent: "triage", mode: triageResult.mode, elapsed: elapsedSince(start) });
+
+  // Step 2: Evidence Assembly
+  const evidenceStart = Date.now();
+  const evidenceResult = await runAgentWithGemini("evidence", AGENT_PROMPTS.evidence, currentData, mockEvidence);
+  currentData.evidence = evidenceResult.data;
+  traces.push({ agent: "evidence", mode: evidenceResult.mode, elapsed: elapsedSince(evidenceStart) });
+
+  // Step 3: Policy Research
+  const policyStart = Date.now();
+  const policyResult = await runAgentWithGemini("policy", AGENT_PROMPTS.policy, currentData, mockPolicy);
+  currentData.policy = policyResult.data;
+  traces.push({ agent: "policy", mode: policyResult.mode, elapsed: elapsedSince(policyStart) });
+
+  // Step 4: Letter Drafting
+  const draftStart = Date.now();
+  const draftResult = await runAgentWithGemini("drafter", AGENT_PROMPTS.drafter, currentData, mockDraft);
+  currentData.draft = draftResult.data;
+  traces.push({ agent: "drafter", mode: draftResult.mode, elapsed: elapsedSince(draftStart) });
+
+  // Step 5: Quality Review
+  const reviewStart = Date.now();
+  const reviewResult = await runAgentWithGemini("reviewer", AGENT_PROMPTS.reviewer, currentData, mockReviewer);
+  currentData.review = reviewResult.data;
+  traces.push({ agent: "reviewer", mode: reviewResult.mode, elapsed: elapsedSince(reviewStart) });
+
+  // Step 6: Citation Classification
+  const citationStart = Date.now();
+  const citationResult = await runAgentWithGemini("citation", AGENT_PROMPTS.citation, currentData, mockCitation);
+  currentData.citations = citationResult.data;
+  traces.push({ agent: "citation", mode: citationResult.mode, elapsed: elapsedSince(citationStart) });
+
+  const anyLive = traces.some(t => t.mode === 'live');
+  const allModes = traces.map(t => t.mode);
+
+  return {
+    workflow_id: randomUUID(),
+    status: "completed",
+    agents_run: traces.length,
+    modes: allModes,
+    overall_mode: anyLive ? 'live' : 'mock',
+    result: currentData,
+    _trace: {
+      trace_id: randomUUID(),
+      timestamp: nowISO(),
+      total_elapsed_seconds: elapsedSince(start),
+      agents: traces,
+    },
+  };
 }
 
 // ─── GCP Status Check ──────────────────────────────────────────────────
@@ -1001,6 +1190,7 @@ async function handleRequest(req: Request): Promise<Response> {
         service: SERVICE_NAME,
         version: SERVICE_VERSION,
         mock_mode: MOCK_MODE,
+        gemini_available: getLLM().geminiAvailable,
         model: GEMINI_MODEL,
         port: PORT,
         runtime: "bun",
@@ -1013,12 +1203,12 @@ async function handleRequest(req: Request): Promise<Response> {
     if (method === "POST" && path === "/agents/triage") {
       const body = await parseBody<Record<string, unknown>>(req);
       const start = Date.now();
-      const data = mockTriage(body);
+      const { data, mode, tokensUsed } = await runAgentWithGemini("triage", AGENT_PROMPTS.triage, body, mockTriage);
       return jsonResponse({
         agent: "triage",
         status: "success",
         data,
-        trace: { agent: "triage", trace_id: randomUUID(), elapsed_seconds: elapsedSince(start), timestamp: nowISO(), mode: "mock" },
+        trace: { agent: "triage", trace_id: randomUUID(), elapsed_seconds: elapsedSince(start), timestamp: nowISO(), mode, tokensUsed },
       });
     }
 
@@ -1026,12 +1216,12 @@ async function handleRequest(req: Request): Promise<Response> {
     if (method === "POST" && path === "/agents/evidence") {
       const body = await parseBody<Record<string, unknown>>(req);
       const start = Date.now();
-      const data = mockEvidence(body);
+      const { data, mode, tokensUsed } = await runAgentWithGemini("evidence", AGENT_PROMPTS.evidence, body, mockEvidence);
       return jsonResponse({
         agent: "evidence",
         status: "success",
         data,
-        trace: { agent: "evidence", trace_id: randomUUID(), elapsed_seconds: elapsedSince(start), timestamp: nowISO(), mode: "mock" },
+        trace: { agent: "evidence", trace_id: randomUUID(), elapsed_seconds: elapsedSince(start), timestamp: nowISO(), mode, tokensUsed },
       });
     }
 
@@ -1039,12 +1229,12 @@ async function handleRequest(req: Request): Promise<Response> {
     if (method === "POST" && path === "/agents/drafter") {
       const body = await parseBody<Record<string, unknown>>(req);
       const start = Date.now();
-      const data = mockDraft(body);
+      const { data, mode, tokensUsed } = await runAgentWithGemini("drafter", AGENT_PROMPTS.drafter, body, mockDraft);
       return jsonResponse({
         agent: "drafter",
         status: "success",
         data,
-        trace: { agent: "drafter", trace_id: randomUUID(), elapsed_seconds: elapsedSince(start), timestamp: nowISO(), mode: "mock" },
+        trace: { agent: "drafter", trace_id: randomUUID(), elapsed_seconds: elapsedSince(start), timestamp: nowISO(), mode, tokensUsed },
       });
     }
 
@@ -1052,12 +1242,12 @@ async function handleRequest(req: Request): Promise<Response> {
     if (method === "POST" && path === "/agents/reviewer") {
       const body = await parseBody<Record<string, unknown>>(req);
       const start = Date.now();
-      const data = mockReviewer(body);
+      const { data, mode, tokensUsed } = await runAgentWithGemini("reviewer", AGENT_PROMPTS.reviewer, body, mockReviewer);
       return jsonResponse({
         agent: "reviewer",
         status: "success",
         data,
-        trace: { agent: "reviewer", trace_id: randomUUID(), elapsed_seconds: elapsedSince(start), timestamp: nowISO(), mode: "mock" },
+        trace: { agent: "reviewer", trace_id: randomUUID(), elapsed_seconds: elapsedSince(start), timestamp: nowISO(), mode, tokensUsed },
       });
     }
 
@@ -1065,12 +1255,12 @@ async function handleRequest(req: Request): Promise<Response> {
     if (method === "POST" && path === "/agents/coder") {
       const body = await parseBody<Record<string, unknown>>(req);
       const start = Date.now();
-      const data = mockCoder(body);
+      const { data, mode, tokensUsed } = await runAgentWithGemini("coder", AGENT_PROMPTS.coder, body, mockCoder);
       return jsonResponse({
         agent: "coder",
         status: "success",
         data,
-        trace: { agent: "coder", trace_id: randomUUID(), elapsed_seconds: elapsedSince(start), timestamp: nowISO(), mode: "mock" },
+        trace: { agent: "coder", trace_id: randomUUID(), elapsed_seconds: elapsedSince(start), timestamp: nowISO(), mode, tokensUsed },
       });
     }
 
@@ -1078,12 +1268,12 @@ async function handleRequest(req: Request): Promise<Response> {
     if (method === "POST" && path === "/agents/policy") {
       const body = await parseBody<Record<string, unknown>>(req);
       const start = Date.now();
-      const data = mockPolicy(body);
+      const { data, mode, tokensUsed } = await runAgentWithGemini("policy", AGENT_PROMPTS.policy, body, mockPolicy);
       return jsonResponse({
         agent: "policy",
         status: "success",
         data,
-        trace: { agent: "policy", trace_id: randomUUID(), elapsed_seconds: elapsedSince(start), timestamp: nowISO(), mode: "mock" },
+        trace: { agent: "policy", trace_id: randomUUID(), elapsed_seconds: elapsedSince(start), timestamp: nowISO(), mode, tokensUsed },
       });
     }
 
@@ -1091,12 +1281,12 @@ async function handleRequest(req: Request): Promise<Response> {
     if (method === "POST" && path === "/agents/citation") {
       const body = await parseBody<Record<string, unknown>>(req);
       const start = Date.now();
-      const data = mockCitation(body);
+      const { data, mode, tokensUsed } = await runAgentWithGemini("citation", AGENT_PROMPTS.citation, body, mockCitation);
       return jsonResponse({
         agent: "citation",
         status: "success",
         data,
-        trace: { agent: "citation", trace_id: randomUUID(), elapsed_seconds: elapsedSince(start), timestamp: nowISO(), mode: "mock" },
+        trace: { agent: "citation", trace_id: randomUUID(), elapsed_seconds: elapsedSince(start), timestamp: nowISO(), mode, tokensUsed },
       });
     }
 
@@ -1110,7 +1300,7 @@ async function handleRequest(req: Request): Promise<Response> {
       if (MOCK_MODE) {
         result = mockWorkflow(body);
       } else {
-        result = await runPythonWorkflow(body);
+        result = await runLiveWorkflow(body);
       }
 
       // Store workflow status
@@ -1137,7 +1327,7 @@ async function handleRequest(req: Request): Promise<Response> {
       if (MOCK_MODE) {
         result = mockWorkflow(body);
       } else {
-        result = await runPythonWorkflow(body);
+        result = await runLiveWorkflow(body);
       }
 
       // Store workflow status

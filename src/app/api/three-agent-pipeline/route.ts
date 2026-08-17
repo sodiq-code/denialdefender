@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { runThreeAgentPipeline } from '@/lib/three-agent-pipeline';
 import { SAMPLE_DENIAL_LETTERS } from '@/lib/vertical-slice-agent';
 
-const FLEET_URL = 'http://localhost:3004';
-const FLEET_TIMEOUT_MS = 10_000;
+const FLEET_URL = process.env.AGENT_FLEET_URL || 'http://localhost:3004';
+const FLEET_TIMEOUT_MS = 30_000;
 
 /**
  * POST /api/three-agent-pipeline — Run the three-agent pipeline

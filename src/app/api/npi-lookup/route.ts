@@ -11,10 +11,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { lookupNPI, searchNPI, runNPIDemo } from '@/lib/npi-registry';
 
-const FLEET_URL = 'http://localhost:3004';
+const FLEET_URL = process.env.AGENT_FLEET_URL || 'http://localhost:3004';
 const NPI_REGISTRY_BASE = 'https://npiregistry.cms.hhs.gov/api/2.1';
 const API_TIMEOUT_MS = 8_000;
-const FLEET_TIMEOUT_MS = 10_000;
+const FLEET_TIMEOUT_MS = 30_000;
 
 /**
  * Try the real NPI Registry API directly for a provider lookup.

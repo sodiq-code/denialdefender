@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { runSixAgentPipeline } from '@/lib/six-agent-pipeline';
 
-const FLEET_URL = 'http://localhost:3004';
-const FLEET_TIMEOUT_MS = 10_000;
+// Fleet URL: use environment variable on Cloud Run, localhost in dev
+const FLEET_URL = process.env.AGENT_FLEET_URL || 'http://localhost:3004';
+const FLEET_TIMEOUT_MS = 30_000; // Increased for Gemini API calls
 
 /**
  * POST /api/six-agent-pipeline — Run the six-agent pipeline
@@ -154,7 +155,14 @@ export async function POST(request: NextRequest) {
         clearTimeout(reviewTimeout);
         const reviewData = reviewRes.ok ? await reviewRes.json() : { data: null };
 
-        dataSource = 'live';
+        // Determine dataSource from fleet traces — 'live' only if any agent used Gemini
+        const triageMode = triageData.trace?.mode || 'mock';
+        const anyLive = triageMode === 'live' ||
+          (policyData.trace?.mode === 'live') ||
+          (evidenceData.trace?.mode === 'live') ||
+          (draftData.trace?.mode === 'live') ||
+          (reviewData.trace?.mode === 'live');
+        dataSource = anyLive ? 'live' : 'mock';
         result = {
           advocate: {
             caseFraming: {
