@@ -16,6 +16,7 @@ const EvidenceCorpusTab = dynamic(() => import('@/components/evidence-corpus-tab
 const SixAgentPipelinePanel = dynamic(() => import('@/components/six-agent-pipeline-panel').then(m => ({ default: m.SixAgentPipelinePanel })), { ssr: false, loading: () => <div className="p-8 text-center text-muted-foreground">Loading pipeline...</div> });
 const GovernancePanel = dynamic(() => import('@/components/governance-panel'), { ssr: false, loading: () => <div className="p-8 text-center text-muted-foreground">Loading governance...</div> });
 const OutcomeLearningPanel = dynamic(() => import('@/components/outcome-learning-panel').then(m => ({ default: m.OutcomeLearningPanel })), { ssr: false, loading: () => <div className="p-8 text-center text-muted-foreground">Loading outcome learning...</div> });
+const AblationPanel = dynamic(() => import('@/components/ablation-panel').then(m => ({ default: m.AblationPanel })), { ssr: false, loading: () => <div className="p-8 text-center text-muted-foreground">Loading ablation experiment...</div> });
 const PlatformStatusCard = dynamic(() => import('@/components/platform-status-card'), { ssr: false });
 import {
   Shield,
@@ -55,6 +56,7 @@ import {
   Clock,
   Percent,
   Briefcase,
+  FlaskConical,
 } from 'lucide-react';
 
 interface AgentFleetHealth {
@@ -257,6 +259,10 @@ export default function Home() {
             <TabsTrigger value="learning" className="gap-1.5">
               <Brain className="h-4 w-4" />
               Learning
+            </TabsTrigger>
+            <TabsTrigger value="ablation" className="gap-1.5">
+              <FlaskConical className="h-4 w-4" />
+              Ablation
             </TabsTrigger>
           </TabsList>
 
@@ -669,6 +675,11 @@ export default function Home() {
           {/* ── Outcome Learning Tab ─────────────────────────────── */}
           <TabsContent value="learning" className="space-y-6">
             <OutcomeLearningPanel />
+          </TabsContent>
+
+          {/* ── Ablation Tab ──────────────────────────────────────── */}
+          <TabsContent value="ablation" className="space-y-6">
+            <AblationPanel />
           </TabsContent>
         </Tabs>
       </main>
