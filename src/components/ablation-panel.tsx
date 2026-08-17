@@ -250,10 +250,10 @@ export function AblationPanel() {
             <div className="space-y-1">
               <CardTitle className="flex items-center gap-2 text-xl">
                 <FlaskConical className="h-5 w-5 text-teal-600 dark:text-teal-400" />
-                Agent Ablation Experiment — Table 7.1
+                Agent Contribution Analysis
               </CardTitle>
               <CardDescription className="text-sm">
-                Proving each agent&apos;s contribution is measurable, not decorative
+                Measuring each agent's measurable contribution to appeal quality
               </CardDescription>
             </div>
             <div className="flex items-center gap-2 flex-wrap">
@@ -363,13 +363,13 @@ export function AblationPanel() {
         </Card>
       )}
 
-      {/* ── 2. Table 7.1 — The Core Table ─────────────────────────── */}
+      {/* ── 2. Agent Contribution Results Table ──────────────── */}
       {experiment && !loading && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
               <BarChart3 className="h-4 w-4 text-teal-600 dark:text-teal-400" />
-              Table 7.1 — Agent Ablation Results
+              Agent Contribution Results
             </CardTitle>
             <CardDescription>
               Each row is a topology. Each cell is a measurement, not a claim.
@@ -572,7 +572,7 @@ export function AblationPanel() {
                 ) : (
                   <XCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
                 )}
-                Ablation Gate
+                Quality Gate
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">

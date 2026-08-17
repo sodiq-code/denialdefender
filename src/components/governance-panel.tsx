@@ -376,7 +376,7 @@ export default function Day11GovernancePanel() {
             <div>
               <CardTitle className="flex items-center gap-2">
                 <Scale className="h-5 w-5 text-emerald-600" />
-                Day 11: Governance Vertex Complete
+                Governance Framework Complete
               </CardTitle>
               <CardDescription className="mt-1">
                 The third pillar of the triad — PHI Guard · Model Armor · Agent Identity · Agent Observability
@@ -404,36 +404,36 @@ export default function Day11GovernancePanel() {
       {/* ── Governance Vertex Flow Diagram ── */}
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-sm font-medium">Figure 5.1 — Governance Vertex (Complete)</CardTitle>
+          <CardTitle className="text-sm font-medium">Governance Framework</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="flex items-center justify-center gap-2 flex-wrap py-3">
             <div className="flex flex-col items-center p-3 rounded-lg border-2 border-rose-200 bg-rose-50 dark:border-rose-800 dark:bg-rose-950 min-w-[100px]">
               <ShieldAlert className="h-5 w-5 text-rose-600 mb-1" />
               <span className="text-xs font-medium">PHI Guard</span>
-              <Badge variant="outline" className="text-[10px] mt-1">Day 10</Badge>
+              <Badge variant="outline" className="text-[10px] mt-1">Active</Badge>
             </div>
             <span className="text-muted-foreground">→</span>
             <div className="flex flex-col items-center p-3 rounded-lg border-2 border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950 min-w-[100px]">
               <ShieldCheck className="h-5 w-5 text-amber-600 mb-1" />
               <span className="text-xs font-medium">Model Armor</span>
-              <Badge variant="outline" className="text-[10px] mt-1">Day 11</Badge>
+              <Badge variant="outline" className="text-[10px] mt-1">Active</Badge>
             </div>
             <span className="text-muted-foreground">→</span>
             <div className="flex flex-col items-center p-3 rounded-lg border-2 border-violet-200 bg-violet-50 dark:border-violet-800 dark:bg-violet-950 min-w-[100px]">
               <Fingerprint className="h-5 w-5 text-violet-600 mb-1" />
               <span className="text-xs font-medium">Agent Identity</span>
-              <Badge variant="outline" className="text-[10px] mt-1">Day 11</Badge>
+              <Badge variant="outline" className="text-[10px] mt-1">Active</Badge>
             </div>
             <span className="text-muted-foreground">→</span>
             <div className="flex flex-col items-center p-3 rounded-lg border-2 border-emerald-200 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-950 min-w-[100px]">
               <Eye className="h-5 w-5 text-emerald-600 mb-1" />
               <span className="text-xs font-medium">Observability</span>
-              <Badge variant="outline" className="text-[10px] mt-1">Day 11</Badge>
+              <Badge variant="outline" className="text-[10px] mt-1">Active</Badge>
             </div>
           </div>
           <p className="text-xs text-muted-foreground text-center mt-2">
-            Governance is co-equal with Evidence and Agents — not a security afterthought tacked onto a working pipeline.
+            Governance is integrated with Evidence and Agents to ensure safety and accountability throughout the pipeline.
           </p>
         </CardContent>
       </Card>
@@ -441,15 +441,15 @@ export default function Day11GovernancePanel() {
       {/* ── Sub-Tabs ── */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="w-full sm:w-auto">
-          <TabsTrigger value="overview">Demo Moment</TabsTrigger>
+          <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="armor">Model Armor</TabsTrigger>
           <TabsTrigger value="identity">Agent Identity</TabsTrigger>
           <TabsTrigger value="observability">Observability</TabsTrigger>
-          <TabsTrigger value="gate">Gate Verify</TabsTrigger>
-          <TabsTrigger value="domain">Domain Rules</TabsTrigger>
+          <TabsTrigger value="gate">Verification</TabsTrigger>
+          <TabsTrigger value="domain">Validation Rules</TabsTrigger>
         </TabsList>
 
-        {/* ── Demo Moment Tab ── */}
+        {/* ── Overview Tab ── */}
         <TabsContent value="overview" className="space-y-4">
           {demoResult ? (
             <>
@@ -756,7 +756,7 @@ export default function Day11GovernancePanel() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <div className="p-2 rounded border bg-red-50 dark:bg-red-950">
                   <h5 className="text-[10px] font-semibold text-red-700 dark:text-red-400 mb-1">
-                    Blueprint Mandate: Prevention
+                    Security Requirement: Prevention
                   </h5>
                   <ul className="text-[10px] space-y-0.5">
                     <li>• Quality Review → write appeal: <strong>DENIED</strong> (prevents self-approval)</li>
@@ -765,7 +765,7 @@ export default function Day11GovernancePanel() {
                 </div>
                 <div className="p-2 rounded border bg-emerald-50 dark:bg-emerald-950">
                   <h5 className="text-[10px] font-semibold text-emerald-700 dark:text-emerald-400 mb-1">
-                    Blueprint Mandate: Capability
+                    Security Requirement: Capability
                   </h5>
                   <ul className="text-[10px] space-y-0.5">
                     <li>• Letter Drafting → write appeal: <strong>ALLOWED</strong> (its core job)</li>
@@ -889,7 +889,7 @@ export default function Day11GovernancePanel() {
               <div className="flex items-center justify-between">
                 <CardTitle className="text-sm flex items-center gap-2">
                   <Lock className="h-4 w-4" />
-                  Day 11 Gate Verification
+                  Gate Verification
                 </CardTitle>
                 <Button onClick={verifyGate} disabled={loading} size="sm" className="gap-1">
                   {loading ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />}

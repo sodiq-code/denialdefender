@@ -195,7 +195,7 @@ export function EvidenceCorpusTab() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs text-muted-foreground">Day 2 Gate</p>
+                <p className="text-xs text-muted-foreground">Quality Gate</p>
                 <p className="text-2xl font-bold">
                   {stats ? (stats.gatePassed ? 'PASSED' : 'PENDING') : '—'}
                 </p>
@@ -225,7 +225,7 @@ export function EvidenceCorpusTab() {
               )}
               <div>
                 <p className="text-sm font-medium">
-                  Day 2 Gate: {stats.gatePassed ? 'PASSED' : 'NOT YET PASSED'}
+                  Quality Gate: {stats.gatePassed ? 'PASSED' : 'NOT YET PASSED'}
                 </p>
                 <p className="text-xs text-muted-foreground">
                   Requirement: 100+ documents with hash + provenance; sample citation resolves to real document

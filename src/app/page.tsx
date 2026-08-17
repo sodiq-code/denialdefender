@@ -220,7 +220,7 @@ export default function Home() {
               {agentFleetOnline && (
                 <Badge variant="outline" className="text-xs gap-1 border-teal-300 text-teal-600 dark:border-teal-700 dark:text-teal-400">
                   <Bot className="h-3 w-3" />
-                  Fleet Online
+Agents Online
                 </Badge>
               )}
             </div>
@@ -262,7 +262,7 @@ export default function Home() {
             </TabsTrigger>
             <TabsTrigger value="ablation" className="gap-1.5">
               <FlaskConical className="h-4 w-4" />
-              Ablation
+              Experiments
             </TabsTrigger>
           </TabsList>
 
@@ -677,7 +677,7 @@ export default function Home() {
             <OutcomeLearningPanel />
           </TabsContent>
 
-          {/* ── Ablation Tab ──────────────────────────────────────── */}
+          {/* ── Experiments Tab ──────────────────────────────────────── */}
           <TabsContent value="ablation" className="space-y-6">
             <AblationPanel />
           </TabsContent>
@@ -692,11 +692,11 @@ export default function Home() {
             <div className="flex items-center gap-2">
               <Badge variant="outline" className="text-[10px] gap-1">
                 <Wifi className="h-2.5 w-2.5" />
-                GCP us-central1
+                Cloud Connected
               </Badge>
               <Badge variant="outline" className="text-[10px] gap-1">
                 <Bot className="h-2.5 w-2.5" />
-                Gemini 3.5 Flash
+                AI Powered
               </Badge>
             </div>
           </div>

@@ -424,7 +424,7 @@ export function SixAgentPipelinePanel() {
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-base">
             <ShieldCheck className="h-5 w-5 text-emerald-600" />
-            Six-Agent Pipeline — Day 5
+            Appeal Generation Pipeline
           </CardTitle>
           <CardDescription>
             Advocate → Triage → [Gate 1] → Policy → Evidence → Draft → Quality Review
@@ -899,7 +899,7 @@ export function SixAgentPipelinePanel() {
                   <p className="text-xs text-muted-foreground">
                     {gateTestResult.gateResult === 'PASS'
                       ? 'The adversarial battery correctly blocked the broken draft. Quality Review is working as intended.'
-                      : 'The adversarial battery FAILED to block the broken draft. The battery needs to be tightened before Day 6.'}
+                      : 'The adversarial battery FAILED to block the broken draft. The battery needs to be tightened before deployment.'}
                   </p>
                 </div>
               </div>

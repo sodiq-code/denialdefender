@@ -212,7 +212,7 @@ export default function PlatformStatusCard() {
           <details className="group">
             <summary className="text-xs font-medium text-muted-foreground cursor-pointer flex items-center gap-1">
               <ArrowRight className="h-3 w-3 transition-transform group-open:rotate-90" />
-              Blueprint Gate Results (Table 12.1)
+              Component Gate Results
             </summary>
             <div className="mt-2 space-y-2 pl-4">
               {(['registry', 'memory', 'policies'] as const).map((key) => {
@@ -252,7 +252,7 @@ export default function PlatformStatusCard() {
         <div className="text-xs text-muted-foreground border-t pt-3 mt-3">
           <strong>Strategy:</strong> {data?.strategy || 'Platform-Accelerated, Demo-First'} —
           Adopt Agent Platform for exactly 3 components (Memory, Policies, Registry)
-          that pass the blueprint gate. Skip all others. Every platform call falls back
+          that pass the quality gate. Skip all others. Every platform call falls back
           to existing local implementation — zero execution risk.
         </div>
       </CardContent>
