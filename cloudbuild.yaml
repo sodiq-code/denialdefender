@@ -1,19 +1,20 @@
 # ══════════════════════════════════════════════════════════════════════════════
 # DenialDefender — Cloud Build CI/CD Pipeline
 # ══════════════════════════════════════════════════════════════════════════════
-# Triggers automatically on push to main branch.
-# Deploys all 3 services to Cloud Run:
+# Deploys all 3 services to Cloud Run via Artifact Registry:
 #   1. denialdefender-web (Next.js frontend)
 #   2. denialdefender-agents (Agent fleet)
-#   3. trace-stream (Decision trace WebSocket)
+#   3. denialdefender-trace-stream (Decision trace WebSocket)
 #
-# Setup:
-#   gcloud builds triggers create github \
-#     --repo-name=denialdefender \
-#     --repo-owner=sodiq-code \
-#     --branch-pattern="^main$" \
-#     --build-config=cloudbuild.yaml
+# Usage:
+#   gcloud builds submit --config=cloudbuild.yaml --project=denialdefender
 # ══════════════════════════════════════════════════════════════════════════════
+
+substitutions:
+  _REGION: europe-west1
+  _AR_HOST: europe-west1-docker.pkg.dev
+  _AR_REPO: denialdefender
+  _SERVICE_ACCOUNT: json-775@denialdefender.iam.gserviceaccount.com
 
 steps:
   # ── Step 1: Build Next.js Web Service ──────────────────────────────────────
@@ -21,9 +22,9 @@ steps:
     args:
       - 'build'
       - '-t'
-      - 'gcr.io/$PROJECT_ID/denialdefender-web:$COMMIT_SHA'
+      - '${_AR_HOST}/$PROJECT_ID/${_AR_REPO}/denialdefender-web:$COMMIT_SHA'
       - '-t'
-      - 'gcr.io/$PROJECT_ID/denialdefender-web:latest'
+      - '${_AR_HOST}/$PROJECT_ID/${_AR_REPO}/denialdefender-web:latest'
       - '.'
     id: 'build-web'
     timeout: 600s
@@ -33,40 +34,40 @@ steps:
     args:
       - 'build'
       - '-t'
-      - 'gcr.io/$PROJECT_ID/denialdefender-agents:$COMMIT_SHA'
+      - '${_AR_HOST}/$PROJECT_ID/${_AR_REPO}/denialdefender-agents:$COMMIT_SHA'
       - '-t'
-      - 'gcr.io/$PROJECT_ID/denialdefender-agents:latest'
+      - '${_AR_HOST}/$PROJECT_ID/${_AR_REPO}/denialdefender-agents:latest'
       - './mini-services/agent-fleet'
     id: 'build-agents'
     timeout: 600s
-    waitFor: ['-']  # Run in parallel with build-web
+    waitFor: ['-']
 
   # ── Step 3: Build Trace Stream Service ─────────────────────────────────────
   - name: 'gcr.io/cloud-builders/docker'
     args:
       - 'build'
       - '-t'
-      - 'gcr.io/$PROJECT_ID/trace-stream:$COMMIT_SHA'
+      - '${_AR_HOST}/$PROJECT_ID/${_AR_REPO}/denialdefender-trace-stream:$COMMIT_SHA'
       - '-t'
-      - 'gcr.io/$PROJECT_ID/trace-stream:latest'
+      - '${_AR_HOST}/$PROJECT_ID/${_AR_REPO}/denialdefender-trace-stream:latest'
       - './mini-services/trace-stream'
     id: 'build-trace-stream'
     timeout: 600s
-    waitFor: ['-']  # Run in parallel with build-web and build-agents
+    waitFor: ['-']
 
   # ── Step 4: Push all images ────────────────────────────────────────────────
   - name: 'gcr.io/cloud-builders/docker'
-    args: ['push', 'gcr.io/$PROJECT_ID/denialdefender-web:$COMMIT_SHA']
+    args: ['push', '${_AR_HOST}/$PROJECT_ID/${_AR_REPO}/denialdefender-web:$COMMIT_SHA']
     id: 'push-web'
     waitFor: ['build-web']
 
   - name: 'gcr.io/cloud-builders/docker'
-    args: ['push', 'gcr.io/$PROJECT_ID/denialdefender-agents:$COMMIT_SHA']
+    args: ['push', '${_AR_HOST}/$PROJECT_ID/${_AR_REPO}/denialdefender-agents:$COMMIT_SHA']
     id: 'push-agents'
     waitFor: ['build-agents']
 
   - name: 'gcr.io/cloud-builders/docker'
-    args: ['push', 'gcr.io/$PROJECT_ID/trace-stream:$COMMIT_SHA']
+    args: ['push', '${_AR_HOST}/$PROJECT_ID/${_AR_REPO}/denialdefender-trace-stream:$COMMIT_SHA']
     id: 'push-trace-stream'
     waitFor: ['build-trace-stream']
 
@@ -76,8 +77,8 @@ steps:
       - 'run'
       - 'deploy'
       - 'denialdefender-web'
-      - '--image=gcr.io/$PROJECT_ID/denialdefender-web:$COMMIT_SHA'
-      - '--region=europe-west1'
+      - '--image=${_AR_HOST}/$PROJECT_ID/${_AR_REPO}/denialdefender-web:$COMMIT_SHA'
+      - '--region=${_REGION}'
       - '--platform=managed'
       - '--allow-unauthenticated'
       - '--cpu=2'
@@ -86,19 +87,16 @@ steps:
       - '--max-instances=4'
       - '--concurrency=80'
       - '--timeout=300'
-      - '--service-account=json-775@$PROJECT_ID.iam.gserviceaccount.com'
-      - '--vpc-connector=dd-vpc-connector'
-      - '--vpc-egress=private-ranges-only'
+      - '--service-account=${_SERVICE_ACCOUNT}'
       - '--set-env-vars=NODE_ENV=production'
       - '--set-env-vars=PORT=8080'
       - '--set-env-vars=GCP_PROJECT_ID=$PROJECT_ID'
-      - '--set-env-vars=GCP_REGION=europe-west1'
+      - '--set-env-vars=GCP_REGION=${_REGION}'
       - '--set-env-vars=FIRESTORE_LOCATION=eur3'
       - '--set-env-vars=NEXT_PUBLIC_GCP_PROJECT_ID=$PROJECT_ID'
       - '--set-env-vars=NEXT_PUBLIC_APP_NAME=DenialDefender'
       - '--set-env-vars=MEMORY_BANK_STORE=vertex_ai'
-      - '--set-secrets=GEMINI_API_KEY=gemini-api-key:latest'
-      - '--set-secrets=DATABASE_URL=cloud-sql-connection-string:latest'
+      - '--set-secrets=GEMINI_API_KEY=gemini-api-key-1:latest'
     id: 'deploy-web'
     waitFor: ['push-web']
 
@@ -108,8 +106,8 @@ steps:
       - 'run'
       - 'deploy'
       - 'denialdefender-agents'
-      - '--image=gcr.io/$PROJECT_ID/denialdefender-agents:$COMMIT_SHA'
-      - '--region=europe-west1'
+      - '--image=${_AR_HOST}/$PROJECT_ID/${_AR_REPO}/denialdefender-agents:$COMMIT_SHA'
+      - '--region=${_REGION}'
       - '--platform=managed'
       - '--no-allow-unauthenticated'
       - '--cpu=4'
@@ -118,11 +116,9 @@ steps:
       - '--max-instances=10'
       - '--concurrency=10'
       - '--timeout=600'
-      - '--service-account=json-775@$PROJECT_ID.iam.gserviceaccount.com'
-      - '--vpc-connector=dd-vpc-connector'
-      - '--vpc-egress=private-ranges-only'
+      - '--service-account=${_SERVICE_ACCOUNT}'
       - '--set-env-vars=GCP_PROJECT_ID=$PROJECT_ID'
-      - '--set-env-vars=GCP_REGION=europe-west1'
+      - '--set-env-vars=GCP_REGION=${_REGION}'
       - '--set-env-vars=FIRESTORE_LOCATION=eur3'
       - '--set-env-vars=PORT=8080'
       - '--set-env-vars=LOG_LEVEL=info'
@@ -131,9 +127,7 @@ steps:
       - '--set-env-vars=EMBEDDING_DIMENSIONS=768'
       - '--set-env-vars=FORCE_LLM_BACKEND=gemini'
       - '--set-env-vars=MEMORY_BANK_STORE=vertex_ai'
-      - '--set-secrets=GEMINI_API_KEY=gemini-api-key:latest'
-      - '--set-secrets=DATABASE_URL=cloud-sql-connection-string:latest'
-      - '--set-secrets=PHI_GUARD_CONFIG=phi-guard-config:latest'
+      - '--set-secrets=GEMINI_API_KEY=gemini-api-key-1:latest'
     id: 'deploy-agents'
     waitFor: ['push-agents']
 
@@ -142,9 +136,9 @@ steps:
     args:
       - 'run'
       - 'deploy'
-      - 'trace-stream'
-      - '--image=gcr.io/$PROJECT_ID/trace-stream:$COMMIT_SHA'
-      - '--region=europe-west1'
+      - 'denialdefender-trace-stream'
+      - '--image=${_AR_HOST}/$PROJECT_ID/${_AR_REPO}/denialdefender-trace-stream:$COMMIT_SHA'
+      - '--region=${_REGION}'
       - '--platform=managed'
       - '--allow-unauthenticated'
       - '--cpu=1'
@@ -156,34 +150,22 @@ steps:
       - '--set-env-vars=NODE_ENV=production'
       - '--set-env-vars=PORT=8080'
       - '--set-env-vars=GCP_PROJECT_ID=$PROJECT_ID'
-      - '--set-env-vars=GCP_REGION=europe-west1'
+      - '--set-env-vars=GCP_REGION=${_REGION}'
     id: 'deploy-trace-stream'
     waitFor: ['push-trace-stream']
 
-  # ── Step 8: Configure IAM & Pub/Sub ────────────────────────────────────────
+  # ── Step 8: Configure IAM for service-to-service auth ─────────────────────
   - name: 'gcr.io/cloud-builders/gcloud'
     entrypoint: 'bash'
     args:
       - '-c'
       - |
-        # Allow web service SA to invoke agent fleet
         gcloud run services add-iam-policy-binding denialdefender-agents \
-          --member="serviceAccount:json-775@$PROJECT_ID.iam.gserviceaccount.com" \
+          --member="serviceAccount:${_SERVICE_ACCOUNT}" \
           --role="roles/run.invoker" \
-          --region=europe-west1 || echo "IAM binding may already exist"
-
-        # Create/update Pub/Sub push subscription
-        AGENT_URL=$(gcloud run services describe denialdefender-agents \
-          --region=europe-west1 --format='value(status.url)')
-
-        gcloud pubsub subscriptions create agent-tasks-push \
-          --topic=agent_tasks \
-          --push-endpoint="$${AGENT_URL}/pubsub/handle" \
-          --push-auth-service-account=json-775@$PROJECT_ID.iam.gserviceaccount.com \
-          2>/dev/null || echo "Subscription may already exist"
-
-        echo "IAM and Pub/Sub configured"
-    id: 'configure-iam-pubsub'
+          --region=${_REGION} 2>/dev/null || echo "IAM binding already exists"
+        echo "IAM configured"
+    id: 'configure-iam'
     waitFor: ['deploy-web', 'deploy-agents']
 
   # ── Step 9: Verify deployment ──────────────────────────────────────────────
@@ -192,32 +174,23 @@ steps:
     args:
       - '-c'
       - |
-        echo "═══════════════════════════════════════════════════════════════"
-        echo "  DenialDefender Deployment Complete!"
-        echo "═══════════════════════════════════════════════════════════════"
-
+        echo "=== DenialDefender Deployment Complete ==="
         WEB_URL=$(gcloud run services describe denialdefender-web \
-          --region=europe-west1 --format='value(status.url)')
+          --region=${_REGION} --format='value(status.url)')
         AGENT_URL=$(gcloud run services describe denialdefender-agents \
-          --region=europe-west1 --format='value(status.url)')
-        TRACE_URL=$(gcloud run services describe trace-stream \
-          --region=europe-west1 --format='value(status.url)')
-
-        echo "  Web:      $${WEB_URL}"
-        echo "  Agents:   $${AGENT_URL}"
-        echo "  Traces:   $${TRACE_URL}"
-        echo "  Commit:   $COMMIT_SHA"
-        echo ""
-
-        # Health check
-        echo "  Health check..."
-        curl -sf "$${WEB_URL}/api/health" && echo "  ✓ Web healthy" || echo "  ✗ Web unhealthy"
+          --region=${_REGION} --format='value(status.url)')
+        TRACE_URL=$(gcloud run services describe denialdefender-trace-stream \
+          --region=${_REGION} --format='value(status.url)')
+        echo "  Web:    $${WEB_URL}"
+        echo "  Agents: $${AGENT_URL}"
+        echo "  Traces: $${TRACE_URL}"
+        echo "  Commit: $COMMIT_SHA"
+        curl -sf "$${WEB_URL}/api/health" && echo "  Web: HEALTHY" || echo "  Web: UNHEALTHY"
     id: 'verify-deployment'
     waitFor: ['deploy-web', 'deploy-agents', 'deploy-trace-stream']
 
-# ── Build options ────────────────────────────────────────────────────────────
 options:
   logging: CLOUD_LOGGING_ONLY
   machineType: 'E2_HIGHCPU_8'
 
-timeout: 1800s  # 30 minutes max
+timeout: 1800s
