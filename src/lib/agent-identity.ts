@@ -251,7 +251,53 @@ export function hasCapability(
   return resourcePerm.capabilities.includes(capability);
 }
 
+// ─── Agent → Fleet Role Mapping ────────────────────────────────────────────
+
+/**
+ * Map fleet agent names (used in endpoints) to AgentRole values.
+ * The fleet uses short names like "triage", "drafter"; the permission
+ * matrix uses hyphenated role names like "denial-triage", "letter-drafting".
+ */
+export const FLEET_AGENT_TO_ROLE: Record<string, AgentRole> = {
+  triage: 'denial-triage',
+  evidence: 'evidence-assembly',
+  drafter: 'letter-drafting',
+  reviewer: 'quality-review',
+  coder: 'denial-triage',       // Coder shares triage scope
+  policy: 'policy-research',
+  citation: 'policy-research',  // Citation shares policy scope
+  orchestrator: 'patient-advocate', // Orchestrator has advocate-level access
+};
+
+/**
+ * Map fleet agent names to the primary resource they access.
+ * Used for permission gating at the endpoint level.
+ */
+export const FLEET_AGENT_RESOURCE: Record<string, Resource> = {
+  triage: 'denial',
+  evidence: 'evidence',
+  drafter: 'appeal',
+  reviewer: 'citation',
+  coder: 'denial',
+  policy: 'policy',
+  citation: 'citation',
+  orchestrator: 'case',
+};
+
 // ─── Permission Gate ──────────────────────────────────────────────────────
+
+/**
+ * Synchronous permission check (no audit logging).
+ * Use this for hot-path gating where async DB writes are not needed.
+ * Returns true if the action is allowed, false if denied.
+ */
+export function isCapabilityAllowed(
+  role: AgentRole,
+  resource: Resource,
+  capability: Capability,
+): boolean {
+  return hasCapability(role, resource, capability);
+}
 
 /**
  * Run the Agent Identity permission gate.

@@ -44,6 +44,161 @@ const CORS_ORIGINS = [
   "http://127.0.0.1:3004",
 ];
 
+// ─── Agent Identity Permission Enforcement ──────────────────────────────
+//
+// Self-contained permission matrix mirroring src/lib/agent-identity.ts.
+// Each agent has scoped capabilities on specific resources. Any action
+// outside scope is DENIED at runtime — no agent can exceed its authority.
+//
+// Key constraints (from the blueprint):
+//   - Quality Review CANNOT write appeals (prevents self-approval)
+//   - Letter Drafting CANNOT ingest outcomes (prevents bias from prior results)
+//   - Outcome Learning CANNOT write appeals or evidence (read-only on product data)
+//   - Deadline Tracker CANNOT write any clinical content (temporal-only authority)
+
+type Capability = "read" | "write" | "execute";
+type Resource = "case" | "denial" | "appeal" | "outcome" | "evidence" | "citation" | "policy" | "deadline" | "hitl_gate" | "trace" | "phi_guard" | "governance";
+
+interface AgentScope {
+  role: string;
+  resources: Partial<Record<Resource, Capability[]>>;
+}
+
+const AGENT_SCOPES: Record<string, AgentScope> = {
+  triage: {
+    role: "denial-triage",
+    resources: {
+      case: ["read", "write"],
+      denial: ["read", "write"],
+      appeal: ["read"],
+      evidence: ["read"],
+      trace: ["write"],
+      hitl_gate: ["read", "write"],
+    },
+  },
+  evidence: {
+    role: "evidence-assembly",
+    resources: {
+      case: ["read"],
+      denial: ["read"],
+      evidence: ["read", "write"],
+      citation: ["read", "write"],
+      trace: ["write"],
+    },
+  },
+  drafter: {
+    role: "letter-drafting",
+    resources: {
+      case: ["read"],
+      denial: ["read"],
+      appeal: ["read", "write"],  // CAN write appeals (core responsibility)
+      evidence: ["read"],
+      citation: ["read"],
+      policy: ["read"],
+      trace: ["write"],
+      // NOTABLE: NO outcome access — cannot ingest outcomes
+    },
+  },
+  reviewer: {
+    role: "quality-review",
+    resources: {
+      case: ["read"],
+      denial: ["read"],
+      appeal: ["read"],  // Read only — CANNOT write appeals
+      evidence: ["read"],
+      citation: ["read", "write"],
+      outcome: ["read"],
+      trace: ["write"],
+      hitl_gate: ["read", "write"],
+    },
+  },
+  coder: {
+    role: "denial-triage",  // Coder shares triage scope
+    resources: {
+      case: ["read", "write"],
+      denial: ["read", "write"],
+      appeal: ["read"],
+      evidence: ["read"],
+      trace: ["write"],
+      hitl_gate: ["read", "write"],
+    },
+  },
+  policy: {
+    role: "policy-research",
+    resources: {
+      case: ["read"],
+      denial: ["read"],
+      policy: ["read", "execute"],
+      evidence: ["read", "write"],
+      citation: ["read", "write"],
+      trace: ["write"],
+    },
+  },
+  citation: {
+    role: "policy-research",  // Citation shares policy scope
+    resources: {
+      case: ["read"],
+      denial: ["read"],
+      policy: ["read", "execute"],
+      evidence: ["read", "write"],
+      citation: ["read", "write"],
+      trace: ["write"],
+    },
+  },
+  orchestrator: {
+    role: "patient-advocate",  // Orchestrator has advocate-level access
+    resources: {
+      case: ["read", "write"],
+      denial: ["read"],
+      appeal: ["read"],
+      evidence: ["read"],
+      trace: ["write"],
+      hitl_gate: ["read"],
+    },
+  },
+};
+
+/** Primary resource each agent accesses at its endpoint */
+const AGENT_PRIMARY_RESOURCE: Record<string, Resource> = {
+  triage: "denial",
+  evidence: "evidence",
+  drafter: "appeal",
+  reviewer: "citation",
+  coder: "denial",
+  policy: "policy",
+  citation: "citation",
+  orchestrator: "case",
+};
+
+/**
+ * Enforce agent permission at runtime.
+ * Returns { allowed, reason } — if not allowed, the endpoint MUST return 403.
+ */
+function enforcePermission(
+  agentName: string,
+  resource: Resource,
+  capability: Capability,
+): { allowed: boolean; reason: string } {
+  const scope = AGENT_SCOPES[agentName];
+  if (!scope) {
+    return { allowed: false, reason: `Unknown agent: ${agentName}` };
+  }
+  const caps = scope.resources[resource];
+  if (!caps || !caps.includes(capability)) {
+    return {
+      allowed: false,
+      reason: `DENIED: ${scope.role} does NOT have ${capability} permission on ${resource}. Action blocked at runtime.`,
+    };
+  }
+  return {
+    allowed: true,
+    reason: `${scope.role} has ${capability} permission on ${resource}`,
+  };
+}
+
+// In-memory audit log for permission denials (fleet-side)
+const permissionDenialLog: Array<{ agent: string; resource: string; capability: string; reason: string; timestamp: string }> = [];
+
 // ─── Agent System Prompts ───────────────────────────────────────────────
 
 const AGENT_PROMPTS: Record<string, string> = {
@@ -1037,6 +1192,7 @@ async function runAgentWithGemini(
 async function runLiveWorkflow(inputData: Record<string, unknown>): Promise<Record<string, unknown>> {
   const start = Date.now();
   const traces: Record<string, unknown>[] = [];
+  const permissionChecks: Array<{ agent: string; resource: string; capability: string; allowed: boolean }> = [];
   // Extract learned context from input (passed by pipeline route)
   const learnedContext = (inputData.learnedContext ?? inputData.learned_context) as LearnedContext | undefined;
   let currentData = { ...inputData };
@@ -1044,37 +1200,73 @@ async function runLiveWorkflow(inputData: Record<string, unknown>): Promise<Reco
   delete currentData.learnedContext;
   delete currentData.learned_context;
 
-  // Step 1: Triage
+  // Step 1: Triage — requires write on denial
+  const triagePerm = enforcePermission("triage", "denial", "write");
+  permissionChecks.push({ agent: "triage", resource: "denial", capability: "write", allowed: triagePerm.allowed });
+  if (!triagePerm.allowed) {
+    permissionDenialLog.push({ agent: "triage", resource: "denial", capability: "write", reason: triagePerm.reason, timestamp: nowISO() });
+    return { workflow_id: randomUUID(), status: "blocked", blocked_agent: "triage", reason: triagePerm.reason, permission_enforced: true };
+  }
   const triageResult = await runAgentWithGemini("triage", AGENT_PROMPTS.triage, currentData, mockTriage, learnedContext);
   currentData.triage = triageResult.data;
   traces.push({ agent: "triage", mode: triageResult.mode, elapsed: elapsedSince(start), learnedContextUsed: triageResult.learnedContextUsed });
 
-  // Step 2: Evidence Assembly
+  // Step 2: Evidence Assembly — requires write on evidence
   const evidenceStart = Date.now();
+  const evidencePerm = enforcePermission("evidence", "evidence", "write");
+  permissionChecks.push({ agent: "evidence", resource: "evidence", capability: "write", allowed: evidencePerm.allowed });
+  if (!evidencePerm.allowed) {
+    permissionDenialLog.push({ agent: "evidence", resource: "evidence", capability: "write", reason: evidencePerm.reason, timestamp: nowISO() });
+    return { workflow_id: randomUUID(), status: "blocked", blocked_agent: "evidence", reason: evidencePerm.reason, permission_enforced: true };
+  }
   const evidenceResult = await runAgentWithGemini("evidence", AGENT_PROMPTS.evidence, currentData, mockEvidence, learnedContext);
   currentData.evidence = evidenceResult.data;
   traces.push({ agent: "evidence", mode: evidenceResult.mode, elapsed: elapsedSince(evidenceStart), learnedContextUsed: evidenceResult.learnedContextUsed });
 
-  // Step 3: Policy Research
+  // Step 3: Policy Research — requires execute on policy
   const policyStart = Date.now();
+  const policyPerm = enforcePermission("policy", "policy", "execute");
+  permissionChecks.push({ agent: "policy", resource: "policy", capability: "execute", allowed: policyPerm.allowed });
+  if (!policyPerm.allowed) {
+    permissionDenialLog.push({ agent: "policy", resource: "policy", capability: "execute", reason: policyPerm.reason, timestamp: nowISO() });
+    return { workflow_id: randomUUID(), status: "blocked", blocked_agent: "policy", reason: policyPerm.reason, permission_enforced: true };
+  }
   const policyResult = await runAgentWithGemini("policy", AGENT_PROMPTS.policy, currentData, mockPolicy, learnedContext);
   currentData.policy = policyResult.data;
   traces.push({ agent: "policy", mode: policyResult.mode, elapsed: elapsedSince(policyStart), learnedContextUsed: policyResult.learnedContextUsed });
 
-  // Step 4: Letter Drafting
+  // Step 4: Letter Drafting — requires write on appeal
   const draftStart = Date.now();
+  const draftPerm = enforcePermission("drafter", "appeal", "write");
+  permissionChecks.push({ agent: "drafter", resource: "appeal", capability: "write", allowed: draftPerm.allowed });
+  if (!draftPerm.allowed) {
+    permissionDenialLog.push({ agent: "drafter", resource: "appeal", capability: "write", reason: draftPerm.reason, timestamp: nowISO() });
+    return { workflow_id: randomUUID(), status: "blocked", blocked_agent: "drafter", reason: draftPerm.reason, permission_enforced: true };
+  }
   const draftResult = await runAgentWithGemini("drafter", AGENT_PROMPTS.drafter, currentData, mockDraft, learnedContext);
   currentData.draft = draftResult.data;
   traces.push({ agent: "drafter", mode: draftResult.mode, elapsed: elapsedSince(draftStart), learnedContextUsed: draftResult.learnedContextUsed });
 
-  // Step 5: Quality Review
+  // Step 5: Quality Review — requires write on citation (verifies citations)
   const reviewStart = Date.now();
+  const reviewPerm = enforcePermission("reviewer", "citation", "write");
+  permissionChecks.push({ agent: "reviewer", resource: "citation", capability: "write", allowed: reviewPerm.allowed });
+  if (!reviewPerm.allowed) {
+    permissionDenialLog.push({ agent: "reviewer", resource: "citation", capability: "write", reason: reviewPerm.reason, timestamp: nowISO() });
+    return { workflow_id: randomUUID(), status: "blocked", blocked_agent: "reviewer", reason: reviewPerm.reason, permission_enforced: true };
+  }
   const reviewResult = await runAgentWithGemini("reviewer", AGENT_PROMPTS.reviewer, currentData, mockReviewer, learnedContext);
   currentData.review = reviewResult.data;
   traces.push({ agent: "reviewer", mode: reviewResult.mode, elapsed: elapsedSince(reviewStart), learnedContextUsed: reviewResult.learnedContextUsed });
 
-  // Step 6: Citation Classification
+  // Step 6: Citation Classification — requires write on citation
   const citationStart = Date.now();
+  const citationPerm = enforcePermission("citation", "citation", "write");
+  permissionChecks.push({ agent: "citation", resource: "citation", capability: "write", allowed: citationPerm.allowed });
+  if (!citationPerm.allowed) {
+    permissionDenialLog.push({ agent: "citation", resource: "citation", capability: "write", reason: citationPerm.reason, timestamp: nowISO() });
+    return { workflow_id: randomUUID(), status: "blocked", blocked_agent: "citation", reason: citationPerm.reason, permission_enforced: true };
+  }
   const citationResult = await runAgentWithGemini("citation", AGENT_PROMPTS.citation, currentData, mockCitation, learnedContext);
   currentData.citations = citationResult.data;
   traces.push({ agent: "citation", mode: citationResult.mode, elapsed: elapsedSince(citationStart), learnedContextUsed: citationResult.learnedContextUsed });
@@ -1090,6 +1282,8 @@ async function runLiveWorkflow(inputData: Record<string, unknown>): Promise<Reco
     modes: allModes,
     overall_mode: anyLive ? 'live' : 'mock',
     learned_context_used: anyLearned,
+    permission_enforced: true,
+    permission_checks: permissionChecks,
     result: currentData,
     _trace: {
       trace_id: randomUUID(),
@@ -1291,6 +1485,18 @@ async function handleRequest(req: Request): Promise<Response> {
   }
 
   try {
+    // ── GET /permissions ─────────────────────────────────────────
+    if (method === "GET" && path === "/permissions") {
+      return jsonResponse({
+        permission_enforced: true,
+        scopes: AGENT_SCOPES,
+        primary_resources: AGENT_PRIMARY_RESOURCE,
+        recent_denials: permissionDenialLog.slice(-20),
+        total_denials: permissionDenialLog.length,
+        timestamp: nowISO(),
+      });
+    }
+
     // ── GET /health ─────────────────────────────────────────────
     if (method === "GET" && path === "/health") {
       return jsonResponse({
@@ -1302,6 +1508,8 @@ async function handleRequest(req: Request): Promise<Response> {
         model: GEMINI_MODEL,
         port: PORT,
         runtime: "bun",
+        permission_enforced: true,
+        permission_denials: permissionDenialLog.length,
         agents: ["triage", "evidence", "drafter", "reviewer", "coder", "policy", "citation", "orchestrator"],
         timestamp: nowISO(),
       });
@@ -1309,6 +1517,11 @@ async function handleRequest(req: Request): Promise<Response> {
 
     // ── POST /agents/triage ─────────────────────────────────────
     if (method === "POST" && path === "/agents/triage") {
+      const permCheck = enforcePermission("triage", "denial", "write");
+      if (!permCheck.allowed) {
+        permissionDenialLog.push({ agent: "triage", resource: "denial", capability: "write", reason: permCheck.reason, timestamp: nowISO() });
+        return jsonResponse({ agent: "triage", status: "blocked", reason: permCheck.reason, permission_enforced: true }, 403);
+      }
       const body = await parseBody<Record<string, unknown>>(req);
       const start = Date.now();
       const lc = (body.learnedContext ?? body.learned_context) as LearnedContext | undefined;
@@ -1318,12 +1531,18 @@ async function handleRequest(req: Request): Promise<Response> {
         agent: "triage",
         status: "success",
         data,
+        permission_enforced: true,
         trace: { agent: "triage", trace_id: randomUUID(), elapsed_seconds: elapsedSince(start), timestamp: nowISO(), mode, tokensUsed, learnedContextUsed },
       });
     }
 
     // ── POST /agents/evidence ───────────────────────────────────
     if (method === "POST" && path === "/agents/evidence") {
+      const permCheck = enforcePermission("evidence", "evidence", "write");
+      if (!permCheck.allowed) {
+        permissionDenialLog.push({ agent: "evidence", resource: "evidence", capability: "write", reason: permCheck.reason, timestamp: nowISO() });
+        return jsonResponse({ agent: "evidence", status: "blocked", reason: permCheck.reason, permission_enforced: true }, 403);
+      }
       const body = await parseBody<Record<string, unknown>>(req);
       const start = Date.now();
       const lc = (body.learnedContext ?? body.learned_context) as LearnedContext | undefined;
@@ -1333,12 +1552,18 @@ async function handleRequest(req: Request): Promise<Response> {
         agent: "evidence",
         status: "success",
         data,
+        permission_enforced: true,
         trace: { agent: "evidence", trace_id: randomUUID(), elapsed_seconds: elapsedSince(start), timestamp: nowISO(), mode, tokensUsed, learnedContextUsed },
       });
     }
 
     // ── POST /agents/drafter ────────────────────────────────────
     if (method === "POST" && path === "/agents/drafter") {
+      const permCheck = enforcePermission("drafter", "appeal", "write");
+      if (!permCheck.allowed) {
+        permissionDenialLog.push({ agent: "drafter", resource: "appeal", capability: "write", reason: permCheck.reason, timestamp: nowISO() });
+        return jsonResponse({ agent: "drafter", status: "blocked", reason: permCheck.reason, permission_enforced: true }, 403);
+      }
       const body = await parseBody<Record<string, unknown>>(req);
       const start = Date.now();
       const lc = (body.learnedContext ?? body.learned_context) as LearnedContext | undefined;
@@ -1348,12 +1573,18 @@ async function handleRequest(req: Request): Promise<Response> {
         agent: "drafter",
         status: "success",
         data,
+        permission_enforced: true,
         trace: { agent: "drafter", trace_id: randomUUID(), elapsed_seconds: elapsedSince(start), timestamp: nowISO(), mode, tokensUsed, learnedContextUsed },
       });
     }
 
     // ── POST /agents/reviewer ───────────────────────────────────
     if (method === "POST" && path === "/agents/reviewer") {
+      const permCheck = enforcePermission("reviewer", "citation", "write");
+      if (!permCheck.allowed) {
+        permissionDenialLog.push({ agent: "reviewer", resource: "citation", capability: "write", reason: permCheck.reason, timestamp: nowISO() });
+        return jsonResponse({ agent: "reviewer", status: "blocked", reason: permCheck.reason, permission_enforced: true }, 403);
+      }
       const body = await parseBody<Record<string, unknown>>(req);
       const start = Date.now();
       const lc = (body.learnedContext ?? body.learned_context) as LearnedContext | undefined;
@@ -1363,12 +1594,18 @@ async function handleRequest(req: Request): Promise<Response> {
         agent: "reviewer",
         status: "success",
         data,
+        permission_enforced: true,
         trace: { agent: "reviewer", trace_id: randomUUID(), elapsed_seconds: elapsedSince(start), timestamp: nowISO(), mode, tokensUsed, learnedContextUsed },
       });
     }
 
     // ── POST /agents/coder ──────────────────────────────────────
     if (method === "POST" && path === "/agents/coder") {
+      const permCheck = enforcePermission("coder", "denial", "write");
+      if (!permCheck.allowed) {
+        permissionDenialLog.push({ agent: "coder", resource: "denial", capability: "write", reason: permCheck.reason, timestamp: nowISO() });
+        return jsonResponse({ agent: "coder", status: "blocked", reason: permCheck.reason, permission_enforced: true }, 403);
+      }
       const body = await parseBody<Record<string, unknown>>(req);
       const start = Date.now();
       const lc = (body.learnedContext ?? body.learned_context) as LearnedContext | undefined;
@@ -1378,12 +1615,18 @@ async function handleRequest(req: Request): Promise<Response> {
         agent: "coder",
         status: "success",
         data,
+        permission_enforced: true,
         trace: { agent: "coder", trace_id: randomUUID(), elapsed_seconds: elapsedSince(start), timestamp: nowISO(), mode, tokensUsed, learnedContextUsed },
       });
     }
 
     // ── POST /agents/policy ─────────────────────────────────────
     if (method === "POST" && path === "/agents/policy") {
+      const permCheck = enforcePermission("policy", "policy", "execute");
+      if (!permCheck.allowed) {
+        permissionDenialLog.push({ agent: "policy", resource: "policy", capability: "execute", reason: permCheck.reason, timestamp: nowISO() });
+        return jsonResponse({ agent: "policy", status: "blocked", reason: permCheck.reason, permission_enforced: true }, 403);
+      }
       const body = await parseBody<Record<string, unknown>>(req);
       const start = Date.now();
       const lc = (body.learnedContext ?? body.learned_context) as LearnedContext | undefined;
@@ -1393,12 +1636,18 @@ async function handleRequest(req: Request): Promise<Response> {
         agent: "policy",
         status: "success",
         data,
+        permission_enforced: true,
         trace: { agent: "policy", trace_id: randomUUID(), elapsed_seconds: elapsedSince(start), timestamp: nowISO(), mode, tokensUsed, learnedContextUsed },
       });
     }
 
     // ── POST /agents/citation ───────────────────────────────────
     if (method === "POST" && path === "/agents/citation") {
+      const permCheck = enforcePermission("citation", "citation", "write");
+      if (!permCheck.allowed) {
+        permissionDenialLog.push({ agent: "citation", resource: "citation", capability: "write", reason: permCheck.reason, timestamp: nowISO() });
+        return jsonResponse({ agent: "citation", status: "blocked", reason: permCheck.reason, permission_enforced: true }, 403);
+      }
       const body = await parseBody<Record<string, unknown>>(req);
       const start = Date.now();
       const lc = (body.learnedContext ?? body.learned_context) as LearnedContext | undefined;
@@ -1408,12 +1657,18 @@ async function handleRequest(req: Request): Promise<Response> {
         agent: "citation",
         status: "success",
         data,
+        permission_enforced: true,
         trace: { agent: "citation", trace_id: randomUUID(), elapsed_seconds: elapsedSince(start), timestamp: nowISO(), mode, tokensUsed, learnedContextUsed },
       });
     }
 
     // ── POST /agents/orchestrator ───────────────────────────────
     if (method === "POST" && path === "/agents/orchestrator") {
+      const permCheck = enforcePermission("orchestrator", "case", "write");
+      if (!permCheck.allowed) {
+        permissionDenialLog.push({ agent: "orchestrator", resource: "case", capability: "write", reason: permCheck.reason, timestamp: nowISO() });
+        return jsonResponse({ agent: "orchestrator", status: "blocked", reason: permCheck.reason, permission_enforced: true }, 403);
+      }
       const body = await parseBody<Record<string, unknown>>(req);
       const start = Date.now();
       const caseId = (body.case_id as string) ?? randomUUID();
