@@ -226,8 +226,15 @@ export function OutcomeLearningPanel() {
     setStatusLoading(true);
     setStatusError(null);
     try {
-      const data = await fetchJson<LearningStatus>('/api/outcome-learning');
-      setStatus(data);
+      const res = await fetchJson<{ success: boolean; status: { outcomeRecordsStored?: number; learnedPatternsStored?: number; learningLoopActive?: boolean; memoryBank?: Record<string, unknown> } }>('/api/outcome-learning');
+      const s = res.status ?? res;
+      setStatus({
+        active: s.learningLoopActive ?? false,
+        outcomesStored: s.outcomeRecordsStored ?? 0,
+        learnedPatterns: s.learnedPatternsStored ?? 0,
+        lastUpdated: new Date().toISOString(),
+        version: '1.0.0',
+      });
     } catch (err) {
       setStatusError(err instanceof Error ? err.message : 'Failed to load status');
     } finally {
@@ -376,7 +383,7 @@ export function OutcomeLearningPanel() {
                   Outcomes
                 </span>
                 <span className="text-2xl font-bold tabular-nums">
-                  {status.outcomesStored.toLocaleString()}
+                  {(status.outcomesStored ?? 0).toLocaleString()}
                 </span>
               </div>
 
@@ -386,7 +393,7 @@ export function OutcomeLearningPanel() {
                   Patterns
                 </span>
                 <span className="text-2xl font-bold tabular-nums">
-                  {status.learnedPatterns.toLocaleString()}
+                  {(status.learnedPatterns ?? 0).toLocaleString()}
                 </span>
               </div>
 
