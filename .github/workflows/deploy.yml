@@ -14,9 +14,8 @@
 name: Deploy to Cloud Run
 
 on:
-  # ⏸️ Deployment paused for faster pushes — re-enable by uncommenting push trigger
-  # push:
-  #   branches: [main]
+  push:
+    branches: [main]
   workflow_dispatch:
 
 env:
