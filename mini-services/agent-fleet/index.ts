@@ -880,33 +880,117 @@ function mockWorkflow(inputData: Record<string, unknown>) {
 
 // ─── Gemini-Powered Agent Runner ────────────────────────────────────────
 
+/**
+ * Learned context from outcome learning — injected into agent prompts
+ * so agents adjust behavior based on past appeal outcomes.
+ * This closes the learning loop: Outcome → Weight → Prompt → Better Decision.
+ */
+interface LearnedContext {
+  strategySuccessRates?: Record<string, number>; // e.g., { medical_necessity: 0.72, prior_auth: 0.45 }
+  evidenceWeightHints?: Record<string, number>;   // e.g., { "JAMA": 0.92, "NEJM": 0.88 }
+  payerBehaviorNotes?: string[];                  // e.g., ["UnitedHealthcare overrides 42% at redetermination"]
+  categoryOutcomeCount?: number;                  // how many outcomes learned from
+}
+
+function buildLearnedContextSuffix(ctx: LearnedContext | undefined): string {
+  if (!ctx || (Object.keys(ctx).length === 0)) return '';
+  const lines: string[] = ['\n\n--- LEARNED FROM PAST OUTCOMES ---'];
+  if (ctx.strategySuccessRates && Object.keys(ctx.strategySuccessRates).length > 0) {
+    lines.push('Strategy success rates (from past appeal outcomes):');
+    for (const [strategy, rate] of Object.entries(ctx.strategySuccessRates)) {
+      lines.push(`  - ${strategy}: ${(rate * 100).toFixed(0)}% success rate`);
+    }
+    lines.push('Prefer strategies with higher success rates when multiple options exist.');
+  }
+  if (ctx.evidenceWeightHints && Object.keys(ctx.evidenceWeightHints).length > 0) {
+    lines.push('Evidence source weights (learned from outcomes):');
+    for (const [source, weight] of Object.entries(ctx.evidenceWeightHints)) {
+      lines.push(`  - ${source}: weight ${weight.toFixed(2)}`);
+    }
+    lines.push('Prioritize higher-weighted evidence sources in your response.');
+  }
+  if (ctx.payerBehaviorNotes && ctx.payerBehaviorNotes.length > 0) {
+    lines.push('Payer behavior notes:');
+    for (const note of ctx.payerBehaviorNotes) {
+      lines.push(`  - ${note}`);
+    }
+  }
+  if (ctx.categoryOutcomeCount && ctx.categoryOutcomeCount > 0) {
+    lines.push(`(Based on ${ctx.categoryOutcomeCount} past outcome records)`);
+  }
+  return lines.join('\n');
+}
+
 async function runAgentWithGemini(
   agentName: string,
   systemPrompt: string,
   inputData: Record<string, unknown>,
-  mockFn: (input: Record<string, unknown>) => Record<string, unknown>
-): Promise<{ data: Record<string, unknown>; mode: 'live' | 'mock'; tokensUsed?: number }> {
+  mockFn: (input: Record<string, unknown>) => Record<string, unknown>,
+  learnedContext?: LearnedContext
+): Promise<{ data: Record<string, unknown>; mode: 'live' | 'mock'; tokensUsed?: number; learnedContextUsed: boolean }> {
+  // If learned context exists, inject it into mock responses too
+  const effectivePrompt = systemPrompt + buildLearnedContextSuffix(learnedContext);
+  const ctxUsed = !!learnedContext && Object.keys(learnedContext).length > 0;
+
   if (MOCK_MODE) {
-    return { data: mockFn(inputData), mode: 'mock' };
+    // Even in mock mode, adjust mock output based on learned context
+    const mockData = mockFn(inputData);
+    if (ctxUsed && learnedContext?.strategySuccessRates) {
+      // Adjust mock confidence/strategy based on learned rates
+      const strategy = (mockData as Record<string, unknown>).strategy as string;
+      const learnedRate = learnedContext.strategySuccessRates[strategy?.toLowerCase()];
+      if (learnedRate !== undefined && (mockData as Record<string, unknown>).estimated_success_rate !== undefined) {
+        // Blend: 70% learned + 30% default (avoid over-reliance on limited data)
+        (mockData as Record<string, unknown>).estimated_success_rate =
+          Math.round((learnedRate * 0.7 + ((mockData as Record<string, unknown>).estimated_success_rate as number) * 0.3) * 100) / 100;
+        (mockData as Record<string, unknown>).learned_from_outcomes = true;
+        (mockData as Record<string, unknown>).outcome_sample_size = learnedContext.categoryOutcomeCount;
+      }
+    }
+    return { data: mockData, mode: 'mock', learnedContextUsed: ctxUsed };
   }
 
   try {
     const llm = getLLM();
     if (!llm.geminiAvailable) {
       console.warn(`[${agentName}] Gemini not available, falling back to mock`);
-      return { data: mockFn(inputData), mode: 'mock' };
+      // Still apply learned context to mock fallback
+      const mockData = mockFn(inputData);
+      if (ctxUsed && learnedContext?.strategySuccessRates) {
+        const strategy = (mockData as Record<string, unknown>).strategy as string;
+        const learnedRate = learnedContext.strategySuccessRates[strategy?.toLowerCase()];
+        if (learnedRate !== undefined && (mockData as Record<string, unknown>).estimated_success_rate !== undefined) {
+          (mockData as Record<string, unknown>).estimated_success_rate =
+            Math.round((learnedRate * 0.7 + ((mockData as Record<string, unknown>).estimated_success_rate as number) * 0.3) * 100) / 100;
+          (mockData as Record<string, unknown>).learned_from_outcomes = true;
+          (mockData as Record<string, unknown>).outcome_sample_size = learnedContext.categoryOutcomeCount;
+        }
+      }
+      return { data: mockData, mode: 'mock', learnedContextUsed: ctxUsed };
     }
 
     const userPrompt = JSON.stringify(inputData, null, 2);
     const response = await llm.generate(userPrompt, {
-      systemPrompt,
+      systemPrompt: effectivePrompt,
       temperature: 0.3,
       maxTokens: 4096,
     });
 
     if (!response.success || !response.content) {
       console.warn(`[${agentName}] Gemini call failed: ${response.error}, falling back to mock`);
-      return { data: mockFn(inputData), mode: 'mock' };
+      // Still apply learned context to mock fallback
+      const mockData = mockFn(inputData);
+      if (ctxUsed && learnedContext?.strategySuccessRates) {
+        const strategy = (mockData as Record<string, unknown>).strategy as string;
+        const learnedRate = learnedContext.strategySuccessRates[strategy?.toLowerCase()];
+        if (learnedRate !== undefined && (mockData as Record<string, unknown>).estimated_success_rate !== undefined) {
+          (mockData as Record<string, unknown>).estimated_success_rate =
+            Math.round((learnedRate * 0.7 + ((mockData as Record<string, unknown>).estimated_success_rate as number) * 0.3) * 100) / 100;
+          (mockData as Record<string, unknown>).learned_from_outcomes = true;
+          (mockData as Record<string, unknown>).outcome_sample_size = learnedContext.categoryOutcomeCount;
+        }
+      }
+      return { data: mockData, mode: 'mock', learnedContextUsed: ctxUsed };
     }
 
     // Parse JSON from response (handle ```json blocks)
@@ -923,11 +1007,28 @@ async function runAgentWithGemini(
     jsonStr = jsonStr.trim();
 
     const data = JSON.parse(jsonStr) as Record<string, unknown>;
-    console.log(`[${agentName}] Gemini call succeeded (${response.tokensUsed} tokens)`);
-    return { data, mode: 'live', tokensUsed: response.tokensUsed };
+    // Mark that learned context was used in this Gemini call
+    if (ctxUsed) {
+      data.learned_from_outcomes = true;
+      data.outcome_sample_size = learnedContext?.categoryOutcomeCount;
+    }
+    console.log(`[${agentName}] Gemini call succeeded (${response.tokensUsed} tokens, learnedCtx=${ctxUsed})`);
+    return { data, mode: 'live', tokensUsed: response.tokensUsed, learnedContextUsed: ctxUsed };
   } catch (err) {
     console.warn(`[${agentName}] Gemini parsing failed: ${err}, falling back to mock`);
-    return { data: mockFn(inputData), mode: 'mock' };
+    // Still apply learned context to mock fallback
+    const mockData = mockFn(inputData);
+    if (ctxUsed && learnedContext?.strategySuccessRates) {
+      const strategy = (mockData as Record<string, unknown>).strategy as string;
+      const learnedRate = learnedContext.strategySuccessRates[strategy?.toLowerCase()];
+      if (learnedRate !== undefined && (mockData as Record<string, unknown>).estimated_success_rate !== undefined) {
+        (mockData as Record<string, unknown>).estimated_success_rate =
+          Math.round((learnedRate * 0.7 + ((mockData as Record<string, unknown>).estimated_success_rate as number) * 0.3) * 100) / 100;
+        (mockData as Record<string, unknown>).learned_from_outcomes = true;
+        (mockData as Record<string, unknown>).outcome_sample_size = learnedContext.categoryOutcomeCount;
+      }
+    }
+    return { data: mockData, mode: 'mock', learnedContextUsed: ctxUsed };
   }
 }
 
@@ -936,45 +1037,51 @@ async function runAgentWithGemini(
 async function runLiveWorkflow(inputData: Record<string, unknown>): Promise<Record<string, unknown>> {
   const start = Date.now();
   const traces: Record<string, unknown>[] = [];
+  // Extract learned context from input (passed by pipeline route)
+  const learnedContext = (inputData.learnedContext ?? inputData.learned_context) as LearnedContext | undefined;
   let currentData = { ...inputData };
+  // Remove learnedContext from data passed to agents (it goes in the prompt)
+  delete currentData.learnedContext;
+  delete currentData.learned_context;
 
   // Step 1: Triage
-  const triageResult = await runAgentWithGemini("triage", AGENT_PROMPTS.triage, currentData, mockTriage);
+  const triageResult = await runAgentWithGemini("triage", AGENT_PROMPTS.triage, currentData, mockTriage, learnedContext);
   currentData.triage = triageResult.data;
-  traces.push({ agent: "triage", mode: triageResult.mode, elapsed: elapsedSince(start) });
+  traces.push({ agent: "triage", mode: triageResult.mode, elapsed: elapsedSince(start), learnedContextUsed: triageResult.learnedContextUsed });
 
   // Step 2: Evidence Assembly
   const evidenceStart = Date.now();
-  const evidenceResult = await runAgentWithGemini("evidence", AGENT_PROMPTS.evidence, currentData, mockEvidence);
+  const evidenceResult = await runAgentWithGemini("evidence", AGENT_PROMPTS.evidence, currentData, mockEvidence, learnedContext);
   currentData.evidence = evidenceResult.data;
-  traces.push({ agent: "evidence", mode: evidenceResult.mode, elapsed: elapsedSince(evidenceStart) });
+  traces.push({ agent: "evidence", mode: evidenceResult.mode, elapsed: elapsedSince(evidenceStart), learnedContextUsed: evidenceResult.learnedContextUsed });
 
   // Step 3: Policy Research
   const policyStart = Date.now();
-  const policyResult = await runAgentWithGemini("policy", AGENT_PROMPTS.policy, currentData, mockPolicy);
+  const policyResult = await runAgentWithGemini("policy", AGENT_PROMPTS.policy, currentData, mockPolicy, learnedContext);
   currentData.policy = policyResult.data;
-  traces.push({ agent: "policy", mode: policyResult.mode, elapsed: elapsedSince(policyStart) });
+  traces.push({ agent: "policy", mode: policyResult.mode, elapsed: elapsedSince(policyStart), learnedContextUsed: policyResult.learnedContextUsed });
 
   // Step 4: Letter Drafting
   const draftStart = Date.now();
-  const draftResult = await runAgentWithGemini("drafter", AGENT_PROMPTS.drafter, currentData, mockDraft);
+  const draftResult = await runAgentWithGemini("drafter", AGENT_PROMPTS.drafter, currentData, mockDraft, learnedContext);
   currentData.draft = draftResult.data;
-  traces.push({ agent: "drafter", mode: draftResult.mode, elapsed: elapsedSince(draftStart) });
+  traces.push({ agent: "drafter", mode: draftResult.mode, elapsed: elapsedSince(draftStart), learnedContextUsed: draftResult.learnedContextUsed });
 
   // Step 5: Quality Review
   const reviewStart = Date.now();
-  const reviewResult = await runAgentWithGemini("reviewer", AGENT_PROMPTS.reviewer, currentData, mockReviewer);
+  const reviewResult = await runAgentWithGemini("reviewer", AGENT_PROMPTS.reviewer, currentData, mockReviewer, learnedContext);
   currentData.review = reviewResult.data;
-  traces.push({ agent: "reviewer", mode: reviewResult.mode, elapsed: elapsedSince(reviewStart) });
+  traces.push({ agent: "reviewer", mode: reviewResult.mode, elapsed: elapsedSince(reviewStart), learnedContextUsed: reviewResult.learnedContextUsed });
 
   // Step 6: Citation Classification
   const citationStart = Date.now();
-  const citationResult = await runAgentWithGemini("citation", AGENT_PROMPTS.citation, currentData, mockCitation);
+  const citationResult = await runAgentWithGemini("citation", AGENT_PROMPTS.citation, currentData, mockCitation, learnedContext);
   currentData.citations = citationResult.data;
-  traces.push({ agent: "citation", mode: citationResult.mode, elapsed: elapsedSince(citationStart) });
+  traces.push({ agent: "citation", mode: citationResult.mode, elapsed: elapsedSince(citationStart), learnedContextUsed: citationResult.learnedContextUsed });
 
   const anyLive = traces.some(t => t.mode === 'live');
   const allModes = traces.map(t => t.mode);
+  const anyLearned = traces.some(t => t.learnedContextUsed);
 
   return {
     workflow_id: randomUUID(),
@@ -982,6 +1089,7 @@ async function runLiveWorkflow(inputData: Record<string, unknown>): Promise<Reco
     agents_run: traces.length,
     modes: allModes,
     overall_mode: anyLive ? 'live' : 'mock',
+    learned_context_used: anyLearned,
     result: currentData,
     _trace: {
       trace_id: randomUUID(),
@@ -1203,12 +1311,14 @@ async function handleRequest(req: Request): Promise<Response> {
     if (method === "POST" && path === "/agents/triage") {
       const body = await parseBody<Record<string, unknown>>(req);
       const start = Date.now();
-      const { data, mode, tokensUsed } = await runAgentWithGemini("triage", AGENT_PROMPTS.triage, body, mockTriage);
+      const lc = (body.learnedContext ?? body.learned_context) as LearnedContext | undefined;
+      delete body.learnedContext; delete body.learned_context;
+      const { data, mode, tokensUsed, learnedContextUsed } = await runAgentWithGemini("triage", AGENT_PROMPTS.triage, body, mockTriage, lc);
       return jsonResponse({
         agent: "triage",
         status: "success",
         data,
-        trace: { agent: "triage", trace_id: randomUUID(), elapsed_seconds: elapsedSince(start), timestamp: nowISO(), mode, tokensUsed },
+        trace: { agent: "triage", trace_id: randomUUID(), elapsed_seconds: elapsedSince(start), timestamp: nowISO(), mode, tokensUsed, learnedContextUsed },
       });
     }
 
@@ -1216,12 +1326,14 @@ async function handleRequest(req: Request): Promise<Response> {
     if (method === "POST" && path === "/agents/evidence") {
       const body = await parseBody<Record<string, unknown>>(req);
       const start = Date.now();
-      const { data, mode, tokensUsed } = await runAgentWithGemini("evidence", AGENT_PROMPTS.evidence, body, mockEvidence);
+      const lc = (body.learnedContext ?? body.learned_context) as LearnedContext | undefined;
+      delete body.learnedContext; delete body.learned_context;
+      const { data, mode, tokensUsed, learnedContextUsed } = await runAgentWithGemini("evidence", AGENT_PROMPTS.evidence, body, mockEvidence, lc);
       return jsonResponse({
         agent: "evidence",
         status: "success",
         data,
-        trace: { agent: "evidence", trace_id: randomUUID(), elapsed_seconds: elapsedSince(start), timestamp: nowISO(), mode, tokensUsed },
+        trace: { agent: "evidence", trace_id: randomUUID(), elapsed_seconds: elapsedSince(start), timestamp: nowISO(), mode, tokensUsed, learnedContextUsed },
       });
     }
 
@@ -1229,12 +1341,14 @@ async function handleRequest(req: Request): Promise<Response> {
     if (method === "POST" && path === "/agents/drafter") {
       const body = await parseBody<Record<string, unknown>>(req);
       const start = Date.now();
-      const { data, mode, tokensUsed } = await runAgentWithGemini("drafter", AGENT_PROMPTS.drafter, body, mockDraft);
+      const lc = (body.learnedContext ?? body.learned_context) as LearnedContext | undefined;
+      delete body.learnedContext; delete body.learned_context;
+      const { data, mode, tokensUsed, learnedContextUsed } = await runAgentWithGemini("drafter", AGENT_PROMPTS.drafter, body, mockDraft, lc);
       return jsonResponse({
         agent: "drafter",
         status: "success",
         data,
-        trace: { agent: "drafter", trace_id: randomUUID(), elapsed_seconds: elapsedSince(start), timestamp: nowISO(), mode, tokensUsed },
+        trace: { agent: "drafter", trace_id: randomUUID(), elapsed_seconds: elapsedSince(start), timestamp: nowISO(), mode, tokensUsed, learnedContextUsed },
       });
     }
 
@@ -1242,12 +1356,14 @@ async function handleRequest(req: Request): Promise<Response> {
     if (method === "POST" && path === "/agents/reviewer") {
       const body = await parseBody<Record<string, unknown>>(req);
       const start = Date.now();
-      const { data, mode, tokensUsed } = await runAgentWithGemini("reviewer", AGENT_PROMPTS.reviewer, body, mockReviewer);
+      const lc = (body.learnedContext ?? body.learned_context) as LearnedContext | undefined;
+      delete body.learnedContext; delete body.learned_context;
+      const { data, mode, tokensUsed, learnedContextUsed } = await runAgentWithGemini("reviewer", AGENT_PROMPTS.reviewer, body, mockReviewer, lc);
       return jsonResponse({
         agent: "reviewer",
         status: "success",
         data,
-        trace: { agent: "reviewer", trace_id: randomUUID(), elapsed_seconds: elapsedSince(start), timestamp: nowISO(), mode, tokensUsed },
+        trace: { agent: "reviewer", trace_id: randomUUID(), elapsed_seconds: elapsedSince(start), timestamp: nowISO(), mode, tokensUsed, learnedContextUsed },
       });
     }
 
@@ -1255,12 +1371,14 @@ async function handleRequest(req: Request): Promise<Response> {
     if (method === "POST" && path === "/agents/coder") {
       const body = await parseBody<Record<string, unknown>>(req);
       const start = Date.now();
-      const { data, mode, tokensUsed } = await runAgentWithGemini("coder", AGENT_PROMPTS.coder, body, mockCoder);
+      const lc = (body.learnedContext ?? body.learned_context) as LearnedContext | undefined;
+      delete body.learnedContext; delete body.learned_context;
+      const { data, mode, tokensUsed, learnedContextUsed } = await runAgentWithGemini("coder", AGENT_PROMPTS.coder, body, mockCoder, lc);
       return jsonResponse({
         agent: "coder",
         status: "success",
         data,
-        trace: { agent: "coder", trace_id: randomUUID(), elapsed_seconds: elapsedSince(start), timestamp: nowISO(), mode, tokensUsed },
+        trace: { agent: "coder", trace_id: randomUUID(), elapsed_seconds: elapsedSince(start), timestamp: nowISO(), mode, tokensUsed, learnedContextUsed },
       });
     }
 
@@ -1268,12 +1386,14 @@ async function handleRequest(req: Request): Promise<Response> {
     if (method === "POST" && path === "/agents/policy") {
       const body = await parseBody<Record<string, unknown>>(req);
       const start = Date.now();
-      const { data, mode, tokensUsed } = await runAgentWithGemini("policy", AGENT_PROMPTS.policy, body, mockPolicy);
+      const lc = (body.learnedContext ?? body.learned_context) as LearnedContext | undefined;
+      delete body.learnedContext; delete body.learned_context;
+      const { data, mode, tokensUsed, learnedContextUsed } = await runAgentWithGemini("policy", AGENT_PROMPTS.policy, body, mockPolicy, lc);
       return jsonResponse({
         agent: "policy",
         status: "success",
         data,
-        trace: { agent: "policy", trace_id: randomUUID(), elapsed_seconds: elapsedSince(start), timestamp: nowISO(), mode, tokensUsed },
+        trace: { agent: "policy", trace_id: randomUUID(), elapsed_seconds: elapsedSince(start), timestamp: nowISO(), mode, tokensUsed, learnedContextUsed },
       });
     }
 
@@ -1281,12 +1401,14 @@ async function handleRequest(req: Request): Promise<Response> {
     if (method === "POST" && path === "/agents/citation") {
       const body = await parseBody<Record<string, unknown>>(req);
       const start = Date.now();
-      const { data, mode, tokensUsed } = await runAgentWithGemini("citation", AGENT_PROMPTS.citation, body, mockCitation);
+      const lc = (body.learnedContext ?? body.learned_context) as LearnedContext | undefined;
+      delete body.learnedContext; delete body.learned_context;
+      const { data, mode, tokensUsed, learnedContextUsed } = await runAgentWithGemini("citation", AGENT_PROMPTS.citation, body, mockCitation, lc);
       return jsonResponse({
         agent: "citation",
         status: "success",
         data,
-        trace: { agent: "citation", trace_id: randomUUID(), elapsed_seconds: elapsedSince(start), timestamp: nowISO(), mode, tokensUsed },
+        trace: { agent: "citation", trace_id: randomUUID(), elapsed_seconds: elapsedSince(start), timestamp: nowISO(), mode, tokensUsed, learnedContextUsed },
       });
     }
 

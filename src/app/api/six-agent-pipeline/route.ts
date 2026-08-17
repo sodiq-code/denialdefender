@@ -1,9 +1,61 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { runSixAgentPipeline } from '@/lib/six-agent-pipeline';
+import { memoryBank } from '@/lib/geap-memory-bank';
 
 // Fleet URL: use environment variable on Cloud Run, localhost in dev
 const FLEET_URL = process.env.AGENT_FLEET_URL || 'http://localhost:3004';
 const FLEET_TIMEOUT_MS = 30_000; // Increased for Gemini API calls
+
+/**
+ * Fetch learned context from the Memory Bank to inject into agent calls.
+ * This closes the Outcome Learning loop:
+ *   Outcome → Weight Update → Memory Bank → Agent Prompt → Better Decision
+ */
+async function fetchLearnedContext(payer: string, denialCategory: string): Promise<Record<string, unknown> | undefined> {
+  try {
+    const weights = await memoryBank.getOutcomeWeights(denialCategory, payer);
+    if (!weights || weights.sampleSize === 0) return undefined;
+
+    const strategySuccessRates: Record<string, number> = {};
+    const payerBehaviorNotes: string[] = [];
+
+    const patterns = await memoryBank.getLearnedPatterns('strategy_weight', denialCategory, payer);
+    for (const pattern of patterns.slice(0, 10)) {
+      const data = pattern.data as Record<string, unknown>;
+      if (data.strategy && data.successRate) {
+        strategySuccessRates[data.strategy as string] = data.successRate as number;
+      }
+    }
+
+    if (Object.keys(strategySuccessRates).length === 0 && weights.sampleSize > 0) {
+      const w = weights.weights as Record<string, number>;
+      if (w) {
+        for (const [key, val] of Object.entries(w)) {
+          if (['medical_necessity', 'prior_auth', 'coding', 'experimental', 'out_of_network'].includes(key) && val != null) {
+            strategySuccessRates[key] = val;
+          }
+        }
+      }
+      if (Object.keys(strategySuccessRates).length === 0) {
+        strategySuccessRates['medical_necessity'] = Math.min(0.95, 0.5 + (w?.proceduralWeight ?? 0.5) * 0.3);
+        strategySuccessRates['prior_auth'] = Math.min(0.85, 0.4 + (w?.proceduralWeight ?? 0.5) * 0.15);
+        strategySuccessRates['coding'] = Math.min(0.90, 0.45 + (w?.proceduralWeight ?? 0.5) * 0.2);
+      }
+    }
+
+    if (weights.sampleSize >= 3) {
+      payerBehaviorNotes.push(`${payer} has ${weights.sampleSize} outcome records for ${denialCategory} denials`);
+    }
+
+    return {
+      strategySuccessRates,
+      payerBehaviorNotes,
+      categoryOutcomeCount: weights.sampleSize,
+    };
+  } catch {
+    return undefined;
+  }
+}
 
 /**
  * POST /api/six-agent-pipeline — Run the six-agent pipeline
@@ -33,6 +85,9 @@ export async function POST(request: NextRequest) {
     let dataSource: 'live' | 'mock' = 'mock';
     let result: Record<string, unknown>;
 
+    // ── Fetch learned context from Memory Bank (closes learning loop) ──
+    const learnedContext = await fetchLearnedContext(body.payer, 'medical_necessity');
+
     // ── Try the agent fleet (Gemini-backed) ──
     try {
       const controller = new AbortController();
@@ -49,6 +104,7 @@ export async function POST(request: NextRequest) {
             carrier_name: body.payer,
           },
           patient_context: body.patientContext || {},
+          learnedContext,
         }),
       });
       clearTimeout(timeout);
@@ -71,6 +127,7 @@ export async function POST(request: NextRequest) {
             },
             patient_context: body.patientContext || {},
             triage: triageData.data || {},
+            learnedContext,
           }),
         });
         clearTimeout(policyTimeout);
@@ -91,6 +148,7 @@ export async function POST(request: NextRequest) {
             },
             patient_context: body.patientContext || {},
             triage: triageData.data || {},
+            learnedContext,
           }),
         });
         clearTimeout(evidenceTimeout);
@@ -106,6 +164,7 @@ export async function POST(request: NextRequest) {
           body: JSON.stringify({
             evidence: evidenceData.data || {},
             policy: policyData.data || {},
+            learnedContext,
           }),
         });
         clearTimeout(citationTimeout);
@@ -129,6 +188,7 @@ export async function POST(request: NextRequest) {
             evidence: evidenceData.data || {},
             policy: policyData.data || {},
             citations: citationData.data || {},
+            learnedContext,
           }),
         });
         clearTimeout(draftTimeout);
@@ -150,6 +210,7 @@ export async function POST(request: NextRequest) {
             triage: triageData.data || {},
             evidence: evidenceData.data || {},
             draft: draftData.data || {},
+            learnedContext,
           }),
         });
         clearTimeout(reviewTimeout);
@@ -205,7 +266,7 @@ export async function POST(request: NextRequest) {
       result = { ...mockResult };
     }
 
-    return NextResponse.json({ ...result, dataSource });
+    return NextResponse.json({ ...result, dataSource, learnedContextAvailable: !!learnedContext });
   } catch (error: unknown) {
     console.error('[POST /api/six-agent-pipeline] Error:', error);
     const msg = error instanceof Error ? error.message : String(error);

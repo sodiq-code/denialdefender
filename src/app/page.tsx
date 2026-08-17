@@ -15,6 +15,7 @@ const TraceStreamTab = dynamic(() => import('@/components/trace-stream-tab').the
 const EvidenceCorpusTab = dynamic(() => import('@/components/evidence-corpus-tab').then(m => ({ default: m.EvidenceCorpusTab })), { ssr: false, loading: () => <div className="p-8 text-center text-muted-foreground">Loading evidence...</div> });
 const SixAgentPipelinePanel = dynamic(() => import('@/components/six-agent-pipeline-panel').then(m => ({ default: m.SixAgentPipelinePanel })), { ssr: false, loading: () => <div className="p-8 text-center text-muted-foreground">Loading pipeline...</div> });
 const GovernancePanel = dynamic(() => import('@/components/governance-panel'), { ssr: false, loading: () => <div className="p-8 text-center text-muted-foreground">Loading governance...</div> });
+const OutcomeLearningPanel = dynamic(() => import('@/components/outcome-learning-panel').then(m => ({ default: m.OutcomeLearningPanel })), { ssr: false, loading: () => <div className="p-8 text-center text-muted-foreground">Loading outcome learning...</div> });
 const PlatformStatusCard = dynamic(() => import('@/components/platform-status-card'), { ssr: false });
 import {
   Shield,
@@ -47,6 +48,7 @@ import {
   Fingerprint,
   Globe,
   PlusCircle,
+  Brain,
   LayoutDashboard,
   Gavel,
   ChevronDown,
@@ -251,6 +253,10 @@ export default function Home() {
             <TabsTrigger value="governance" className="gap-1.5">
               <Gavel className="h-4 w-4" />
               Governance
+            </TabsTrigger>
+            <TabsTrigger value="learning" className="gap-1.5">
+              <Brain className="h-4 w-4" />
+              Learning
             </TabsTrigger>
           </TabsList>
 
@@ -658,6 +664,11 @@ export default function Home() {
             
               <PlatformStatusCard />
             
+          </TabsContent>
+
+          {/* ── Outcome Learning Tab ─────────────────────────────── */}
+          <TabsContent value="learning" className="space-y-6">
+            <OutcomeLearningPanel />
           </TabsContent>
         </Tabs>
       </main>
