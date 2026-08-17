@@ -33,6 +33,7 @@ import {
   ChevronUp,
   FileSearch,
   Scale,
+  ClipboardCheck,
 } from 'lucide-react';
 
 // ─── Types ────────────────────────────────────────────────────────────────
@@ -73,6 +74,219 @@ interface DemoResult {
       checks: { check: string; result: boolean; detail: string }[];
     };
   };
+}
+
+// ─── Domain Validation Sub-Component ──────────────────────────────────────
+
+interface DomainValidationResult {
+  ruleId: string;
+  ruleName: string;
+  category: string;
+  passed: boolean;
+  severity: string;
+  detail: string;
+  evidence: string;
+  source: string;
+}
+
+interface DomainValidationReport {
+  id: string;
+  validatorType: string;
+  timestamp: string;
+  results: DomainValidationResult[];
+  summary: {
+    total: number;
+    passed: number;
+    failed: number;
+    criticalFailures: number;
+    highFailures: number;
+    passRate: number;
+    categories: Record<string, { total: number; passed: number; failed: number }>;
+  };
+  overallVerdict: string;
+  overallNotes: string;
+}
+
+function DomainValidationTab() {
+  const [report, setReport] = useState<DomainValidationReport | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
+
+  const runValidation = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch('/api/domain-validation', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'full_validation' }),
+      });
+      const data = await res.json();
+      setReport(data.report);
+    } catch (err) {
+      console.error('Domain validation failed:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const severityColor: Record<string, string> = {
+    critical: 'text-red-600',
+    high: 'text-orange-600',
+    medium: 'text-yellow-600',
+    low: 'text-green-600',
+  };
+
+  const verdictColor: Record<string, string> = {
+    pass: 'bg-green-100 text-green-800',
+    conditional_pass: 'bg-yellow-100 text-yellow-800',
+    fail: 'bg-red-100 text-red-800',
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Header */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm flex items-center gap-2">
+            <ClipboardCheck className="h-4 w-4 text-emerald-600" />
+            Automated Domain Rule Validator
+          </CardTitle>
+          <CardDescription className="text-xs">
+            Validates every agent output against 20 authoritative domain rules from CMS, AMA, and payer databases.
+            Stronger than one-time human review — continuous, automated, measurable.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center gap-3">
+            <Button onClick={runValidation} disabled={loading} size="sm" className="bg-emerald-600 hover:bg-emerald-700">
+              {loading ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <ClipboardCheck className="h-3 w-3 mr-1" />}
+              Run Full Validation
+            </Button>
+            {report && (
+              <Badge className={verdictColor[report.overallVerdict] || ''}>
+                {report.overallVerdict === 'pass' ? 'ALL RULES PASS' : report.overallVerdict === 'conditional_pass' ? 'CONDITIONAL PASS' : 'FAIL'}
+              </Badge>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Results */}
+      {report && (
+        <>
+          {/* Summary Card */}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm">Validation Summary</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 text-center">
+                <div>
+                  <div className="text-2xl font-bold text-emerald-600">{report.summary.passed}</div>
+                  <div className="text-xs text-muted-foreground">Passed</div>
+                </div>
+                <div>
+                  <div className="text-2xl font-bold text-red-600">{report.summary.failed}</div>
+                  <div className="text-xs text-muted-foreground">Failed</div>
+                </div>
+                <div>
+                  <div className="text-2xl font-bold">{report.summary.total}</div>
+                  <div className="text-xs text-muted-foreground">Total Rules</div>
+                </div>
+                <div>
+                  <div className="text-2xl font-bold">{Math.round(report.summary.passRate * 100)}%</div>
+                  <div className="text-xs text-muted-foreground">Pass Rate</div>
+                </div>
+                <div>
+                  <div className="text-2xl font-bold text-red-600">{report.summary.criticalFailures}</div>
+                  <div className="text-xs text-muted-foreground">Critical Failures</div>
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground mt-3">{report.overallNotes}</p>
+            </CardContent>
+          </Card>
+
+          {/* Category Breakdown */}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm">Category Breakdown</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2">
+                {Object.entries(report.summary.categories).map(([cat, data]) => (
+                  <div key={cat} className="border rounded-md">
+                    <button
+                      className="w-full px-3 py-2 flex items-center justify-between text-xs hover:bg-muted/50"
+                      onClick={() => setExpandedCategory(expandedCategory === cat ? null : cat)}
+                    >
+                      <span className="font-medium capitalize">{cat.replace(/_/g, ' ')}</span>
+                      <span className="flex items-center gap-2">
+                        <span className="text-emerald-600">{data.passed}✓</span>
+                        {data.failed > 0 && <span className="text-red-600">{data.failed}✗</span>}
+                        {expandedCategory === cat ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                      </span>
+                    </button>
+                    {expandedCategory === cat && (
+                      <div className="px-3 pb-2 space-y-1">
+                        {report.results
+                          .filter(r => r.category === cat)
+                          .map(r => (
+                            <div key={r.ruleId} className="flex items-start gap-2 text-xs py-1 border-t">
+                              <span className="mt-0.5">
+                                {r.passed ? <CheckCircle2 className="h-3 w-3 text-emerald-600" /> : <XCircle className="h-3 w-3 text-red-600" />}
+                              </span>
+                              <div className="flex-1">
+                                <div className="flex items-center gap-1">
+                                  <span className="font-medium">{r.ruleId}</span>
+                                  <span className={severityColor[r.severity] || ''}>[{r.severity}]</span>
+                                </div>
+                                <div className="text-muted-foreground">{r.detail}</div>
+                                <div className="text-muted-foreground/70 italic mt-0.5">Source: {r.source}</div>
+                              </div>
+                            </div>
+                          ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Concrete Changes */}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm">3 Concrete Changes (Domain Improvements)</CardTitle>
+              <CardDescription className="text-xs">
+                Documented improvements identified and implemented — the system didn&apos;t invent this workflow, it was validated against domain rules and these 3 things were changed.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {report.concreteChanges && report.concreteChanges.map((change, i) => (
+                  <div key={change.id} className="border rounded-md p-3">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Badge variant="outline" className="text-xs">Change #{i + 1}</Badge>
+                      <span className="text-xs font-medium">{change.area}</span>
+                      <Badge className={`text-xs ${change.severity === 'high' ? 'bg-red-100 text-red-800' : 'bg-yellow-100 text-yellow-800'}`}>
+                        {change.severity} severity
+                      </Badge>
+                      {change.implemented && <CheckCircle2 className="h-3 w-3 text-emerald-600" />}
+                    </div>
+                    <div className="text-xs space-y-1">
+                      <div><span className="text-red-600 font-medium">Before:</span> {change.before}</div>
+                      <div><span className="text-emerald-600 font-medium">After:</span> {change.after}</div>
+                      <div className="text-muted-foreground italic">Rationale: {change.rationale}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </>
+      )}
+    </div>
+  );
 }
 
 // ─── Component ────────────────────────────────────────────────────────────
@@ -232,6 +446,7 @@ export default function Day11GovernancePanel() {
           <TabsTrigger value="identity">Agent Identity</TabsTrigger>
           <TabsTrigger value="observability">Observability</TabsTrigger>
           <TabsTrigger value="gate">Gate Verify</TabsTrigger>
+          <TabsTrigger value="domain">Domain Rules</TabsTrigger>
         </TabsList>
 
         {/* ── Demo Moment Tab ── */}
@@ -736,6 +951,11 @@ export default function Day11GovernancePanel() {
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* ── Domain Rules Tab ── */}
+        <TabsContent value="domain" className="space-y-4">
+          <DomainValidationTab />
         </TabsContent>
       </Tabs>
     </div>
