@@ -56,7 +56,7 @@ export interface EvidenceAssemblyResult {
 
 // ─── Content Hash Generator ────────────────────────────────────────────────
 
-function generateContentHash(content: string): string {
+export function generateContentHash(content: string): string {
   // Simple hash function for content verification
   let hash = 0;
   const str = content.trim().toLowerCase();

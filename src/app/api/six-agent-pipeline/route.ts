@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { runSixAgentPipeline } from '@/lib/six-agent-pipeline';
 import { memoryBank } from '@/lib/geap-memory-bank';
+import { db } from '@/lib/db';
 
 // Fleet URL: use environment variable on Cloud Run, localhost in dev
 const FLEET_URL = process.env.AGENT_FLEET_URL || 'http://localhost:3004';
@@ -224,6 +225,30 @@ export async function POST(request: NextRequest) {
           (draftData.trace?.mode === 'live') ||
           (reviewData.trace?.mode === 'live');
         dataSource = anyLive ? 'live' : 'mock';
+
+        // Create a case in the DB so Gate 1 approval/rejection works
+        let fleetCaseId: string | null = null;
+        try {
+          const caseRecord = await db.case.create({
+            data: {
+              patient_id: `patient-${Date.now()}`,
+              state: 'hitl_gate_1',
+            },
+          });
+          fleetCaseId = caseRecord.id;
+          // Create HitlGate record for Gate 1
+          await db.hitlGate.create({
+            data: {
+              case_id: fleetCaseId,
+              gate_number: 1,
+              status: 'pending',
+              reviewer_note: 'Review triage classification and confirm to proceed.',
+            },
+          });
+        } catch (dbErr) {
+          console.error('[POST /api/six-agent-pipeline] Fleet DB case creation failed:', dbErr);
+        }
+
         result = {
           advocate: {
             caseFraming: {
@@ -248,7 +273,7 @@ export async function POST(request: NextRequest) {
           qualityReview: reviewData.data || null,
           citations: citationData.data || null,
           pipelineStatus: 'awaiting_gate1',
-          caseId: null,
+          caseId: fleetCaseId,
           latencyMs: 0,
         };
       }

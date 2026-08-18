@@ -14,6 +14,7 @@ import type { AdvocateResult } from './patient-advocate';
 import type { TriageResult } from './denial-triage';
 import type { PolicyResearchResult } from './policy-research-agent';
 import type { EvidenceAssemblyResult } from './evidence-assembly';
+import { generateContentHash } from './evidence-assembly';
 
 // ─── Types ────────────────────────────────────────────────────────────────
 
@@ -269,11 +270,11 @@ export class LetterDraftingAgent extends BaseAgent<LetterDraftingInput, LetterDr
     const payerDeadline = PAYER_DEADLINES[denialJson.payer] || { days: 180, label: '180 calendar days' };
 
     const inlineCitations: InlineCitation[] = [
-      { number: 1, evidenceId: 'mock-evidence-1', source: 'CMS Medicare Policy Manual', documentName: 'Medicare Coverage Determination', contentHash: 'a1b2c3d4', claimText: 'Policy clause: Items and services reasonable and necessary', provenanceTier: 'primary_source' },
-      { number: 2, evidenceId: 'mock-evidence-2', source: 'AAOS Clinical Practice Guidelines', documentName: 'AAOS CPG', contentHash: 'e5f6g7h8', claimText: 'Clinical guideline: TKA recommended for advanced OA', provenanceTier: 'secondary_summary' },
-      { number: 3, evidenceId: 'mock-evidence-3', source: 'Journal of Bone and Joint Surgery', documentName: 'JBJS Study', contentHash: 'i9j0k1l2', claimText: 'Peer-reviewed evidence: Long-term outcomes support TKA', provenanceTier: 'tertiary_commentary' },
-      { number: 4, evidenceId: 'mock-evidence-4', source: 'AHRQ Evidence Report', documentName: 'Effectiveness of TKA', contentHash: 'm3n4o5p6', claimText: 'AHRQ: TKA is effective for end-stage knee OA', provenanceTier: 'secondary_summary' },
-      { number: 5, evidenceId: 'mock-evidence-5', source: 'CMS Local Coverage Determination', documentName: 'LCD', contentHash: 'q7r8s9t0', claimText: 'LCD: Coverage criteria for the requested service', provenanceTier: 'primary_source' },
+      { number: 1, evidenceId: 'mock-evidence-1', source: 'CMS Medicare Policy Manual', documentName: 'Medicare Coverage Determination', contentHash: generateContentHash('CMS Medicare Policy Manual Section 1862'), claimText: 'Policy clause: Items and services reasonable and necessary', provenanceTier: 'primary_source' },
+      { number: 2, evidenceId: 'mock-evidence-2', source: 'AAOS Clinical Practice Guidelines', documentName: 'AAOS CPG', contentHash: generateContentHash('AAOS Clinical Practice Guidelines Chapter 4'), claimText: 'Clinical guideline: TKA recommended for advanced OA', provenanceTier: 'secondary_summary' },
+      { number: 3, evidenceId: 'mock-evidence-3', source: 'Journal of Bone and Joint Surgery', documentName: 'JBJS Study', contentHash: generateContentHash('JBJS Long-term outcomes TKA'), claimText: 'Peer-reviewed evidence: Long-term outcomes support TKA', provenanceTier: 'tertiary_commentary' },
+      { number: 4, evidenceId: 'mock-evidence-4', source: 'AHRQ Evidence Report', documentName: 'Effectiveness of TKA', contentHash: generateContentHash('AHRQ Evidence Report TKA'), claimText: 'AHRQ: TKA is effective for end-stage knee OA', provenanceTier: 'secondary_summary' },
+      { number: 5, evidenceId: 'mock-evidence-5', source: 'CMS Local Coverage Determination', documentName: 'LCD', contentHash: generateContentHash('LCD coverage criteria mock'), claimText: 'LCD: Coverage criteria for the requested service', provenanceTier: 'primary_source' },
     ];
 
     const sections: AppealSection[] = [

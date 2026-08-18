@@ -228,8 +228,8 @@ async function initializeSchema(): Promise<void> {
  */
 export const db = new Proxy(prismaClient, {
   get(target, prop, receiver) {
+    const original = Reflect.get(target, prop, receiver)
     if (typeof prop === 'string' && prop !== '$transaction' && prop !== '$connect' && prop !== '$disconnect' && prop !== '$extends' && prop !== '$executeRawUnsafe' && prop !== '$queryRawUnsafe') {
-      const original = Reflect.get(target, prop, receiver)
       if (original && typeof original === 'object') {
         return new Proxy(original, {
           get(modelTarget, modelProp, modelReceiver) {

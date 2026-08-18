@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { runThreeAgentPipeline } from '@/lib/three-agent-pipeline';
 import { SAMPLE_DENIAL_LETTERS } from '@/lib/vertical-slice-agent';
+import { db } from '@/lib/db';
 
 const FLEET_URL = process.env.AGENT_FLEET_URL || 'http://localhost:3004';
 const FLEET_TIMEOUT_MS = 30_000;
@@ -101,6 +102,29 @@ export async function POST(request: NextRequest) {
         const draftData = draftRes.ok ? await draftRes.json() : { data: null };
 
         dataSource = 'live';
+
+        // Create a case in the DB so Gate 1 approval/rejection works
+        let fleetCaseId: string | null = null;
+        try {
+          const caseRecord = await db.case.create({
+            data: {
+              patient_id: `patient-${Date.now()}`,
+              state: 'hitl_gate_1',
+            },
+          });
+          fleetCaseId = caseRecord.id;
+          await db.hitlGate.create({
+            data: {
+              case_id: fleetCaseId,
+              gate_number: 1,
+              status: 'pending',
+              reviewer_note: 'Review triage classification and confirm to proceed.',
+            },
+          });
+        } catch (dbErr) {
+          console.error('[POST /api/three-agent-pipeline] Fleet DB case creation failed:', dbErr);
+        }
+
         result = {
           advocate: {
             caseFraming: {
@@ -122,7 +146,7 @@ export async function POST(request: NextRequest) {
             confirmPrompt: 'Review triage classification and confirm to proceed.',
           },
           pipelineStatus: 'awaiting_gate1',
-          caseId: null,
+          caseId: fleetCaseId,
           latencyMs: 0,
         };
       }
