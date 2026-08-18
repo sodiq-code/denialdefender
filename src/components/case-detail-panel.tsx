@@ -117,7 +117,7 @@ export function CaseDetailPanel({ caseId, open, onOpenChange, onCaseUpdated }: C
 
   // Gate action handlers
   const handleApproveGate = useCallback(async (gateId: string, note: string) => {
-    if (!caseId) return;
+    if (!caseId) { toast.error('Cannot approve: no case ID'); return; }
     try {
       const res = await fetch(`/api/cases/${caseId}/gates`, {
         method: 'POST',
@@ -140,7 +140,7 @@ export function CaseDetailPanel({ caseId, open, onOpenChange, onCaseUpdated }: C
   }, [caseId, caseData, onCaseUpdated]);
 
   const handleRejectGate = useCallback(async (gateId: string, note: string) => {
-    if (!caseId) return;
+    if (!caseId) { toast.error('Cannot reject: no case ID'); return; }
     try {
       const res = await fetch(`/api/cases/${caseId}/gates`, {
         method: 'POST',
@@ -162,7 +162,7 @@ export function CaseDetailPanel({ caseId, open, onOpenChange, onCaseUpdated }: C
   }, [caseId, caseData, onCaseUpdated]);
 
   const handleEditGate = useCallback(async (gateId: string, note: string) => {
-    if (!caseId) return;
+    if (!caseId) { toast.error('Cannot edit: no case ID'); return; }
     try {
       const res = await fetch(`/api/cases/${caseId}/gates`, {
         method: 'POST',

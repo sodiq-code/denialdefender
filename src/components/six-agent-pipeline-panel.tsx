@@ -350,7 +350,10 @@ export function SixAgentPipelinePanel() {
 
   // Gate 1 action
   const handleGate1 = useCallback(async (action: 'approved' | 'rejected') => {
-    if (!result?.caseId) return;
+    if (!result?.caseId) {
+      setError('Cannot resume pipeline: case was not created in the database. Check the Decision Trace for the database error and re-run the pipeline.');
+      return;
+    }
     setResuming(true);
     setError(null);
 
@@ -561,6 +564,18 @@ export function SixAgentPipelinePanel() {
             {gate1Status === 'pending' && (
               <div className="mt-4 space-y-3">
                 <Separator />
+                {!result!.caseId && (
+                  <div className="p-3 rounded-md bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800">
+                    <div className="flex items-center gap-2 mb-1">
+                      <AlertCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
+                      <p className="text-sm font-medium text-red-800 dark:text-red-200">Database Error — Pipeline Cannot Resume</p>
+                    </div>
+                    <p className="text-xs text-red-700 dark:text-red-300">
+                      Case creation failed. The Approve/Reject buttons are disabled because there is no case record in the database.
+                      Check the Decision Trace below for the error details. Fix the database connection and re-run the pipeline.
+                    </p>
+                  </div>
+                )}
                 <div className="p-3 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800">
                   <p className="text-sm font-medium text-amber-800 dark:text-amber-200 mb-1">HITL Gate 1 — Confirm Denial Classification</p>
                   <p className="text-xs text-amber-700 dark:text-amber-300 mb-3">{result!.gate1.confirmPrompt}</p>
@@ -568,8 +583,8 @@ export function SixAgentPipelinePanel() {
                     <Button
                       size="sm"
                       onClick={() => handleGate1('approved')}
-                      disabled={resuming}
-                      className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                      disabled={resuming || !result!.caseId}
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {resuming ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />}
                       Approve — Run Agents 4-6
@@ -578,8 +593,8 @@ export function SixAgentPipelinePanel() {
                       size="sm"
                       variant="outline"
                       onClick={() => handleGate1('rejected')}
-                      disabled={resuming}
-                      className="border-red-300 text-red-600 hover:bg-red-50 dark:border-red-700 dark:text-red-400 dark:hover:bg-red-950/30"
+                      disabled={resuming || !result!.caseId}
+                      className="border-red-300 text-red-600 hover:bg-red-50 dark:border-red-700 dark:text-red-400 dark:hover:bg-red-950/30 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <XCircle className="h-3.5 w-3.5 mr-1.5" />
                       Reject

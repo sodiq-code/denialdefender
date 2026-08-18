@@ -491,3 +491,21 @@ Stage Summary:
 - Thesis now has 3 memorable elements (reframe + core loop + automation boundary) vs 1 before
 - Cognitive load reduced: judge can understand entire product in 5 lines
 - No competitive language remains in any section title or claim
+---
+Task ID: 1
+Agent: main
+Task: Fix Approve button not responding in HITL Gate 1 panel
+
+Work Log:
+- Analyzed 3 user screenshots showing the bug: Approve button appears clickable but does nothing
+- Screenshot 552 revealed root cause: Prisma error "Failed to create case: Invalid 'prisma.case.create()' invocation: The table" in Decision Trace
+- Traced code flow: db.case.create() fails → caseId = null → pipeline still returns awaiting_gate1 → Gate 1 panel shows → user clicks Approve → handleGate1 silently returns (if (!result?.caseId) return;)
+- Fixed backend (six-agent-pipeline.ts, three-agent-pipeline.ts, full-pipeline.ts): When case creation fails, pipeline returns gate1_rejected instead of awaiting_gate1, with descriptive error in confirmPrompt
+- Fixed frontend (six-agent-pipeline-panel.tsx): handleGate1 now shows error message when caseId is null instead of silently returning; Approve/Reject buttons disabled when caseId is null; Red error banner shown when case creation failed
+- Fixed frontend (case-detail-panel.tsx): Gate handlers now show toast.error instead of silent return when caseId is null
+- Verified: lint passes (0 errors), pipeline API test returns correct structure with caseId present, no trace errors
+
+Stage Summary:
+- Root cause: 2 bugs working together - (1) pipeline returned awaiting_gate1 even when case creation failed, (2) handleGate1 silently returned when caseId was null
+- Fix: Pipeline now returns gate1_rejected when case creation fails; Frontend disables buttons and shows error when caseId is null
+- Files changed: src/lib/six-agent-pipeline.ts, src/lib/three-agent-pipeline.ts, src/lib/full-pipeline.ts, src/components/six-agent-pipeline-panel.tsx, src/components/case-detail-panel.tsx

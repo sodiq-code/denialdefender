@@ -85,6 +85,7 @@ export async function runFullPipeline(
 
   // Step 1: Create a Case in the DB
   let caseId: string | null = null;
+  let caseCreateError: string | null = null;
   try {
     const caseRecord = await db.case.create({
       data: {
@@ -102,6 +103,7 @@ export async function runFullPipeline(
     traces.push({ agent: 'pipeline', step: 'create_case', timestamp: new Date().toISOString(), status: 'completed', detail: se.detail });
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : String(error);
+    caseCreateError = msg;
     traces.push({ agent: 'pipeline', step: 'create_case', timestamp: new Date().toISOString(), status: 'error', detail: `Failed: ${msg}` });
   }
 
@@ -190,6 +192,27 @@ export async function runFullPipeline(
 
   const traceChecklist = buildTraceChecklist(structuredTraces);
   const latencyMs = Date.now() - totalStart;
+
+  // If case creation failed, we cannot resume — return error status
+  if (!caseId) {
+    return {
+      advocate: advocateResult.data,
+      triage: triageResult.data,
+      gate1: { status: 'rejected', gateId: null, confirmPrompt: `Pipeline error: Case could not be created in database. ${caseCreateError || 'Unknown database error'}. Fix the database connection and re-run the pipeline.` },
+      policyResearch: null,
+      evidenceAssembly: null,
+      letterDrafting: null,
+      qualityReview: null,
+      gate2: null,
+      pipelineStatus: 'gate1_rejected' as const,
+      caseId: null,
+      latencyMs,
+      traces,
+      structuredTraces,
+      traceChecklist,
+      letterVersion: 0,
+    };
+  }
 
   return {
     advocate: advocateResult.data,

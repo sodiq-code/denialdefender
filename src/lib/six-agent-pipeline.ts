@@ -85,6 +85,7 @@ export async function runSixAgentPipeline(
 
   // Step 1: Create a Case in the DB
   let caseId: string | null = null;
+  let caseCreateError: string | null = null;
   try {
     const caseRecord = await db.case.create({
       data: {
@@ -102,6 +103,7 @@ export async function runSixAgentPipeline(
     });
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : String(error);
+    caseCreateError = msg;
     traces.push({
       agent: 'pipeline',
       step: 'create_case',
@@ -234,6 +236,29 @@ export async function runSixAgentPipeline(
   const latencyMs = Date.now() - totalStart;
 
   // Step 6: Return — pipeline STOPS at Gate 1
+  // If case creation failed, we cannot resume — return a distinct error status
+  if (!caseId) {
+    return {
+      advocate: advocateResult.data,
+      triage: triageResult.data,
+      gate1: {
+        status: 'rejected',
+        gateId: null,
+        confirmPrompt: `Pipeline error: Case could not be created in database. ${caseCreateError || 'Unknown database error'}. Fix the database connection and re-run the pipeline.`,
+      },
+      policyResearch: null,
+      evidenceAssembly: null,
+      letterDrafting: null,
+      qualityReview: null,
+      pipelineStatus: 'gate1_rejected' as const,
+      caseId: null,
+      latencyMs,
+      traces,
+      permissionEnforced: true,
+      permissionChecks,
+    };
+  }
+
   return {
     advocate: advocateResult.data,
     triage: triageResult.data,
