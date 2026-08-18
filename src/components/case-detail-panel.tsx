@@ -71,6 +71,7 @@ interface CaseDetailPanelProps {
 export function CaseDetailPanel({ caseId, open, onOpenChange, onCaseUpdated }: CaseDetailPanelProps) {
   const [caseData, setCaseData] = useState<CaseData | null>(null);
   const [loading, setLoading] = useState(false);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const { subscribeToCase, unsubscribeFromCase, traceEvents } = useTraceStream();
 
   // Fetch case data when opened
@@ -87,6 +88,7 @@ export function CaseDetailPanel({ caseId, open, onOpenChange, onCaseUpdated }: C
         }
       } catch (err) {
         console.error('Failed to fetch case:', err);
+        setFetchError(err instanceof Error ? err.message : 'Failed to load case data');
       } finally {
         setLoading(false);
       }
@@ -453,7 +455,7 @@ export function CaseDetailPanel({ caseId, open, onOpenChange, onCaseUpdated }: C
         {!loading && !caseData && caseId && (
           <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
             <AlertTriangle className="h-8 w-8 mb-2" />
-            <p className="text-sm">Case not found</p>
+            <p className="text-sm">{fetchError ? `Error: ${fetchError}` : 'Case not found'}</p>
           </div>
         )}
       </SheetContent>

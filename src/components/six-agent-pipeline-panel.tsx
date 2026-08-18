@@ -584,6 +584,7 @@ export function SixAgentPipelinePanel() {
                       size="sm"
                       onClick={() => handleGate1('approved')}
                       disabled={resuming || !result!.caseId}
+                      title={!result?.caseId ? 'Disabled: Case creation failed — check error above' : resuming ? 'Resuming pipeline...' : 'Approve and run Agents 4-6'}
                       className="bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {resuming ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />}
@@ -594,6 +595,7 @@ export function SixAgentPipelinePanel() {
                       variant="outline"
                       onClick={() => handleGate1('rejected')}
                       disabled={resuming || !result!.caseId}
+                      title={!result?.caseId ? 'Disabled: Case creation failed — check error above' : resuming ? 'Resuming pipeline...' : 'Reject this classification'}
                       className="border-red-300 text-red-600 hover:bg-red-50 dark:border-red-700 dark:text-red-400 dark:hover:bg-red-950/30 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <XCircle className="h-3.5 w-3.5 mr-1.5" />

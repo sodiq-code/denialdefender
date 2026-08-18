@@ -18,6 +18,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { toast } from 'sonner';
 import {
   ShieldAlert,
   ShieldCheck,
@@ -325,7 +326,7 @@ export default function Day11GovernancePanel() {
         const data = await res.json();
         setArmorAudit(data.entries || []);
       }
-    } catch { /* ignore */ }
+    } catch (err) { console.error('[Governance] Armor audit failed:', err); toast.error('Failed to load Model Armor audit log'); }
   };
 
   const loadIdentityAudit = async () => {
@@ -335,7 +336,7 @@ export default function Day11GovernancePanel() {
         const data = await res.json();
         setIdentityAudit(data.entries || []);
       }
-    } catch { /* ignore */ }
+    } catch (err) { console.error('[Governance] Identity audit failed:', err); toast.error('Failed to load Agent Identity audit log'); }
   };
 
   const loadObservabilityStats = async () => {
@@ -345,7 +346,7 @@ export default function Day11GovernancePanel() {
         const data = await res.json();
         setObservabilityStats(data);
       }
-    } catch { /* ignore */ }
+    } catch (err) { console.error('[Governance] Observability stats failed:', err); toast.error('Failed to load observability stats'); }
   };
 
   // Verify governance gate
@@ -357,7 +358,7 @@ export default function Day11GovernancePanel() {
         const data = await res.json();
         setGateResult(data);
       }
-    } catch { /* ignore */ }
+    } catch (err) { console.error('[Governance] Gate verification failed:', err); toast.error('Governance gate verification failed'); }
     finally {
       setLoading(false);
     }

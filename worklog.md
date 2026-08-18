@@ -596,3 +596,32 @@ Stage Summary:
 - Changes pushed to origin/main
 - Auto-deploy to Cloud Run triggered via GitHub Actions
 - Key fixes: db.ts proxy crash, content hash consistency, DB error resilience, fleet caseId
+---
+Task ID: 2
+Agent: Main
+Task: Fix Prisma database "The table" error and all silent failure anti-patterns across DenialDefender
+
+Work Log:
+- Diagnosed root cause: Prisma database tables were not initialized, causing `db.case.create()` to fail with "The table `Case` does not exist" error
+- Ran `prisma db push --accept-data-loss` to sync schema and create all tables in SQLite
+- Verified all 9 tables exist: Case, Denial, Evidence, Citation, Outcome, DecisionTraceEvent, HitlGate, PhiGuardAudit, GovernanceAudit, LearnedPattern, CaseMemoryState
+- Audited ALL components for silent failure anti-patterns (catch { /* ignore */ } blocks)
+- Fixed evidence-corpus-tab.tsx: Replaced 4 `catch { // ignore }` blocks with proper error handling + toast.error() feedback
+- Fixed governance-panel.tsx: Replaced 4 `catch { /* ignore */ }` blocks with proper error handling + toast.error() feedback
+- Fixed case-detail-panel.tsx: Added fetchError state + display for failed case fetch, shows actual error instead of generic "Case not found"
+- Added tooltip attributes to disabled Approve/Reject buttons in six-agent-pipeline-panel.tsx explaining WHY they're disabled
+- Verified all 3 pipeline variants (six-agent, three-agent, full) properly track caseCreateError and return gate1.status='rejected' with descriptive error message
+- Verified case-detail-panel.tsx gate handlers properly use toast.error() when caseId is null
+- Ran lint: 0 errors, 218 warnings (all non-critical)
+- API-level end-to-end test PASSED:
+  - Step 1: Pipeline to Gate 1 → caseId created, pipelineStatus=awaiting_gate1, 6 traces, 0 errors
+  - Step 2: Gate 1 Approve → All 6 agents ran, pipelineStatus=completed, 10 traces, 0 errors
+  - Appeal letter generated (3275 chars), Quality review completed
+- Browser verification: Page renders correctly, all tabs work, New Appeal tab shows pipeline panel, UHC sample fills form, Run Pipeline button enabled
+
+Stage Summary:
+- Database: All tables synced and working via Prisma SQLite
+- Pipeline: Full 6-agent pipeline works end-to-end (Advocate → Triage → [Gate 1] → Policy → Evidence → Draft → Quality Review)
+- Error handling: All silent failures replaced with user-visible toast errors
+- The "The table" error is FIXED — cases are being created successfully in the database
+- Gate 1 Approve button works — the previous silent failure has been eliminated

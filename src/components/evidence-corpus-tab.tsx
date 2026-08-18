@@ -11,6 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { toast } from 'sonner';
 import { ProvenanceCard, ProvenanceBadge } from '@/components/provenance-card';
 import {
   FileSearch,
@@ -78,8 +79,9 @@ export function EvidenceCorpusTab() {
         const data = await res.json();
         setStats(data.corpus);
       }
-    } catch {
-      // ignore
+    } catch (err) {
+      console.error('[EvidenceCorpus] Failed to fetch stats:', err);
+      toast.error('Failed to load evidence corpus stats');
     }
   }, []);
 
@@ -99,8 +101,9 @@ export function EvidenceCorpusTab() {
         setRecords(data.records || []);
         setTotal(data.total || 0);
       }
-    } catch {
-      // ignore
+    } catch (err) {
+      console.error('[EvidenceCorpus] Failed to fetch records:', err);
+      toast.error('Failed to load evidence records');
     } finally {
       setLoading(false);
     }
@@ -125,8 +128,9 @@ export function EvidenceCorpusTab() {
         setStats(data.corpus);
         fetchRecords();
       }
-    } catch {
-      // ignore
+    } catch (err) {
+      console.error('[EvidenceCorpus] Ingest failed:', err);
+      toast.error('Evidence ingest failed — check server logs');
     } finally {
       setIngesting(false);
     }
@@ -142,8 +146,9 @@ export function EvidenceCorpusTab() {
         const data = await res.json();
         setSearchResults(data.results || []);
       }
-    } catch {
-      // ignore
+    } catch (err) {
+      console.error('[EvidenceCorpus] Search failed:', err);
+      toast.error('Evidence search failed');
     } finally {
       setLoading(false);
     }
