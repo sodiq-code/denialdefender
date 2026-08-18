@@ -200,8 +200,13 @@ async function initializeSchema(): Promise<void> {
     try {
       await prismaClient.case.count()
       globalForPrisma.dbInitialized = true
+      console.log('[db] Tables already exist — schema OK')
     } catch (e: any) {
-      if (e?.code === 'P2021') {
+      const code = e?.code || ''
+      const message = e?.message || ''
+      console.log(`[db] Schema check failed: code=${code}, msg=${message.slice(0, 100)}`)
+      // P2021 = table doesn't exist; also catch other SQLite errors
+      if (code === 'P2021' || message.includes('does not exist') || code === 'P1') {
         console.log('[db] Creating tables in SQLite...')
         try {
           const statements = INIT_SQL.split(';').map(s => s.trim()).filter(s => s.length > 0)
@@ -209,11 +214,22 @@ async function initializeSchema(): Promise<void> {
             await prismaClient.$executeRawUnsafe(stmt)
           }
           console.log('[db] Tables created successfully')
-        } catch (err) {
-          console.error('[db] Table creation error:', err)
+        } catch (err: any) {
+          console.error('[db] Table creation error:', err?.message || err)
+          // Try one more time — sometimes the first DDL statement creates the file
+          try {
+            const statements = INIT_SQL.split(';').map(s => s.trim()).filter(s => s.length > 0)
+            for (const stmt of statements) {
+              await prismaClient.$executeRawUnsafe(stmt)
+            }
+            console.log('[db] Tables created on retry')
+          } catch (retryErr: any) {
+            console.error('[db] Table creation retry also failed:', retryErr?.message || retryErr)
+          }
         }
         globalForPrisma.dbInitialized = true
       } else {
+        console.error('[db] Unexpected schema error (not P2021):', code, message.slice(0, 200))
         throw e
       }
     }

@@ -165,8 +165,33 @@ if [[ "${DEPLOY_WEB}" == true ]]; then
     --set-env-vars "MODEL_ARMOR_LOCATION=${REGION}" \
     --set-env-vars "MEMORY_BANK_STORE=vertex_ai" \
     --set-secrets "GEMINI_API_KEY=gemini-api-key:latest" \
-    --set-secrets "DATABASE_URL=cloud-sql-connection-string:latest" \
     --project "${PROJECT_ID}"
+
+  # ── Update Web Service with Agent Fleet & Trace Stream URLs ────────────────
+  # Get the deployed URLs and update the web service so it can reach them
+  AGENT_URL=$(gcloud run services describe "${AGENT_SERVICE}" \
+    --region "${REGION}" \
+    --format "value(status.url)" \
+    --project "${PROJECT_ID}" 2>/dev/null || echo "")
+
+  TRACE_URL=$(gcloud run services describe "denialdefender-trace-stream" \
+    --region "${REGION}" \
+    --format "value(status.url)" \
+    --project "${PROJECT_ID}" 2>/dev/null || echo "")
+
+  if [[ -n "${AGENT_URL}" ]]; then
+    echo ""
+    echo "  Updating web service with inter-service URLs..."
+    ENV_UPDATE="AGENT_FLEET_URL=${AGENT_URL}"
+    if [[ -n "${TRACE_URL}" ]]; then
+      ENV_UPDATE="${ENV_UPDATE},NEXT_PUBLIC_TRACE_STREAM_URL=${TRACE_URL}"
+    fi
+    gcloud run services update "${WEB_SERVICE}" \
+      --region "${REGION}" \
+      --update-env-vars="${ENV_UPDATE}" \
+      --project "${PROJECT_ID}" || warn "Failed to update web service URLs"
+    log "Web service updated with AGENT_FLEET_URL and TRACE_STREAM_URL"
+  fi
 
   # Get the deployed URL
   WEB_URL=$(gcloud run services describe "${WEB_SERVICE}" \

@@ -72,6 +72,9 @@ steps:
     waitFor: ['build-trace-stream']
 
   # ── Step 5: Deploy Web Service to Cloud Run ────────────────────────────────
+  # NOTE: DATABASE_URL is NOT set here — the Dockerfile bakes in
+  # file:/app/db/production.db (SQLite with tables pre-created).
+  # Cloud SQL is for the agent fleet, not the web service.
   - name: 'gcr.io/cloud-builders/gcloud'
     args:
       - 'run'
@@ -95,8 +98,10 @@ steps:
       - '--set-env-vars=FIRESTORE_LOCATION=eur3'
       - '--set-env-vars=NEXT_PUBLIC_GCP_PROJECT_ID=$PROJECT_ID'
       - '--set-env-vars=NEXT_PUBLIC_APP_NAME=DenialDefender'
+      - '--set-env-vars=MODEL_ARMOR_POLICY_ID=dd-model-armor'
+      - '--set-env-vars=MODEL_ARMOR_LOCATION=${_REGION}'
       - '--set-env-vars=MEMORY_BANK_STORE=vertex_ai'
-      - '--set-secrets=GEMINI_API_KEY=gemini-api-key-1:latest'
+      - '--set-secrets=GEMINI_API_KEY=gemini-api-key:latest'
     id: 'deploy-web'
     waitFor: ['push-web']
 
@@ -154,7 +159,28 @@ steps:
     id: 'deploy-trace-stream'
     waitFor: ['push-trace-stream']
 
-  # ── Step 8: Configure IAM for service-to-service auth ─────────────────────
+  # ── Step 8: Update Web Service with Agent Fleet & Trace Stream URLs ───────
+  # The web service needs to know where the agent fleet and trace stream are.
+  # These URLs are only available after deployment.
+  - name: 'gcr.io/cloud-builders/gcloud'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        AGENT_URL=$(gcloud run services describe denialdefender-agents \
+          --region=${_REGION} --format='value(status.url)')
+        TRACE_URL=$(gcloud run services describe denialdefender-trace-stream \
+          --region=${_REGION} --format='value(status.url)')
+        echo "Agent Fleet URL: $${AGENT_URL}"
+        echo "Trace Stream URL: $${TRACE_URL}"
+        gcloud run services update denialdefender-web \
+          --region=${_REGION} \
+          --update-env-vars=AGENT_FLEET_URL=$${AGENT_URL},NEXT_PUBLIC_TRACE_STREAM_URL=$${TRACE_URL} \
+          || echo "Warning: Failed to update web service env vars"
+    id: 'update-web-urls'
+    waitFor: ['deploy-web', 'deploy-agents', 'deploy-trace-stream']
+
+  # ── Step 9: Configure IAM for service-to-service auth ─────────────────────
   - name: 'gcr.io/cloud-builders/gcloud'
     entrypoint: 'bash'
     args:
@@ -166,9 +192,9 @@ steps:
           --region=${_REGION} 2>/dev/null || echo "IAM binding already exists"
         echo "IAM configured"
     id: 'configure-iam'
-    waitFor: ['deploy-web', 'deploy-agents']
+    waitFor: ['update-web-urls']
 
-  # ── Step 9: Verify deployment ──────────────────────────────────────────────
+  # ── Step 10: Verify deployment ────────────────────────────────────────────
   - name: 'gcr.io/cloud-builders/gcloud'
     entrypoint: 'bash'
     args:
@@ -187,7 +213,7 @@ steps:
         echo "  Commit: $COMMIT_SHA"
         curl -sf "$${WEB_URL}/api/health" && echo "  Web: HEALTHY" || echo "  Web: UNHEALTHY"
     id: 'verify-deployment'
-    waitFor: ['deploy-web', 'deploy-agents', 'deploy-trace-stream']
+    waitFor: ['configure-iam']
 
 options:
   logging: CLOUD_LOGGING_ONLY

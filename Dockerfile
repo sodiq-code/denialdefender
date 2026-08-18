@@ -42,10 +42,15 @@ RUN npx prisma generate
 # Build Next.js
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
-ENV DATABASE_URL=file:./prisma/dev.db
 
-# Push Prisma schema to SQLite then build Next.js
-RUN npx prisma db push --accept-data-loss && npm run build
+# Create production database directory and file
+# This ensures tables exist at runtime for Cloud Run
+RUN mkdir -p /app/db && \
+    DATABASE_URL=file:/app/db/production.db npx prisma db push --accept-data-loss
+
+# Build Next.js (use the production DB URL)
+ENV DATABASE_URL=file:/app/db/production.db
+RUN npm run build
 
 # ── Stage 3: Production Runtime ──────────────────────────────────────────────
 FROM node:20-alpine AS runner
@@ -56,7 +61,10 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=8080
-# DATABASE_URL is set at deploy time via Cloud Run env vars (Turso for persistent, file: for local)
+# DATABASE_URL defaults to the SQLite file created during build.
+# Cloud Run should NOT override this with a PostgreSQL URL (Prisma schema is SQLite).
+# If Turso is used, set TURSO_DB_URL and TURSO_DB_TOKEN instead.
+ENV DATABASE_URL=file:/app/db/production.db
 
 # Create non-root user for security
 RUN addgroup --system --gid 1001 nodejs && \
@@ -74,8 +82,11 @@ COPY --from=builder --chown=nextjs:nodejs /app/node_modules ./node_modules
 # Copy Prisma schema and generated client (needed at runtime for DB queries)
 COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma
 
-# Copy database file if using SQLite locally
+# Copy database file (production.db with tables pre-created during build)
 COPY --from=builder --chown=nextjs:nodejs /app/db ./db
+
+# Ensure the database directory is writable (Cloud Run containers are read-only except /tmp)
+# The db.ts auto-initialization will create tables if they don't exist.
 
 USER nextjs
 
