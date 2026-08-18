@@ -295,6 +295,23 @@ export async function resumeSixAgentPipeline(
 ): Promise<SixAgentPipelineResult> {
   const totalStart = Date.now();
   const traces: TraceEvent[] = [];
+  const permissionChecks: Array<{ agent: AgentRole; resource: Resource; capability: Capability; allowed: boolean }> = [];
+
+  // ── Permission gate helper ──
+  async function gatePermission(role: AgentRole, resource: Resource, capability: Capability): Promise<boolean> {
+    const result = await checkPermission(role, resource, capability, undefined, `six-agent-pipeline resume gate for ${role}`);
+    permissionChecks.push({ agent: role, resource, capability, allowed: result.allowed });
+    if (!result.allowed) {
+      traces.push({
+        agent: 'agent-identity',
+        step: 'permission_deny',
+        timestamp: new Date().toISOString(),
+        status: 'blocked',
+        detail: result.reason,
+      });
+    }
+    return result.allowed;
+  }
 
   // Verify the case exists
   const caseRecord = await db.case.findUnique({ where: { id: caseId } });

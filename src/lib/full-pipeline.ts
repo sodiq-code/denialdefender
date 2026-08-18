@@ -34,6 +34,8 @@ import {
   getCurrentLetterVersion,
   type InlineCitationVersion,
 } from './letter-version-history';
+import { checkPermission } from './agent-identity';
+import type { AgentRole, Resource, Capability } from './agent-identity';
 
 // ─── Types ────────────────────────────────────────────────────────────────
 
@@ -72,6 +74,9 @@ export interface FullPipelineResult {
   structuredTraces: StructuredTraceEvent[];
   traceChecklist: TraceChecklistItem[];
   letterVersion: number;
+  /** Runtime permission enforcement results */
+  permissionEnforced: boolean;
+  permissionChecks: Array<{ agent: AgentRole; resource: Resource; capability: Capability; allowed: boolean }>;
 }
 
 // ─── Main Pipeline (Phase 1: up to Gate 1) ─────────────────────────────────
@@ -211,6 +216,8 @@ export async function runFullPipeline(
       structuredTraces,
       traceChecklist,
       letterVersion: 0,
+      permissionEnforced: false,
+      permissionChecks: [],
     };
   }
 
@@ -230,6 +237,8 @@ export async function runFullPipeline(
     structuredTraces,
     traceChecklist,
     letterVersion: 0,
+    permissionEnforced: false,
+    permissionChecks: [],
   };
 }
 
@@ -244,6 +253,23 @@ export async function resumeAfterGate1(
   const totalStart = Date.now();
   const traces: TraceEvent[] = [];
   const structuredTraces: StructuredTraceEvent[] = [];
+  const permissionChecks: Array<{ agent: AgentRole; resource: Resource; capability: Capability; allowed: boolean }> = [];
+
+  // ── Permission gate helper ──
+  async function gatePermission(role: AgentRole, resource: Resource, capability: Capability): Promise<boolean> {
+    const result = await checkPermission(role, resource, capability, undefined, `pipeline resume gate for ${role}`);
+    permissionChecks.push({ agent: role, resource, capability, allowed: result.allowed });
+    if (!result.allowed) {
+      traces.push({
+        agent: 'agent-identity',
+        step: 'permission_deny',
+        timestamp: new Date().toISOString(),
+        status: 'blocked',
+        detail: result.reason,
+      });
+    }
+    return result.allowed;
+  }
 
   const caseRecord = await db.case.findUnique({ where: { id: caseId } });
   if (!caseRecord) throw new Error(`Case ${caseId} not found`);
@@ -273,6 +299,7 @@ export async function resumeAfterGate1(
       gate1: { status: 'rejected', gateId: gate.id, confirmPrompt: gate.reviewer_note || 'Gate 1 rejected' },
       pipelineStatus: 'gate1_rejected',
       traces, structuredTraces, latencyMs: Date.now() - totalStart,
+      permissionEnforced: true, permissionChecks,
     });
   }
 
@@ -289,6 +316,26 @@ export async function resumeAfterGate1(
   const advocateResult: AdvocateResult = cachedAdvocateResult || buildDefaultAdvocate(denial);
 
   // ─── Step A: Policy Research ──────────────────────────────────────────
+  // ── Gate: Policy Research → policy:execute ──
+  const policyAllowed = await gatePermission('policy-research', 'policy', 'execute');
+  if (!policyAllowed) {
+    return {
+      advocate: advocateResult,
+      triage: triageResult,
+      gate1: { status: 'approved', gateId: gate.id, confirmPrompt: gate.reviewer_note || 'Gate 1 approved' },
+      policyResearch: null, evidenceAssembly: null, letterDrafting: null, qualityReview: null, gate2: null,
+      pipelineStatus: 'quality_review_failed' as const,
+      caseId,
+      latencyMs: Date.now() - totalStart,
+      traces,
+      structuredTraces,
+      traceChecklist: buildTraceChecklist(structuredTraces),
+      letterVersion: 0,
+      permissionEnforced: true,
+      permissionChecks,
+    };
+  }
+
   await db.case.update({ where: { id: caseId }, data: { state: 'evidence_active' } });
 
   const policyResult = await policyResearchAgent.run({ triageResult });
@@ -302,6 +349,26 @@ export async function resumeAfterGate1(
   structuredTraces.push(polTrace);
 
   // ─── Step B: Evidence Assembly ────────────────────────────────────────
+  // ── Gate: Evidence Assembly → evidence:write ──
+  const evidenceAllowed = await gatePermission('evidence-assembly', 'evidence', 'write');
+  if (!evidenceAllowed) {
+    return {
+      advocate: advocateResult,
+      triage: triageResult,
+      gate1: { status: 'approved', gateId: gate.id, confirmPrompt: gate.reviewer_note || 'Gate 1 approved' },
+      policyResearch: policyResult.data, evidenceAssembly: null, letterDrafting: null, qualityReview: null, gate2: null,
+      pipelineStatus: 'quality_review_failed' as const,
+      caseId,
+      latencyMs: Date.now() - totalStart,
+      traces,
+      structuredTraces,
+      traceChecklist: buildTraceChecklist(structuredTraces),
+      letterVersion: 0,
+      permissionEnforced: true,
+      permissionChecks,
+    };
+  }
+
   const evidenceResult = await evidenceAssemblyAgent.run({ triageResult, policyResearchResult: policyResult.data });
   traces.push(evidenceResult.trace);
   const evTrace = await emitTraceEvent(toStructuredTrace(caseId, {
@@ -312,6 +379,26 @@ export async function resumeAfterGate1(
   structuredTraces.push(evTrace);
 
   // ─── Step C: Letter Drafting ──────────────────────────────────────────
+  // ── Gate: Letter Drafting → appeal:write ──
+  const draftingAllowed = await gatePermission('letter-drafting', 'appeal', 'write');
+  if (!draftingAllowed) {
+    return {
+      advocate: advocateResult,
+      triage: triageResult,
+      gate1: { status: 'approved', gateId: gate.id, confirmPrompt: gate.reviewer_note || 'Gate 1 approved' },
+      policyResearch: policyResult.data, evidenceAssembly: evidenceResult.data, letterDrafting: null, qualityReview: null, gate2: null,
+      pipelineStatus: 'quality_review_failed' as const,
+      caseId,
+      latencyMs: Date.now() - totalStart,
+      traces,
+      structuredTraces,
+      traceChecklist: buildTraceChecklist(structuredTraces),
+      letterVersion: 0,
+      permissionEnforced: true,
+      permissionChecks,
+    };
+  }
+
   await db.case.update({ where: { id: caseId }, data: { state: 'drafting_active' } });
 
   const draftingResult = await letterDraftingAgent.run({
@@ -344,6 +431,26 @@ export async function resumeAfterGate1(
   );
 
   // ─── Step D: Quality Review ───────────────────────────────────────────
+  // ── Gate: Quality Review → citation:write ──
+  const qualityAllowed = await gatePermission('quality-review', 'citation', 'write');
+  if (!qualityAllowed) {
+    return {
+      advocate: advocateResult,
+      triage: triageResult,
+      gate1: { status: 'approved', gateId: gate.id, confirmPrompt: gate.reviewer_note || 'Gate 1 approved' },
+      policyResearch: policyResult.data, evidenceAssembly: evidenceResult.data, letterDrafting: draftingResult.data, qualityReview: null, gate2: null,
+      pipelineStatus: 'quality_review_failed' as const,
+      caseId,
+      latencyMs: Date.now() - totalStart,
+      traces,
+      structuredTraces,
+      traceChecklist: buildTraceChecklist(structuredTraces),
+      letterVersion: letterVersion.version,
+      permissionEnforced: true,
+      permissionChecks,
+    };
+  }
+
   await db.case.update({ where: { id: caseId }, data: { state: 'quality_review' } });
 
   const qualityResult = await qualityReviewAgent.run({
@@ -385,6 +492,8 @@ export async function resumeAfterGate1(
       structuredTraces,
       traceChecklist: buildTraceChecklist(structuredTraces),
       letterVersion: letterVersion.version,
+      permissionEnforced: true,
+      permissionChecks,
     };
   }
 
@@ -435,6 +544,8 @@ export async function resumeAfterGate1(
     structuredTraces,
     traceChecklist: buildTraceChecklist(structuredTraces),
     letterVersion: letterVersion.version,
+    permissionEnforced: true,
+    permissionChecks,
   };
 }
 
@@ -667,6 +778,8 @@ function buildResult(
     traces: TraceEvent[];
     structuredTraces: StructuredTraceEvent[];
     latencyMs: number;
+    permissionEnforced: boolean;
+    permissionChecks: Array<{ agent: AgentRole; resource: Resource; capability: Capability; allowed: boolean }>;
   },
 ): FullPipelineResult {
   return {
@@ -681,5 +794,7 @@ function buildResult(
     structuredTraces: extra.structuredTraces,
     traceChecklist: buildTraceChecklist(extra.structuredTraces),
     letterVersion: 0,
+    permissionEnforced: extra.permissionEnforced,
+    permissionChecks: extra.permissionChecks,
   };
 }

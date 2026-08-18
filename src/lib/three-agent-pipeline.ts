@@ -21,6 +21,8 @@ import { patientAdvocateAgent, type PatientAdvocateInput, type AdvocateResult } 
 import { denialTriageAgent, type DenialTriageInput, type TriageResult } from './agents/denial-triage';
 import { policyResearchAgent, type PolicyResearchInput, type PolicyResearchResult } from './agents/policy-research-agent';
 import type { TraceEvent } from './agents/base-agent';
+import { checkPermission } from './agent-identity';
+import type { AgentRole, Resource, Capability } from './agent-identity';
 
 // ─── Types ────────────────────────────────────────────────────────────────
 
@@ -50,6 +52,9 @@ export interface ThreeAgentPipelineResult {
   caseId: string | null;
   latencyMs: number;
   traces: TraceEvent[];
+  /** Runtime permission enforcement results */
+  permissionEnforced: boolean;
+  permissionChecks: Array<{ agent: AgentRole; resource: Resource; capability: Capability; allowed: boolean }>;
 }
 
 // ─── Main Pipeline ────────────────────────────────────────────────────────
@@ -237,6 +242,8 @@ export async function runThreeAgentPipeline(
       caseId: null,
       latencyMs,
       traces,
+      permissionEnforced: false,
+      permissionChecks: [],
     };
   }
 
@@ -253,6 +260,8 @@ export async function runThreeAgentPipeline(
     caseId,
     latencyMs,
     traces,
+    permissionEnforced: false,
+    permissionChecks: [],
   };
 }
 
@@ -270,6 +279,23 @@ export async function resumeAfterGate1(
 ): Promise<ThreeAgentPipelineResult> {
   const totalStart = Date.now();
   const traces: TraceEvent[] = [];
+  const permissionChecks: Array<{ agent: AgentRole; resource: Resource; capability: Capability; allowed: boolean }> = [];
+
+  // ── Permission gate helper ──
+  async function gatePermission(role: AgentRole, resource: Resource, capability: Capability): Promise<boolean> {
+    const result = await checkPermission(role, resource, capability, undefined, `pipeline resume gate for ${role}`);
+    permissionChecks.push({ agent: role, resource, capability, allowed: result.allowed });
+    if (!result.allowed) {
+      traces.push({
+        agent: 'agent-identity',
+        step: 'permission_deny',
+        timestamp: new Date().toISOString(),
+        status: 'blocked',
+        detail: result.reason,
+      });
+    }
+    return result.allowed;
+  }
 
   // Verify the case exists
   const caseRecord = await db.case.findUnique({ where: { id: caseId } });
@@ -358,6 +384,8 @@ export async function resumeAfterGate1(
       caseId,
       latencyMs: Date.now() - totalStart,
       traces,
+      permissionEnforced: true,
+      permissionChecks,
     };
   }
 
@@ -375,7 +403,7 @@ export async function resumeAfterGate1(
 
   // Get denial info for triage
   const denial = await db.denial.findUnique({ where: { case_id: caseId } });
-  let triageResult: TriageResult = cachedTriageResult || {
+  const triageResult: TriageResult = cachedTriageResult || {
     denialJson: {
       payer: denial?.payer || 'Unknown',
       reasonCode: denial?.reason_code || 'UNKNOWN',
@@ -396,6 +424,33 @@ export async function resumeAfterGate1(
     },
     humanConfirmPrompt: gate.reviewer_note || 'Gate 1 approved',
   };
+
+  // ── Gate: Policy Research → policy:execute ──
+  const policyAllowed = await gatePermission('policy-research', 'policy', 'execute');
+  if (!policyAllowed) {
+    return {
+      advocate: {
+        caseFraming: {
+          patientSummary: 'Case information from existing record',
+          denialImpact: 'Permission denied for Policy Research',
+          urgencyLevel: 'standard',
+          recommendedActions: [],
+          deadline: null,
+          deadlineDaysRemaining: null,
+        },
+        empatheticNote: 'Policy Research was blocked by permission check.',
+      },
+      triage: triageResult,
+      gate1: { status: 'approved', gateId: gate.id, confirmPrompt: gate.reviewer_note || 'Gate 1 approved' },
+      policyResearch: null,
+      pipelineStatus: 'gate1_rejected' as const,
+      caseId,
+      latencyMs: Date.now() - totalStart,
+      traces,
+      permissionEnforced: true,
+      permissionChecks,
+    };
+  }
 
   // Run Policy Research
   const policyInput: PolicyResearchInput = {
@@ -459,5 +514,7 @@ export async function resumeAfterGate1(
     caseId,
     latencyMs: Date.now() - totalStart,
     traces,
+    permissionEnforced: true,
+    permissionChecks,
   };
 }
