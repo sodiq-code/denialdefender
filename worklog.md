@@ -509,3 +509,25 @@ Stage Summary:
 - Root cause: 2 bugs working together - (1) pipeline returned awaiting_gate1 even when case creation failed, (2) handleGate1 silently returned when caseId was null
 - Fix: Pipeline now returns gate1_rejected when case creation fails; Frontend disables buttons and shows error when caseId is null
 - Files changed: src/lib/six-agent-pipeline.ts, src/lib/three-agent-pipeline.ts, src/lib/full-pipeline.ts, src/components/six-agent-pipeline-panel.tsx, src/components/case-detail-panel.tsx
+---
+Task ID: 2
+Agent: main
+Task: Push fixes, test full pipeline end-to-end, fix other components, redeploy
+
+Work Log:
+- Discovered critical runtime bug: resumeSixAgentPipeline called gatePermission which was only defined inside runSixAgentPipeline → ReferenceError on Gate 1 approval
+- Fixed six-agent-pipeline.ts: Added permissionChecks + gatePermission helper inside resumeSixAgentPipeline
+- Fixed three-agent-pipeline.ts: Added full permission enforcement (gatePermission + permissionChecks) in resumeAfterGate1, added permissionEnforced/permissionChecks to result type
+- Fixed full-pipeline.ts: Added full permission enforcement with 4 agent gates in resumeAfterGate1
+- Tested full pipeline end-to-end via API: Step 1 (Run Pipeline → awaiting_gate1 ✅) → Step 2 (Approve Gate 1 → completed ✅) with Policy Research ✅, Evidence Assembly ✅, Letter Drafting ✅, Quality Review PASS ✅, 0 trace errors ✅
+- Audited all other components for similar bugs: found 2 high-severity silent fetch failures
+- Fixed case-dashboard.tsx: Added error toast for non-OK fetch responses
+- Fixed case-detail-panel.tsx: Added error toasts for non-OK gate actions, warning toasts for refresh failures, error detail in catch blocks
+- Pushed 2 commits: fix gatePermission + fix silent failures
+- Cloud Run auto-deploy triggered via GitHub Actions workflow on push to main
+
+Stage Summary:
+- Critical gatePermission ReferenceError fixed in all 3 pipeline resume functions
+- Full pipeline verified working end-to-end: Run → Gate 1 → Approve → All 6 agents → Quality PASS → Completed
+- 2 silent failure patterns fixed in case-dashboard and case-detail-panel
+- All changes pushed to main, auto-deploy triggered
