@@ -16,6 +16,16 @@ name: Deploy to Cloud Run
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - 'README.md'
+      - 'LICENSE'
+      - 'DEPLOY.md'
+      - 'worklog.md'
+      - 'agent-ctx/**'
+      - 'tool-results/**'
+      - 'data/README.md'
+      - '.gitignore'
+      - 'docs/**'
   workflow_dispatch:
 
 env:
