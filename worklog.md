@@ -468,3 +468,26 @@ Stage Summary:
 - Premium emerald/teal color scheme implemented with warm light + deep dark modes
 - Elite UX polish: gradient header, glass cards, subtle noise texture, refined interactions
 - Zero regressions — all tabs functional, 0 lint errors
+
+---
+Task ID: 2
+Agent: Main
+Task: README flag phrase audit, thesis rewrite, and credibility precision fixes
+
+Work Log:
+- Audited all section titles and sub-sections for competitive/flag phrases
+- Identified 5 flag phrases: "Why This Wins" (major), "Real Evidence, Not Synthetic", "Measured Learning, Not Weight Animation", "Proven Governance, Not Named Roles" (soft), and "separate from every other multi-agent submission" (absolute competitive claim)
+- Identified 5 credibility overclaims: "6-hour" (unverified), "implemented by eight specialists" (named roles), "prove" (mathematical overclaim ×2), "guarantee" (overclaim ×2)
+- Rewrote thesis with: identity line ("Evidence-grounded insurance-appeal operations, with humans in control"), reframe sentence, core loop (Triage → Learn), fleet positioning with enforced separation of concerns, automation boundary, privacy-as-feature statement
+- Renamed section: "Why This Wins" → "Three Measured Proofs"
+- Renamed sub-sections: "Real Evidence, Not Synthetic" → "Grounded Evidence Corpus", "Measured Learning, Not Weight Animation" → "Measured Outcome Learning", "Proven Governance, Not Named Roles" → "Enforced Governance"
+- Fixed competitive claim: "separate DenialDefender from every other multi-agent submission" → "justify the fleet architecture"
+- Fixed overclaims: "prove" → "demonstrate", "guarantee" → "enforcement", "6-hour" → "hours of", "eight specialists" → "eight-agent ADK fleet with enforced separation of concerns"
+- Verified zero remaining instances of: guarantee, prove/proving/proves, "every other", "Not Synthetic/Weight/Named"
+
+Stage Summary:
+- All 5 flag phrases eliminated from README
+- All 5 credibility overclaims softened to defensible language
+- Thesis now has 3 memorable elements (reframe + core loop + automation boundary) vs 1 before
+- Cognitive load reduced: judge can understand entire product in 5 lines
+- No competitive language remains in any section title or claim

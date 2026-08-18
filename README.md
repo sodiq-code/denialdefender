@@ -1,128 +1,155 @@
+<div align="center">
+
 # DenialDefender
 
-**DenialDefender does not replace the human. It replaces the hours of work around the human** — turning a 6-hour, error-prone appeal-drafting ordeal into a 90-second, evidence-backed, independently verified, human-approved appeal package that measurably improves after every recorded outcome.
+**Evidence-grounded insurance-appeal operations, with humans in control.**
 
-> A verified appeal workflow that learns from outcomes, implemented by eight specialists.
+[![Next.js](https://img.shields.io/badge/Next.js_16-000?logo=next.js)](https://nextjs.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript_5-3178c6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Google ADK](https://img.shields.io/badge/Google_ADK-Python-4285f4?logo=google&logoColor=white)](https://ai.google.dev/)
+[![Gemini](https://img.shields.io/badge/Gemini-4285f4?logo=googlecloud&logoColor=white)](https://cloud.google.com/)
+[![Cloud Run](https://img.shields.io/badge/Cloud_Run-2_services-4285f4?logo=googlecloud&logoColor=white)](https://cloud.google.com/run)
 
-1 in 7 insured Americans get a claim denied each year. Appeals win 50–75% of the time — but most patients never file one. DenialDefender reads the denial letter, finds the payer policy that contradicts the reason code, assembles citation-backed evidence, and drafts an appeal letter ready for human review — all in under 90 seconds.
+[**Live Demo →**](https://denialdefender-web-7ffj23k2va-ew.a.run.app)
+
+</div>
 
 ---
 
-**Live demo**: [denialdefender-web-7ffj23k2va-ew.a.run.app](https://denialdefender-web-7ffj23k2va-ew.a.run.app)
+> DenialDefender does not replace the human. It replaces the hours of work around the human — turning hours of denial triage, policy research, evidence assembly, and appeal drafting into a verified, human-approved appeal package in under 90 seconds.
+>
+> **Core loop:** Triage → Ground → Assemble → Draft → Verify → Approve → Track → Learn.
 
-[![Next.js](https://img.shields.io/badge/Next.js_16-App_Router-000?logo=next.js)](https://nextjs.org/)
-[![TypeScript](https://img.shields.io/badge/TypeScript_5-strict-3178c6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
-[![Tailwind CSS](https://img.shields.io/badge/Tailwind_4-oklch-06b6d4?logo=tailwindcss&logoColor=white)](https://tailwindcss.com/)
-[![Bun](https://img.shields.io/badge/Bun-runtime-fbf1df?logo=bun&logoColor=black)](https://bun.sh/)
-[![Google ADK](https://img.shields.io/badge/Google_ADK-Python-4285f4?logo=google&logoColor=white)](https://ai.google.dev/)
-[![Cloud Run](https://img.shields.io/badge/GCP-Cloud_Run-4285f4?logo=googlecloud&logoColor=white)](https://cloud.google.com/run)
+An eight-agent ADK fleet with enforced separation of concerns. Each agent holds scoped permissions; durable case state, asynchronous deadline workflows, evidence provenance on every citation, independent quality review, and validated outcome learning turn a one-off generation task into a governed operational system.
+
+**Built for the Fortified Enterprise Fleet:** durable context, scoped identities, audit traces, failure tolerance, and human approval gates.
+
+DenialDefender does not make medical treatment decisions or autonomously submit appeals. It prepares and verifies an evidence-backed appeal package; a human must approve the final output.
+
+No real patient PHI is used. Evidence is grounded in public/authorized healthcare sources; synthetic cases are used for evaluation only.
 
 ---
 
 ## What It Does
 
-- **Parses denial letters** — classifies reason codes, identifies appealable denials vs. patient responsibility
-- **Retrieves payer policy** — finds coverage contradictions and prior auth requirements from the evidence corpus
-- **Assembles evidence** — pulls citation-backed records from 150+ provenance-tagged sources (CMS, AHA, KFF, GAO)
-- **Drafts appeal letters** — generates structured letters with inline `[1][2][3]` citations and provenance tiers
-- **Quality-gates the output** — adversarial review agent refuses to pass until every citation resolves and every claim is grounded
+| Step | Agent | Responsibility |
+|------|-------|---------------|
+| 1 | Patient Advocate | Empathetic intake, urgency assessment, deadline extraction |
+| 2 | Denial Triage | Reason code classification, appealability decision, strategy selection |
+| 3 | Policy Research | Payer policy contradiction retrieval from evidence corpus |
+| 4 | Evidence Assembly | Clinical evidence gathering with provenance tier scoring |
+| 5 | Citation Verification | Citation resolution, provenance validation, tier weighting |
+| 6 | Letter Drafting | Structured appeal letter with inline `[1][2][3]` citations |
+| 7 | Quality Review | Adversarial 8-point battery -- refuses to pass until every claim is grounded |
+| 8 | Deadline Tracker | Appeal deadline monitoring and escalation |
+
+Two **human-in-the-loop gates**: Gate 1 confirms triage before research, Gate 2 approves the final letter before sending. No letter reaches a payer without explicit human approval.
 
 ---
 
-## How It Works
+## Three Measured Proofs
 
-```
-┌──────────────┐    ┌──────────────┐    ┌──────────────┐
-│  Patient     │───▶│  Denial      │───▶│  Policy      │
-│  Advocate    │    │  Triage      │    │  Research    │
-└──────────────┘    └──────┬───────┘    └──────┬───────┘
-                           │  Gate 1 ⚡          │
-┌──────────────┐    ┌──────▼───────┐    ┌──────▼───────┐
-│  Quality     │◀───│  Letter      │◀───│  Evidence    │
-│  Review      │    │  Drafting    │    │  Assembly    │
-└──────────────┘    └──────────────┘    └──────────────┘
-        │  Gate 2 ⚡
-        ▼
-   Approved Letter
-```
+Three measurable proofs justify the fleet architecture.
 
-Two **human-in-the-loop gates** — Gate 1 confirms evidence before drafting, Gate 2 approves the final letter before sending. Revision loops (max 3) let clinicians request changes.
+### 1. Grounded Evidence Corpus
+
+31 structured files from 10 authoritative public sources: CMS (denial codes, LCD/NCD, SynPUFs, appeal procedures, X12 835 CARC/RARC/CAG/EMDR), KFF, AHA, GAO, HHS, OIG, Health Affairs, Noridian, and Medicare Appeals. Every record is SHA-256 hashed, provenance-tiered, and frozen. Patient cases are synthetic by design; the institutional knowledge grounding them is real and authoritative.
+
+### 2. Measured Outcome Learning
+
+| Metric | Before | After | Delta |
+|--------|--------|-------|-------|
+| Top-3 argument accuracy | 70% | 88% | +18 |
+| Citation grounding | 75% | 89% | +14 |
+
+10 held-out cases, 50 outcome records (5 public + 45 synthetic controlled), honest delta reporting. Negative deltas are reported, not hidden. Framework: `src/lib/before-after-experiment.ts`, endpoint: `/api/eval/before-after`.
+
+### 3. Enforced Governance
+
+| Mechanism | Proof |
+|-----------|-------|
+| PHI Guard | 10-pattern classifier runs **before** model invocation. On BLOCK: `modelInvocations === 0` -- verified in audit log |
+| Agent Identity | Runtime RBAC with 4 enforced violations (e.g., Quality Review cannot WRITE appeals) |
+| Domain Validator | 20 automated rules from CMS X12 / 42 CFR / AMA CPT -- 21/21 pass |
+| Citation Honesty | Classifier reports `rule-based-classifier-v1`, not a model |
 
 ---
 
 ## Architecture
 
-**Evidence · Agents · Governance** — the triad that makes this work.
-
-**Evidence** — 150+ provenance-tagged records from public sources (CMS, AHA, KFF, GAO). Citation classifier scores each reference by tier (regulatory → clinical → payer). No synthetic data.
-
-**Agents** — 8 Python ADK agents (Gemini 3.5 Flash) + 7 TypeScript agents with inline fallback. Each agent has scoped permissions via Agent Identity RBAC — Quality Review cannot write appeals (prevents self-approval). Agent ablation experiment proves removing any single agent degrades citation grounding by 20–60%.
-
-**Governance** — PHI Guard (SHA-256 + regex, **zero model invocations** on sensitive data), Model Armor (prompt injection / PII / malicious URI), Decision Trace (every step emits a structured audit event), Phrase Discipline (prevents fabricated citations in output).
-
 ```
-Next.js 16 Frontend (Cloud Run)     Agent Fleet (Cloud Run)        GCP Infra
-├─ 51 REST endpoints                ├─ 8 Python ADK agents         ├─ Cloud Run (3 services)
-├─ Real-time decision trace         ├─ TypeScript workflow engine   ├─ Firestore + Cloud SQL
-└─ PHI Guard · Model Armor         └─ GEAP Memory Bank            └─ Model Armor · Pub/Sub · IAM
+                    DENIALDEFENDER
+                         |
+        +----------------+----------------+
+        |                |                |
+    EVIDENCE          AGENTS         GOVERNANCE
+  31 files          8 ADK agents    PHI Guard
+  10 sources        Bun + Gemini    Model Armor
+  SHA-256           Flash           Agent Identity
+  provenance-tied                    Decision Trace
+        +----------------+----------------+
+                         |
+              Gate 1 → Ground → Draft → Verify → Gate 2
+                         |
+              Human-Approved Appeal + Deadline
+                         |
+              Outcome Learning → updates retrieval
 ```
+
+Removing Evidence breaks citation grounding; removing Agents breaks the workflow; removing Governance breaks enterprise-readiness. The triad is the minimum architecture satisfying all three judging dimensions.
+
+**Agent Ablation** -- four topologies on the same 10 held-out cases demonstrate the count is justified:
+
+| Topology | Citation Grounding | Verdict |
+|----------|--------------------|---------|
+| 1-agent | 72% | Fails verification |
+| 3-agent | 84% | Weak grounding |
+| 5-agent | 91% | Strong grounding |
+| 8-agent | 96% | Independently verifiable |
+
+**Deployment** -- 2 Cloud Run services + 1 local mini-service (`europe-west1`): `denialdefender-web` (Next.js 16, 55 API routes), `denialdefender-agents` (8 ADK agents), `trace-stream` (Socket.io). Cloud Build CI/CD, Firestore, Pub/Sub, Secret Manager.
 
 ---
 
-## Key Features
+## How to Verify
 
-- 🔒 **PHI Guard** — pre-invoke classifier guarantees sensitive data never reaches the model
-- 🛡️ **Model Armor** — blocks prompt injection, PII leaks, and tool poisoning before any agent runs
-- 👁️ **Human-in-the-loop** — two approval gates with revision loops at critical pipeline stages
-- 📊 **Agent ablation** — experiment proving each agent is necessary, not just a bigger model
-- 🔄 **Outcome learning** — appeal results feed back to memory bank, improving future appeals
-- 🔍 **Citation provenance** — every reference tracked to source (CMS, AHA, KFF, GAO) with tier scoring
-- 🏥 **NPI Registry** — real-time provider verification via CMS NPI lookup
-
----
-
-## Tech Stack
-
-| Layer | Tech |
-|-------|------|
-| Frontend | Next.js 16, React 19, TypeScript 5, Tailwind CSS 4, shadcn/ui |
-| Agents | Google ADK (Python) + Gemini 3.5 Flash + TypeScript workflow engine |
-| Database | Prisma 6 + SQLite (local) / Firestore + Cloud SQL (GCP) |
-| Infra | Cloud Run (europe-west1), Model Armor, Pub/Sub, Secret Manager |
-| Governance | PHI Guard, Agent Identity (RBAC), Decision Trace, GEAP Memory Bank |
+| Claim | File or Endpoint |
+|-------|-----------------|
+| 31 evidence files from 10 sources | `data/corpus/raw/` + `manifest.json` |
+| PHI Guard zero-invocation enforcement | `src/lib/phi-guard.ts` -- `modelInvocations === 0` on BLOCK |
+| 4 Agent Identity violations | `src/lib/agent-identity.ts` -- `DEMONSTRATION_VIOLATIONS` |
+| 20 domain rules, 21/21 pass | `src/lib/domain-validator.ts` -- `/api/domain-validation` |
+| Ablation experiment | `src/lib/agent-ablation.ts` -- `/api/eval/ablation` |
+| Before/after learning loop | `src/lib/before-after-experiment.ts` -- `/api/eval/before-after` |
+| 10 held-out eval cases | `data/cases/held_out/` |
+| 8 Python ADK agents | `mini-services/agent-fleet/agents/` |
+| HITL gates | `/api/full-pipeline/gate-test`, `/api/full-pipeline/gate2` |
 
 ---
 
 ## Getting Started
 
 ```bash
-# Install dependencies
-bun install
-
-# Set up database
-bun run db:push
-
-# Start dev server (localhost:3000)
-bun run dev
-
-# (Optional) Start agent fleet + trace stream
-bash mini-services/start-services.sh
+bun install && bun run db:push && bun run dev   # localhost:3000
+bash mini-services/start-services.sh             # agent fleet + trace stream
 ```
 
-Set `GEMINI_API_KEY` to connect live agents. Without it, agents run in mock mode with simulated responses.
-
-See [`DEPLOY.md`](./DEPLOY.md) for GCP Cloud Run deployment.
+Set `GEMINI_API_KEY` for live agents. Without it, agents run in mock mode with deterministic responses. See [`DEPLOY.md`](./DEPLOY.md) for GCP deployment.
 
 ---
 
 ## Hackathon
 
-Built for the [**All Things Agentic Hackathon**](https://allthingsagentichackathon.devpost.com/) — *Ready, Set, Agent!*
+Built for the [**All Things Agentic Hackathon**](https://allthingsagentichackathon.devpost.com/) — **Fortified Enterprise Fleet** track.
 
-**Track**: Fortified Enterprise Fleet — multi-agent architecture with enterprise governance, zero-trust access control, and production compliance.
+> Insurance denial appeals are healthcare-adjacent, compliance-heavy, unglamorous — precisely why they matter. The gap is not medical; it is procedural.
+
+Eight cataloged agents with scoped identities, durable async state, ablation-justified delegation, defense-in-depth security, and event-driven failure tolerance — directly addressing every Fleet requirement.
+
+**GEAP**: ADK · Model Armor · Agent Identity · Observability · Memory Bank
 
 ---
 
 ## License
 
-This project is licensed under the [MIT License](./LICENSE).
+[MIT](./LICENSE)

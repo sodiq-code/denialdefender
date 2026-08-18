@@ -57,3 +57,4 @@ upload/*.json
 *sa-key*.json
 dd-deploy-sa-key.json
 key.json
+tool-results/
