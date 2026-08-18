@@ -132,10 +132,14 @@ export function CaseDetailPanel({ caseId, open, onOpenChange, onCaseUpdated }: C
         if (freshRes.ok) {
           const data = await freshRes.json();
           setCaseData(data.case);
+        } else {
+          toast.warning('Gate approved, but failed to refresh case data');
         }
+      } else {
+        toast.error('Failed to approve gate — server returned an error');
       }
-    } catch {
-      toast.error('Failed to approve gate');
+    } catch (err) {
+      toast.error(`Failed to approve gate: ${err instanceof Error ? err.message : 'Unknown error'}`);
     }
   }, [caseId, caseData, onCaseUpdated]);
 
@@ -154,10 +158,14 @@ export function CaseDetailPanel({ caseId, open, onOpenChange, onCaseUpdated }: C
         if (freshRes.ok) {
           const data = await freshRes.json();
           setCaseData(data.case);
+        } else {
+          toast.warning('Gate rejected, but failed to refresh case data');
         }
+      } else {
+        toast.error('Failed to reject gate — server returned an error');
       }
-    } catch {
-      toast.error('Failed to reject gate');
+    } catch (err) {
+      toast.error(`Failed to reject gate: ${err instanceof Error ? err.message : 'Unknown error'}`);
     }
   }, [caseId, caseData, onCaseUpdated]);
 
@@ -175,10 +183,14 @@ export function CaseDetailPanel({ caseId, open, onOpenChange, onCaseUpdated }: C
         if (freshRes.ok) {
           const data = await freshRes.json();
           setCaseData(data.case);
+        } else {
+          toast.warning('Gate updated, but failed to refresh case data');
         }
+      } else {
+        toast.error('Failed to edit gate — server returned an error');
       }
-    } catch {
-      toast.error('Failed to edit gate');
+    } catch (err) {
+      toast.error(`Failed to edit gate: ${err instanceof Error ? err.message : 'Unknown error'}`);
     }
   }, [caseId, caseData]);
 

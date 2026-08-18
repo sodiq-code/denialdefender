@@ -58,6 +58,8 @@ export function CaseDashboard({ onCaseCountChange }: CaseDashboardProps) {
         const data = await res.json();
         setCases(data.cases);
         onCaseCountChange?.(data.cases.length);
+      } else {
+        toast.error('Failed to load cases — server returned an error');
       }
     } catch (err) {
       console.error('Failed to fetch cases:', err);
