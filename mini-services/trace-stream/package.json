@@ -1,0 +1,12 @@
+{
+  "name": "denialdefender-trace-stream",
+  "version": "1.0.0",
+  "description": "DenialDefender Socket.io trace-stream server (port 3003)",
+  "scripts": {
+    "dev": "bun --hot index.ts",
+    "start": "bun index.ts"
+  },
+  "dependencies": {
+    "socket.io": "^4.8.2"
+  }
+}

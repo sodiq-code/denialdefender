@@ -1,0 +1,173 @@
+{
+  "description": "DenialDefender Curated Payer Policy Corpus — 3 payers × 5 denial types = 15 entries",
+  "version": "2025.1",
+  "created": "2025-03-04",
+  "provenance": "Retrieved (curated corpus)",
+  "entries": [
+    {
+      "clause_id": "MED-MN-001",
+      "payer_name": "Medicare",
+      "denial_type": "Medical Necessity",
+      "clause_text": "Section 1862(a)(1)(A) of the Social Security Act (the Act) excludes payment for items or services that are not 'reasonable and necessary' for the diagnosis or treatment of illness or injury, or to improve the functioning of a malformed body member. Per 42 CFR § 410.32, diagnostic tests must be ordered by the treating physician or qualified nonphysician practitioner who is treating the beneficiary and who certifies that the test is reasonable and necessary. A denial under 'not medically necessary' is issued when the service does not meet the coverage criteria established by the applicable National Coverage Determination (NCD) or Local Coverage Determination (LCD). Per CMS IOM 100-02, Chapter 1, § 80, contractors shall deny claims where clinical evidence does not support that the item or service is medically appropriate, considering the beneficiary's diagnosis, signs, symptoms, and the clinical probability of benefit. The beneficiary has the right to request a redetermination within 120 calendar days of the initial determination notice per 42 CFR § 405.930. A redetermination must include additional medical evidence demonstrating that the service was reasonable and necessary for the beneficiary's specific clinical condition.",
+      "source_url": "https://www.cms.gov/Regulations-and-Guidance/Guidance/Manuals/downloads/bp102c01.pdf",
+      "effective_date": "2025-01-01",
+      "embedding": null,
+      "retrieval_weight": 0.95,
+      "version": "2025.1"
+    },
+    {
+      "clause_id": "MED-PA-002",
+      "payer_name": "Medicare",
+      "denial_type": "Prior Authorization",
+      "clause_text": "Under 42 CFR § 410.62 and § 410.63, certain Medicare Advantage (MA) services require prior authorization before delivery. Effective January 1, 2024, CMS finalized the Interoperability and Prior Authorization Final Rule (CMS-0090-F) requiring MA organizations to implement an electronic prior authorization process with a maximum turnaround of 72 hours for standard requests and 24 hours for expedited requests per 42 CFR § 422.112. Per 42 CFR § 422.568, if an MA organization denies a prior authorization request, it must provide a specific, detailed written notice including: (1) the specific clinical rationale for denial; (2) the applicable coverage criteria, rules, or guidelines; (3) instructions for obtaining the applicable criteria upon request; and (4) instructions for filing a standard or expedited grievance. A denial based on failure to obtain prior authorization shall be treated as an organization determination under 42 CFR § 422.566 and is appealable through the five-level Medicare appeals process. Providers should document that the service met applicable LCD/NCD criteria and that the prior authorization denial conflicts with the beneficiary's clinical necessity as documented in the medical record.",
+      "source_url": "https://www.cms.gov/newsroom/press-releases/cms-finalizes-rule-improve-interoperability-and-prior-authorization-processes",
+      "effective_date": "2025-01-01",
+      "embedding": null,
+      "retrieval_weight": 0.93,
+      "version": "2025.1"
+    },
+    {
+      "clause_id": "MED-CB-003",
+      "payer_name": "Medicare",
+      "denial_type": "Coding/Billing",
+      "clause_text": "Per 42 CFR § 424.32, claims must be filed with correct and complete coding to be processed. Under the Health Insurance Portability and Accountability Act (HIPAA) of 1996, providers must use the ICD-10-CM diagnosis code set and CPT/HCPCS procedure code set in effect on the date of service per 45 CFR § 162.1002. A coding/billing denial is issued under CARC CO16 (Claim/service lacks information or has submission/billing error(s)) when: (1) the diagnosis code does not support medical necessity for the procedure billed (per the CMS IOM 100-04, Chapter 19, § 30); (2) the procedure code is inconsistent with the place of service code; (3) a required modifier is missing (e.g., modifier -25 for significant, separately identifiable E/M service); or (4) unbundling is detected per the Correct Coding Initiative (CCI) edits published quarterly by CMS. Per CMS IOM 100-04, Chapter 1, § 70, providers have the right to submit a corrected claim within the timely filing period (generally 12 months from the date of service per 42 CFR § 424.44). If the denial was based on a coding error, resubmission with corrected codes constitutes a new initial claim, not an appeal.",
+      "source_url": "https://www.cms.gov/Regulations-and-Guidance/Guidance/Manuals/downloads/clm104c01.pdf",
+      "effective_date": "2025-01-01",
+      "embedding": null,
+      "retrieval_weight": 0.90,
+      "version": "2025.1"
+    },
+    {
+      "clause_id": "MED-EI-004",
+      "payer_name": "Medicare",
+      "denial_type": "Experimental/Investigational",
+      "clause_text": "Section 1862(a)(1)(A) of the Social Security Act excludes coverage for items or services that are not reasonable and necessary, which includes services classified as experimental or investigational. Per 42 CFR § 405.1060 and the CMS National Coverage Determination (NCD) process, an item or service is considered experimental or investigational if: (1) it has not yet been approved by the FDA for the indication in question; (2) it is the subject of a clinical trial that has not completed Phase III; or (3) the available evidence does not demonstrate that the item or service improves net health outcomes outside the investigational setting. NCD 310.1 (National Coverage Determinations with Study Protocols) allows coverage with evidence development (CED) for certain items or services where evidence is insufficient for unconditional coverage but a clinical study may provide the needed evidence. If a denial is issued under 'experimental/investigational,' the beneficiary may appeal and submit peer-reviewed literature, clinical practice guidelines, or FDA approval documentation demonstrating that the service has transitioned from investigational to accepted clinical practice. Per CMS IOM 100-03, Chapter 4, § 60, QICs must consider all relevant evidence submitted with the reconsideration request.",
+      "source_url": "https://www.cms.gov/medicare-coverage-database/view/ncd.aspx?ncdid=310.1",
+      "effective_date": "2025-01-01",
+      "embedding": null,
+      "retrieval_weight": 0.92,
+      "version": "2025.1"
+    },
+    {
+      "clause_id": "MED-ON-005",
+      "payer_name": "Medicare",
+      "denial_type": "Out-of-Network",
+      "clause_text": "Under Original Medicare (Part A and Part B), beneficiaries generally may obtain covered services from any Medicare-enrolled provider nationwide, as Original Medicare is not a network-based system per 42 CFR § 410.20. However, Medicare Advantage (MA) plans under 42 CFR § 422.4 are authorized to establish provider networks and may deny or reduce payment for out-of-network services except as required under 42 CFR § 422.6 (emergency and urgently needed services) and 42 CFR § 422.100 (coverage and cost sharing requirements). An MA plan must cover out-of-network emergency services at the in-network cost-sharing rate per 42 CFR § 422.113. For non-emergency out-of-network services, the MA organization may deny the claim under CARC CO29 (The time limit for filing has expired) or PR96 (Patient is not covered) or issue a denial under 42 CFR § 422.568 stating that the service is not covered when obtained out-of-network unless prior authorization was granted. The beneficiary may appeal by demonstrating that no in-network provider was available within a reasonable timeframe or distance (network adequacy challenge) per CMS network adequacy requirements at 42 CFR § 422.116, or that the service qualified as emergency/urgent under the prudent layperson standard at 42 CFR § 422.113.",
+      "source_url": "https://www.ecfr.gov/current/title-42/chapter-IV/subchapter-C/part-422",
+      "effective_date": "2025-01-01",
+      "embedding": null,
+      "retrieval_weight": 0.88,
+      "version": "2025.1"
+    },
+    {
+      "clause_id": "UHC-MN-006",
+      "payer_name": "UnitedHealthcare",
+      "denial_type": "Medical Necessity",
+      "clause_text": "UnitedHealthcare applies medical necessity criteria consistent with the definition at 42 CFR § 440.230: a service is medically necessary if it is required to prevent, diagnose, or treat an illness, injury, condition, disease, or its symptoms, and is in accordance with generally accepted standards of medical practice. UHC utilizes InterQual® criteria and proprietary Clinical Policy Bulletins (CPBs) to adjudicate medical necessity. Per UHC CPB:Infusion Therapy-001, infusion therapy is considered medically necessary when the patient's condition requires intravenous administration because oral administration is not feasible or effective. A denial for medical necessity may be issued when: (1) the service does not meet the applicable InterQual® level of care, intensity of service, or severity of illness criteria; (2) the requested service is not supported by the clinical documentation submitted; or (3) an alternative less intensive or less costly service is medically appropriate. Per the UHC Administrative Guide, the provider has 180 calendar days from the date of the denial notice to request a first-level appeal (internal review). The appeal must include clinical documentation supporting medical necessity, such as treating physician's letter of medical necessity, relevant lab results, imaging reports, and treatment history demonstrating failure or contraindication of alternative treatments.",
+      "source_url": "https://www.uhcprovider.com/content/prov-landing/en/resources/policies-and-guidelines/clinical-policies.html",
+      "effective_date": "2025-01-15",
+      "embedding": null,
+      "retrieval_weight": 0.94,
+      "version": "2025.1"
+    },
+    {
+      "clause_id": "UHC-PA-007",
+      "payer_name": "UnitedHealthcare",
+      "denial_type": "Prior Authorization",
+      "clause_text": "UnitedHealthcare requires prior authorization for selected services as published in the UHC Administrative Guide and the UHC Prior Authorization and Notification List. Per UHC's Notification and Prior Authorization Requirements, the following service categories require prior authorization: (1) inpatient admissions (excluding emergency); (2) selected outpatient surgical procedures; (3) advanced imaging (CT, CTA, MRI, MRA, PET) per the UHC Imaging Notification Program; (4) specialty pharmaceuticals; and (5) Durable Medical Equipment (DME) exceeding cost thresholds. Failure to obtain required prior authorization results in a denial under CARC CO15 (Authorization/pre-certification required) or CO197 (Precertification/authorization/notification/approval absent). UHC processes standard prior authorization requests within 14 calendar days and expedited requests within 72 hours, consistent with applicable state law and 42 CFR § 422.112 for MA plans. A retrospective authorization may be submitted within 1 business day of an emergency or urgent admission per UHC's Notification Guide. Upon denial of a prior authorization request, UHC must provide the specific clinical rationale and the criteria used to make the determination per 42 CFR § 422.568. The provider may appeal by submitting additional clinical evidence demonstrating that the service meets UHC's medical necessity criteria and that the prior authorization denial was based on incomplete information.",
+      "source_url": "https://www.uhcprovider.com/content/prov-landing/en/resources/authorization-and-notification.html",
+      "effective_date": "2025-01-15",
+      "embedding": null,
+      "retrieval_weight": 0.91,
+      "version": "2025.1"
+    },
+    {
+      "clause_id": "UHC-CB-008",
+      "payer_name": "UnitedHealthcare",
+      "denial_type": "Coding/Billing",
+      "clause_text": "UnitedHealthcare adjudicates claims in accordance with HIPAA-mandated code sets (ICD-10-CM, CPT, HCPCS) and the UHC Claims Editing Policy. UHC applies the Correct Coding Initiative (CCI) edits, Medically Unlikely Edits (MUEs), and proprietary UHC code-auditing logic. A coding/billing denial is issued when: (1) the primary diagnosis code does not support the procedure code billed per UHC's Clinical Policy Bulletins and LCD references; (2) unbundling is identified (e.g., billing component codes separately when a comprehensive code exists, per CCI Column 1/Column 2 edits); (3) a required modifier is absent (e.g., modifier -59 for distinct procedural service, or modifier -26 for professional component); (4) the place of service code conflicts with the provider type or procedure; or (5) duplicate billing is detected. Denials are typically issued under CARC CO16 (Claim lacks information) or CO18 (Duplicate claim/service). Per UHC's Claims Resubmission Guide, a corrected claim may be submitted within the timely filing period (generally 90 days for commercial, 12 months for MA). If the denial was due to a coding error that does not change the nature of the service, resubmission with corrected codes is appropriate. If the coding accurately reflects the service provided and the denial is based on a coverage policy dispute, the provider should file a formal appeal rather than resubmit.",
+      "source_url": "https://www.uhcprovider.com/content/prov-landing/en/resources/claims-submission.html",
+      "effective_date": "2025-01-15",
+      "embedding": null,
+      "retrieval_weight": 0.89,
+      "version": "2025.1"
+    },
+    {
+      "clause_id": "UHC-EI-009",
+      "payer_name": "UnitedHealthcare",
+      "denial_type": "Experimental/Investigational",
+      "clause_text": "UnitedHealthcare defines a service as experimental or investigational if it does not meet the definition of medically necessary and any of the following criteria apply: (1) the service has not received final FDA approval for the specific indication; (2) the service is the subject of ongoing Phase I, II, or III clinical trials and has not been adopted by the relevant clinical specialty society as standard of care; (3) the available peer-reviewed medical literature does not permit conclusions about the service's effect on net health outcomes; or (4) the service is not demonstrated to be as safe and effective as established alternatives. Per UHC CPB:Experimental/Investigational Services-001, services meeting any of the above criteria are excluded from coverage. Exceptions may apply when: (a) the service is provided under an approved clinical trial that meets UHC's Clinical Trial Policy criteria (consistent with NCD 310.1 CED); or (b) the service, while classified as investigational for most indications, has demonstrated efficacy for the specific patient's condition through peer-reviewed literature. Upon denial, the provider may appeal by submitting: (1) published peer-reviewed studies demonstrating clinical efficacy for the specific indication; (2) clinical practice guidelines from relevant specialty societies recommending the service; (3) FDA approval documentation for the specific indication; and (4) a letter of medical necessity from the treating physician detailing why established alternatives are not appropriate for the patient.",
+      "source_url": "https://www.uhcprovider.com/content/prov-landing/en/resources/policies-and-guidelines/clinical-policies/experimental-investigational-services.html",
+      "effective_date": "2025-01-15",
+      "embedding": null,
+      "retrieval_weight": 0.93,
+      "version": "2025.1"
+    },
+    {
+      "clause_id": "UHC-ON-010",
+      "payer_name": "UnitedHealthcare",
+      "denial_type": "Out-of-Network",
+      "clause_text": "UnitedHealthcare maintains contracted provider networks for all commercial and MA plan products. Out-of-network benefits vary by plan: (1) UHC Premium plans typically allow out-of-network benefits with higher cost-sharing; (2) UHC Choice/Essence plans may have limited or no out-of-network benefits except for emergency services; and (3) UHC MA HMO plans generally do not cover out-of-network services except as required under 42 CFR § 422.113 (emergency services) and § 422.112 (urgently needed services). A denial for out-of-network services is issued under CARC CO29 or PR96 when the plan does not include out-of-network benefits and the service does not qualify as emergency/urgent. Per the No Surprises Act (NSA) effective January 1, 2022 (45 CFR § 149.110), out-of-network providers at in-network facilities are subject to independent dispute resolution (IDR) for payment disputes, and patients are protected from balance billing for emergency services and certain non-emergency services at in-network facilities. The provider may challenge an out-of-network denial by: (1) demonstrating that no in-network provider was available within the plan's access standards (network adequacy); (2) establishing that the service qualified as emergency or urgent; or (3) invoking the NSA IDR process for applicable claims. UHC must provide information on how to obtain in-network providers upon request.",
+      "source_url": "https://www.uhcprovider.com/content/prov-landing/en/resources/network-participation.html",
+      "effective_date": "2025-01-15",
+      "embedding": null,
+      "retrieval_weight": 0.87,
+      "version": "2025.1"
+    },
+    {
+      "clause_id": "AET-MN-011",
+      "payer_name": "Aetna",
+      "denial_type": "Medical Necessity",
+      "clause_text": "Aetna applies the following definition of medical necessity: a health care service is medically necessary if, as determined by Aetna, the service is clinically appropriate in terms of type, frequency, extent, site, and duration, and is considered effective for the patient's illness, injury, or disease, based on the clinical information provided, the coverage criteria of the applicable health plan, and the guidelines developed by the American College of Radiology (ACR), the American Society of Clinical Oncology (ASCO), and other nationally recognized clinical specialty organizations. Per Aetna Clinical Policy Bulletin (CPB) #001, Aetna relies on CMS NCDs and LCDs as primary coverage references for Medicare members, and on proprietary CPBs and InterQual®/MCG (Milliman Care Guidelines) criteria for commercial members. A medical necessity denial may be issued when: (1) the service does not meet the applicable CPB criteria; (2) clinical documentation is insufficient to establish that the service is likely to benefit the patient more than less intensive alternatives; or (3) the service is primarily for the convenience of the patient or provider. Per Aetna's Appeals Process Guide, the member or provider has 60 calendar days (commercial) or 120 calendar days (Medicare) from the denial notice date to file a first-level appeal. The appeal must include supporting clinical documentation, a letter of medical necessity from the treating physician, and relevant published evidence.",
+      "source_url": "https://www.aetna.com/health-care-professionals/clinical-policy-bulletins.html",
+      "effective_date": "2025-02-01",
+      "embedding": null,
+      "retrieval_weight": 0.92,
+      "version": "2025.1"
+    },
+    {
+      "clause_id": "AET-PA-012",
+      "payer_name": "Aetna",
+      "denial_type": "Prior Authorization",
+      "clause_text": "Aetna requires prior authorization (referred to as 'precertification' in Aetna's terminology) for selected services as listed in the Aetna Precertification Requirements by Plan Type and the Aetna Clinical Policy Bulletins. Per Aetna's Utilization Management (UM) Program, the following require precertification: (1) inpatient hospital admissions (including observation exceeding 48 hours); (2) selected outpatient surgical procedures (per Aetna's Surgical Precertification List); (3) advanced diagnostic imaging (MRI, MRA, CT, CTA, PET) consistent with the CMS Appropriate Use Criteria (AUC) program under PAMA; (4) specialty pharmacy medications; (5) home health services exceeding plan-defined visit limits; and (6) skilled nursing facility admissions. Aetna processes non-urgent precertification requests within 15 calendar days and urgent requests within 72 hours, consistent with applicable state timely decision requirements. Denial of a precertification request is issued under CARC CO15 or CO197 with a specific clinical rationale. Per Aetna's Appeals Guide, a denied precertification may be appealed by submitting a written request with: (1) additional clinical documentation demonstrating that the service meets Aetna's medical necessity criteria; (2) documentation of clinical circumstances not considered in the initial review; and (3) relevant peer-reviewed literature or clinical guidelines. A retrospective review may be requested for emergency admissions within 1 business day.",
+      "source_url": "https://www.aetna.com/health-care-professionals/precertification.html",
+      "effective_date": "2025-02-01",
+      "embedding": null,
+      "retrieval_weight": 0.90,
+      "version": "2025.1"
+    },
+    {
+      "clause_id": "AET-CB-013",
+      "payer_name": "Aetna",
+      "denial_type": "Coding/Billing",
+      "clause_text": "Aetna adjudicates claims using HIPAA-standard code sets (ICD-10-CM, CPT, HCPCS) and applies coding edits consistent with CMS CCI and MUE requirements as well as Aetna proprietary claim editing rules. A coding/billing denial is issued when: (1) the diagnosis code(s) do not support the procedure code billed per Aetna's Clinical Policy Bulletins or the applicable LCD; (2) the claim reflects unbundling per CCI edits (e.g., billing an add-on code without its primary procedure, or billing component codes separately when a comprehensive CPT code exists); (3) a required modifier is missing (e.g., modifier -25 for a significant separately identifiable E/M service appended to a procedure with a global period, modifier -59 to bypass a CCI edit for a distinct service); (4) the billed place of service is inconsistent with the provider's enrollment or the procedure's requirements; or (5) the claim duplicates a previously adjudicated claim. Aetna issues these denials under CARC CO16, CO18, or CO97 (Payment adjusted because this benefit is not included in the patient's current benefit plan). Per Aetna's Claims Resubmission Policy, a corrected claim may be submitted within 90 days of the denial for commercial plans or within the Medicare timely filing period. If the coding accurately reflects the service but the denial reflects a coverage determination dispute, the provider should file a formal appeal with supporting documentation.",
+      "source_url": "https://www.aetna.com/health-care-professionals/claims-processing.html",
+      "effective_date": "2025-02-01",
+      "embedding": null,
+      "retrieval_weight": 0.88,
+      "version": "2025.1"
+    },
+    {
+      "clause_id": "AET-EI-014",
+      "payer_name": "Aetna",
+      "denial_type": "Experimental/Investigational",
+      "clause_text": "Aetna defines a service as experimental or investigational when it does not meet Aetna's definition of medical necessity and any of the following apply: (1) the service has not received required governmental approval (e.g., FDA market authorization) for the specific indication; (2) the service is being studied in a Phase I, II, or III clinical trial and has not yet been adopted as standard of care by the relevant clinical specialty organization; (3) conclusive peer-reviewed evidence of the service's effectiveness for the specific indication is not available in the medical literature; or (4) the service is not demonstrated to be at least as beneficial as existing available treatments, and its long-term safety and efficacy have not been established. Per Aetna CPB:Experimental and Investigational Procedures-015, exceptions may be considered when: (a) the service is provided under an eligible clinical trial per Aetna's Clinical Trial Policy (consistent with NCD 310.1); or (b) the service has published, peer-reviewed evidence of efficacy for the patient's specific clinical circumstances that was not available at the time of the initial denial. An appeal of an experimental/investigational denial should include: (1) peer-reviewed published studies demonstrating clinical efficacy and safety for the specific indication; (2) clinical practice guidelines from nationally recognized specialty societies supporting the service; (3) FDA clearance or approval documentation for the specific indication; (4) outcomes data from treating physician's experience; and (5) a detailed letter of medical necessity explaining why standard alternatives are contraindicated or have failed for the patient.",
+      "source_url": "https://www.aetna.com/health-care-professionals/clinical-policy-bulletins/experimental-investigational.html",
+      "effective_date": "2025-02-01",
+      "embedding": null,
+      "retrieval_weight": 0.91,
+      "version": "2025.1"
+    },
+    {
+      "clause_id": "AET-ON-015",
+      "payer_name": "Aetna",
+      "denial_type": "Out-of-Network",
+      "clause_text": "Aetna maintains tiered provider networks across its commercial (Aetna Choice POS, Open Access, Aetna Health Network Option) and Medicare Advantage plan products. Out-of-network coverage varies by plan: (1) Aetna Open Access and POS plans provide out-of-network benefits with higher deductibles and coinsurance; (2) Aetna Health Network Option (HNO) and MA HMO plans typically have no out-of-network benefits except for emergency services as required by 42 CFR § 422.113. A denial for out-of-network services is issued under CARC PR96 or CO29 when the plan does not include out-of-network benefits and the service does not meet the emergency/urgent exception criteria. Per the No Surprises Act (NSA), effective January 1, 2022 (45 CFR § 149.110-149.420), out-of-network providers at in-network facilities are subject to the independent dispute resolution (IDR) process, and patients are held harmless from balance billing for emergency services, and for non-emergency services at in-network facilities provided by out-of-network ancillary providers. The provider may challenge an out-of-network denial by: (1) demonstrating that no in-network provider with the required specialty was available within the plan's network adequacy standards (access/availability standards per state law and CMS requirements); (2) establishing that the service met the prudent layperson emergency definition; (3) invoking the NSA IDR process; or (4) demonstrating that the plan's network directory was inaccurate (per the CMS Provider Directory Enforcement Final Rule) and the patient reasonably relied on the directory to select an in-network provider. Aetna must provide the member with information on available in-network providers upon request.",
+      "source_url": "https://www.aetna.com/health-care-professionals/network-information.html",
+      "effective_date": "2025-02-01",
+      "embedding": null,
+      "retrieval_weight": 0.86,
+      "version": "2025.1"
+    }
+  ]
+}

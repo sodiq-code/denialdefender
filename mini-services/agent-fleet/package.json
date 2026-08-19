@@ -1,0 +1,9 @@
+{
+  "name": "denialdefender-agent-fleet",
+  "version": "1.0.0",
+  "description": "DenialDefender 8-agent fleet service (TypeScript/Bun, mock mode in sandbox)",
+  "scripts": {
+    "dev": "bun --hot index.ts",
+    "start": "bun index.ts"
+  }
+}

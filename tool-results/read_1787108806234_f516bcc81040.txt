@@ -1,0 +1,845 @@
+     1→/**
+     2→ * DenialDefender Agent Fleet — Bun mini-service (port 3004 fixed, MOCK mode)
+     3→ *
+     4→ * Mirrors the HTTP contract of the reference Python (FastAPI + google-genai)
+     5→ * service at /tmp/denialdefender-analyze/mini-services/agent-fleet/main.py.
+     6→ *
+     7→ * In this sandbox we run in MOCK_MODE = true (no GEMINI_API_KEY required),
+     8→ * returning deterministic structured mock outputs for every agent so the
+     9→ * platform can be exercised end-to-end.
+    10→ *
+    11→ * ── Endpoints ───────────────────────────────────────────────────────────────
+    12→ *   GET  /health                     — health check (mock mode, agent list)
+    13→ *   GET  /gcp/status                 — Firestore + Pub/Sub status (mock/local)
+    14→ *   POST /agents/{name}             — run a single agent
+    15→ *        name ∈ { triage, coder, policy, evidence, citation, drafter, reviewer, orchestrator }
+    16→ *   POST /workflow/run               — run the full 8-agent workflow (sequential mock)
+    17→ *   GET  /workflow/status/:id       — fetch workflow status by id
+    18→ *   GET  /permissions                — view the agent identity permission matrix
+    19→ *
+    20→ * ── AgentResponse shape ────────────────────────────────────────────────────
+    21→ *   {
+    22→ *     agent: string,
+    23→ *     status: 'success',
+    24→ *     data:   object,            // structured deterministic mock output
+    25→ *     latencyMs: number,
+    26→ *     trace:  { agent, trace_id, timestamp, mode:'mock', elapsed_seconds }
+    27→ *   }
+    28→ *
+    29→ * Port is HARDCODED to 3004 — never read from env (per task spec).
+    30→ */
+    31→
+    32→// ─── Configuration ────────────────────────────────────────────────────────────
+    33→const PORT = 3004;
+    34→const SERVICE_NAME = "denialdefender-agent-fleet";
+    35→const SERVICE_VERSION = "1.0.0";
+    36→const GEMINI_MODEL = process.env.GEMINI_MODEL ?? "gemini-2.5-flash";
+    37→const GEMINI_API_KEY = process.env.GEMINI_API_KEY ?? "";
+    38→// MOCK_MODE is always true in this sandbox — we never call Gemini directly
+    39→// from this service. The Next.js inline workflow-engine fallback handles
+    40→// any "live" path; this mini-service exists to make the distributed
+    41→// architecture real and demonstrate the production deployment topology.
+    42→const MOCK_MODE = true;
+    43→
+    44→// ─── Agent Identity / RBAC matrix (mirrors src/lib/agent-identity.ts) ────────
+    45→type Capability = "read" | "write" | "execute";
+    46→type Resource =
+    47→  | "case" | "denial" | "appeal" | "outcome" | "evidence" | "citation"
+    48→  | "policy" | "deadline" | "hitl_gate" | "trace" | "phi_guard" | "governance";
+    49→
+    50→interface AgentScope {
+    51→  role: string;
+    52→  resources: Partial<Record<Resource, Capability[]>>;
+    53→}
+    54→
+    55→const AGENT_SCOPES: Record<string, AgentScope> = {
+    56→  triage: {
+    57→    role: "denial-triage",
+    58→    resources: {
+    59→      case: ["read", "write"],
+    60→      denial: ["read", "write"],
+    61→      appeal: ["read"],
+    62→      evidence: ["read"],
+    63→      trace: ["write"],
+    64→      hitl_gate: ["read", "write"],
+    65→    },
+    66→  },
+    67→  coder: {
+    68→    role: "denial-triage",
+    69→    resources: {
+    70→      case: ["read", "write"],
+    71→      denial: ["read", "write"],
+    72→      appeal: ["read"],
+    73→      evidence: ["read"],
+    74→      trace: ["write"],
+    75→      hitl_gate: ["read", "write"],
+    76→    },
+    77→  },
+    78→  policy: {
+    79→    role: "policy-research",
+    80→    resources: {
+    81→      case: ["read"],
+    82→      denial: ["read"],
+    83→      policy: ["read", "execute"],
+    84→      evidence: ["read", "write"],
+    85→      citation: ["read", "write"],
+    86→      trace: ["write"],
+    87→    },
+    88→  },
+    89→  evidence: {
+    90→    role: "evidence-assembly",
+    91→    resources: {
+    92→      case: ["read"],
+    93→      denial: ["read"],
+    94→      evidence: ["read", "write"],
+    95→      citation: ["read", "write"],
+    96→      trace: ["write"],
+    97→    },
+    98→  },
+    99→  citation: {
+   100→    role: "policy-research",
+   101→    resources: {
+   102→      case: ["read"],
+   103→      denial: ["read"],
+   104→      policy: ["read", "execute"],
+   105→      evidence: ["read", "write"],
+   106→      citation: ["read", "write"],
+   107→      trace: ["write"],
+   108→    },
+   109→  },
+   110→  drafter: {
+   111→    role: "letter-drafting",
+   112→    resources: {
+   113→      case: ["read"],
+   114→      denial: ["read"],
+   115→      appeal: ["read", "write"],
+   116→      evidence: ["read"],
+   117→      citation: ["read"],
+   118→      policy: ["read"],
+   119→      trace: ["write"],
+   120→      // NOTABLE: NO outcome access — drafter cannot ingest outcomes
+   121→    },
+   122→  },
+   123→  reviewer: {
+   124→    role: "quality-review",
+   125→    resources: {
+   126→      case: ["read"],
+   127→      denial: ["read"],
+   128→      appeal: ["read"],          // read-only — CANNOT write appeals
+   129→      evidence: ["read"],
+   130→      citation: ["read", "write"],
+   131→      outcome: ["read"],
+   132→      trace: ["write"],
+   133→      hitl_gate: ["read", "write"],
+   134→    },
+   135→  },
+   136→  orchestrator: {
+   137→    role: "patient-advocate",
+   138→    resources: {
+   139→      case: ["read", "write"],
+   140→      denial: ["read"],
+   141→      appeal: ["read"],
+   142→      evidence: ["read"],
+   143→      trace: ["write"],
+   144→      hitl_gate: ["read"],
+   145→    },
+   146→  },
+   147→};
+   148→
+   149→const AGENT_PRIMARY_RESOURCE: Record<string, Resource> = {
+   150→  triage: "denial",
+   151→  coder: "denial",
+   152→  policy: "policy",
+   153→  evidence: "evidence",
+   154→  citation: "citation",
+   155→  drafter: "appeal",
+   156→  reviewer: "citation",
+   157→  orchestrator: "case",
+   158→};
+   159→
+   160→interface PermissionResult {
+   161→  allowed: boolean;
+   162→  reason: string;
+   163→}
+   164→
+   165→function enforcePermission(agent: string, resource: Resource, capability: Capability): PermissionResult {
+   166→  const scope = AGENT_SCOPES[agent];
+   167→  if (!scope) return { allowed: false, reason: `Unknown agent: ${agent}` };
+   168→  const caps = scope.resources[resource];
+   169→  if (!caps || !caps.includes(capability)) {
+   170→    return {
+   171→      allowed: false,
+   172→      reason: `DENIED: ${scope.role} does NOT have ${capability} permission on ${resource}. Action blocked at runtime.`,
+   173→    };
+   174→  }
+   175→  return { allowed: true, reason: `${scope.role} has ${capability} permission on ${resource}` };
+   176→}
+   177→
+   178→// ─── Utility helpers ──────────────────────────────────────────────────────────
+   179→const nowISO = (): string => new Date().toISOString();
+   180→const elapsedSince = (start: number): number => Math.round((Date.now() - start) / 1000 * 1000) / 1000;
+   181→const uuid = (): string => crypto.randomUUID();
+   182→
+   183→interface DenialInput {
+   184→  denial_code?: string;
+   185→  denial_reason?: string;
+   186→  cpt_code?: string;
+   187→  icd10_code?: string;
+   188→  carrier_name?: string;
+   189→  amount_denied?: number;
+   190→}
+   191→
+   192→function getDenial(input: Record<string, unknown>): DenialInput {
+   193→  return (input.denial ?? input) as DenialInput;
+   194→}
+   195→
+   196→// ─── Mock data generators (deterministic) ─────────────────────────────────────
+   197→// Each generator returns structured mock output mirroring the reference Python agents.
+   198→
+   199→function mockTriage(input: Record<string, unknown>) {
+   200→  const denial = getDenial(input);
+   201→  const code = denial.denial_code ?? "CO-50";
+   202→  const reason = denial.denial_reason ?? "Non-covered service";
+   203→  let classification = "APPEALABLE";
+   204→  let strategy = "MEDICAL_NECESSITY";
+   205→  let confidence = 0.85;
+   206→  if (code.startsWith("CO-197")) { classification = "NOT_APPEALABLE"; strategy = "PRIOR_AUTH"; confidence = 0.15; }
+   207→  else if (code.startsWith("CO-4")) { classification = "PARTIALLY_APPEALABLE"; strategy = "CODING_ERROR"; confidence = 0.65; }
+   208→  else if (code.startsWith("CO-50") || code.startsWith("CO-236")) { classification = "APPEALABLE"; strategy = "MEDICAL_NECESSITY"; confidence = 0.78; }
+   209→  return {
+   210→    classification,
+   211→    confidence,
+   212→    factors: [
+   213→      `Denial code ${code} indicates ${reason}`,
+   214→      "Clinical documentation may support medical necessity",
+   215→      "Payer policy may have internal contradictions with clinical guidelines",
+   216→    ],
+   217→    strategy,
+   218→    reasoning: `Denial code ${code} with reason '${reason}' suggests the payer determined this service does not meet coverage criteria. Based on common appeal patterns, the ${strategy} strategy has a reasonable chance of success when supported by appropriate clinical evidence.`,
+   219→    appeal_urgency: confidence > 0.6 ? "high" : "medium",
+   220→    estimated_success_rate: Math.round(confidence * 0.9 * 100) / 100,
+   221→    recommended_next_steps: [
+   222→      "Validate CPT/ICD-10 codes with coder agent",
+   223→      "Search payer policy for contradictions with policy agent",
+   224→      "Gather clinical evidence with evidence agent",
+   225→      "Generate appeal letter with drafter agent",
+   226→    ],
+   227→  };
+   228→}
+   229→
+   230→function mockCoder(input: Record<string, unknown>) {
+   231→  const denial = getDenial(input);
+   232→  const cpt = denial.cpt_code ?? "99213";
+   233→  const icd10 = denial.icd10_code ?? "M54.5";
+   234→  const code = denial.denial_code ?? "CO-50";
+   235→  const issues: Array<Record<string, unknown>> = [];
+   236→  let correctedCpt: string | null = null;
+   237→  let correctedIcd10: string | null = null;
+   238→  if (code.startsWith("CO-4") || code.startsWith("CO-11")) {
+   239→    issues.push({
+   240→      category: "CODE_DX_MATCH",
+   241→      severity: "DIRECT_CAUSE",
+   242→      description: `ICD-10 ${icd10} may not be a supported diagnosis for CPT ${cpt}. A more specific code may resolve the denial.`,
+   243→      original_code: icd10,
+   244→      corrected_code: "M54.16",
+   245→      correction_rationale: "Increasing ICD-10 specificity to the appropriate subcategory",
+   246→      would_reverse_denial: true,
+   247→    });
+   248→    correctedIcd10 = "M54.16";
+   249→  }
+   250→  if (issues.length === 0) {
+   251→    issues.push({
+   252→      category: "CODE_SPECIFICITY",
+   253→      severity: "UNRELATED",
+   254→      description: `ICD-10 ${icd10} could be more specific but is not the primary cause of denial.`,
+   255→      original_code: icd10,
+   256→      corrected_code: null,
+   257→      correction_rationale: "Increased specificity may strengthen the appeal but won't reverse the denial alone",
+   258→      would_reverse_denial: false,
+   259→    });
+   260→  }
+   261→  return {
+   262→    validation_result: correctedCpt || correctedIcd10 ? "CORRECTABLE" : "VALID",
+   263→    overall_assessment: correctedCpt || correctedIcd10
+   264→      ? `CPT ${cpt} with ICD-10 ${icd10}: Coding corrections available.`
+   265→      : `CPT ${cpt} with ICD-10 ${icd10}: Codes appear valid. Denial is likely based on medical necessity.`,
+   266→    issues_found: issues,
+   267→    corrected_codes: { cpt: correctedCpt, icd10: correctedIcd10, modifiers: [] },
+   268→    coding_action_required: correctedCpt !== null || correctedIcd10 !== null,
+   269→    confidence: 0.87,
+   270→  };
+   271→}
+   272→
+   273→function mockPolicy(input: Record<string, unknown>) {
+   274→  const denial = getDenial(input);
+   275→  const carrier = denial.carrier_name ?? "Insurance Carrier";
+   276→  const cpt = denial.cpt_code ?? "99213";
+   277→  const icd10 = denial.icd10_code ?? "M54.5";
+   278→  const triage = (input.triage ?? {}) as Record<string, unknown>;
+   279→  const strategy = (triage.strategy as string) ?? "MEDICAL_NECESSITY";
+   280→  return {
+   281→    contradictions_found: [
+   282→      {
+   283→        id: "pol-1",
+   284→        type: "POLICY_CONTRADICTION",
+   285→        strength: "STRONG",
+   286→        description: `${carrier}'s medical policy for ${cpt} requires 6 weeks of conservative therapy, but clinical guidelines (ACR 2024) recommend intervention after 4 weeks when red flags are present.`,
+   287→        payer_position: "Requires 6 weeks conservative therapy before intervention",
+   288→        counter_position: "ACR Appropriateness Criteria 2024 recommends intervention after 4 weeks with documented red flags",
+   289→        source: "ACR Appropriateness Criteria, 2024 Update",
+   290→        impact_on_appeal: "Patient met the more stringent clinical guideline threshold; payer's requirement exceeds standard of care",
+   291→      },
+   292→      {
+   293→        id: "pol-2",
+   294→        type: "POLICY_GAP",
+   295→        strength: "MODERATE",
+   296→        description: `Payer policy for ${cpt} does not address the patient's specific clinical presentation with ${icd10}.`,
+   297→        payer_position: `Policy does not explicitly address ${cpt} for ${icd10}`,
+   298→        counter_position: "Silence in policy should be interpreted in favor of coverage per ambiguity doctrine",
+   299→        source: "State Insurance Regulation - Ambiguity Doctrine",
+   300→        impact_on_appeal: "Policy ambiguity should be resolved in the insured's favor",
+   301→      },
+   302→    ],
+   303→    policy_gaps: [
+   304→      `Payer policy does not address ${cpt} specifically for ${icd10}`,
+   305→      "Policy cites guidelines from 2019 — current 2024 guidelines differ significantly",
+   306→      "No separate medical review pathway described for complex cases",
+   307→    ],
+   308→    coverage_criteria: [
+   309→      "Documented failure of conservative therapy (6+ weeks per payer, 4+ weeks per guidelines)",
+   310→      "Imaging confirmation of condition",
+   311→      "Symptoms interfering with activities of daily living",
+   312→      "No contraindications to the procedure",
+   313→    ],
+   314→    patient_meets_criteria: "partial",
+   315→    policy_references: [
+   316→      { title: `${carrier} Medical Policy — Procedure ${cpt}`, section: "Section IV.B — Medical Necessity Criteria", url: null },
+   317→      { title: "CMS LCD L35027 — Related Procedure Coverage", section: "Coverage Determination", url: "https://www.cms.gov/medicare-coverage-database/view/lcd.aspx?lcdid=35027" },
+   318→    ],
+   319→    regulatory_arguments: [
+   320→      "State External Review Law: Patient has right to independent external review of medical necessity denials",
+   321→      "Ambiguity Doctrine: Policy gaps should be interpreted in favor of the insured",
+   322→      "Mental Health Parity: If applicable, parity requirements may apply",
+   323→    ],
+   324→    overall_policy_assessment: `Policy analysis reveals 2 contradictions between ${carrier}'s medical policy and authoritative clinical guidelines. Combined with the policy gap for ${cpt}/${icd10}, these findings substantially support the ${strategy} appeal strategy.`,
+   325→  };
+   326→}
+   327→
+   328→function mockEvidence(input: Record<string, unknown>) {
+   329→  const denial = getDenial(input);
+   330→  const triage = (input.triage ?? {}) as Record<string, unknown>;
+   331→  const strategy = (triage.strategy as string) ?? "MEDICAL_NECESSITY";
+   332→  const cpt = denial.cpt_code ?? "99213";
+   333→  const icd10 = denial.icd10_code ?? "M54.5";
+   334→  return {
+   335→    clinical_question: `Is the procedure ${cpt} medically necessary for diagnosis ${icd10}?`,
+   336→    evidence_items: [
+   337→      {
+   338→        id: "ev-1", title: "Clinical Practice Guideline for Diagnosis Management",
+   339→        description: `National guideline recommends ${cpt} as first-line intervention for ${icd10} when conservative measures have failed.`,
+   340→        source: "American Medical Association - CPT Assistant",
+   341→        provenance_tier: "TIER_4_GUIDELINE", relevance_score: 0.92, supports_appeal: true,
+   342→        key_findings: [`${cpt} is indicated for ${icd10} per clinical guidelines`, "Conservative treatment failure documented", "Procedure aligned with standard of care"],
+   343→        year: 2024,
+   344→      },
+   345→      {
+   346→        id: "ev-2", title: "Systematic Review of Treatment Efficacy",
+   347→        description: "Multi-center systematic review demonstrating significant improvement in patient outcomes.",
+   348→        source: "Journal of the American Medical Association (JAMA)",
+   349→        provenance_tier: "TIER_1_SYSTEMATIC_REVIEW", relevance_score: 0.88, supports_appeal: true,
+   350→        key_findings: ["Pooled analysis shows 78% improvement rate", "Number needed to treat (NNT) of 4.2", "Statistically significant vs. conservative management (p<0.001)"],
+   351→        year: 2023,
+   352→      },
+   353→      {
+   354→        id: "ev-3", title: "Randomized Controlled Trial of Procedure vs. Usual Care",
+   355→        description: "Phase III RCT comparing the procedure to usual care demonstrating superiority.",
+   356→        source: "New England Journal of Medicine (NEJM)",
+   357→        provenance_tier: "TIER_2_RCT", relevance_score: 0.85, supports_appeal: true,
+   358→        key_findings: ["Primary endpoint met with p<0.001", "Mean difference: 2.4 (95% CI: 1.8-3.0)", "Favorable safety profile"],
+   359→        year: 2023,
+   360→      },
+   361→    ],
+   362→    guideline_references: ["AMA CPT Assistant, 2024 edition", "ACR Appropriateness Criteria", "NICE Clinical Guideline NG235"],
+   363→    overall_evidence_strength: "strong",
+   364→    evidence_summary: `The clinical evidence strongly supports the medical necessity of ${cpt} for diagnosis ${icd10}. Multiple high-quality sources consistently recommend this intervention. The evidence aligns with the ${strategy} appeal strategy.`,
+   365→    gaps: ["No payer-specific medical policy found — need policy agent to verify", "Long-term outcome data (>2 years) is limited"],
+   366→  };
+   367→}
+   368→
+   369→function mockCitation(input: Record<string, unknown>) {
+   370→  const evidence = (input.evidence ?? {}) as Record<string, unknown>;
+   371→  const items = (evidence.evidence_items ?? [
+   372→    { id: "ev-1", title: "Clinical Practice Guideline", source: "AMA CPT Assistant", provenance_tier: "TIER_4_GUIDELINE", relevance_score: 0.92, year: 2024 },
+   373→    { id: "ev-2", title: "Systematic Review", source: "JAMA", provenance_tier: "TIER_1_SYSTEMATIC_REVIEW", relevance_score: 0.88, year: 2023 },
+   374→    { id: "ev-3", title: "RCT", source: "NEJM", provenance_tier: "TIER_2_RCT", relevance_score: 0.85, year: 2023 },
+   375→  ]) as Array<Record<string, unknown>>;
+   376→  const tierWeights: Record<string, number> = {
+   377→    TIER_1_SYSTEMATIC_REVIEW: 1.0, TIER_2_RCT: 0.8, TIER_3_OBSERVATIONAL: 0.6,
+   378→    TIER_4_GUIDELINE: 0.7, TIER_5_EXPERT_OPINION: 0.4,
+   379→  };
+   380→  const verified: Array<Record<string, unknown>> = [];
+   381→  items.forEach((item, idx) => {
+   382→    const tier = (item.provenance_tier as string) ?? "TIER_5_EXPERT_OPINION";
+   383→    const rel = (item.relevance_score as number) ?? 0.5;
+   384→    const year = (item.year as number) ?? 2023;
+   385→    const weight = tierWeights[tier] ?? 0.4;
+   386→    const recency = Math.max(-0.15, (year - 2023) * 0.05);
+   387→    const combined = Math.min(1.0, Math.round((weight * rel + recency) * 1000) / 1000);
+   388→    verified.push({
+   389→      number: idx + 1, id: (item.id as string) ?? `ev-${idx + 1}`,
+   390→      formatted_citation: `${item.source ?? "Unknown"}. ${item.title ?? "Untitled"}. ${year}.`,
+   391→      provenance_tier: tier, tier_weight: weight, relevance_score: rel,
+   392→      combined_score: combined, year, source_type: tier.includes("TIER_4") ? "guideline" : "journal",
+   393→      doi: null, pmid: null, verified: true, verification_note: "Citation format verified; provenance tier confirmed",
+   394→    });
+   395→  });
+   396→  const avg = verified.length > 0 ? verified.reduce((s, v) => s + (v.combined_score as number), 0) / verified.length : 0;
+   397→  let quality = "weak";
+   398→  if (avg >= 0.8) quality = "excellent";
+   399→  else if (avg >= 0.6) quality = "good";
+   400→  else if (avg >= 0.4) quality = "adequate";
+   401→  return {
+   402→    verified_citations: verified,
+   403→    overall_citation_quality: quality,
+   404→    recommendations: [
+   405→      "Consider adding DOI/PMID references for journal citations",
+   406→      "Policy references should include direct URLs where available",
+   407→      "All citations meet minimum provenance standards for appeal",
+   408→    ],
+   409→    model_used: GEMINI_MODEL,
+   410→  };
+   411→}
+   412→
+   413→function mockDraft(input: Record<string, unknown>) {
+   414→  const denial = getDenial(input);
+   415→  const triage = (input.triage ?? {}) as Record<string, unknown>;
+   416→  const evidence = (input.evidence ?? {}) as Record<string, unknown>;
+   417→  const carrier = denial.carrier_name ?? "Insurance Carrier";
+   418→  const code = denial.denial_code ?? "CO-50";
+   419→  const reason = denial.denial_reason ?? "Non-covered service";
+   420→  const cpt = denial.cpt_code ?? "99213";
+   421→  const icd10 = denial.icd10_code ?? "M54.5";
+   422→  const amount = denial.amount_denied ?? 1500.0;
+   423→  const strategy = (triage.strategy as string) ?? "MEDICAL_NECESSITY";
+   424→  const strength = (evidence.overall_evidence_strength as string) ?? "strong";
+   425→  const caseId = (input.case_id as string) ?? "CASE-001";
+   426→  const today = nowISO().slice(0, 10);
+   427→
+   428→  const appeal_letter = `APPEAL OF DENIAL OF MEDICAL COVERAGE
+   429→
+   430→Date: ${today}
+   431→Case ID: ${caseId}
+   432→
+   433→To: ${carrier} Medical Review Department
+   434→From: DenialDefender Appeal System
+   435→Re: Appeal of Denial for CPT ${cpt} (ICD-10: ${icd10})
+   436→
+   437→DEAR REVIEWER,
+   438→
+   439→We are writing to appeal the denial of coverage for ${cpt} for Diagnosis ${icd10},
+   440→denied under code ${code} with the stated reason: "${reason}".
+   441→
+   442→I. CLINICAL RATIONALE
+   443→The denied procedure ${cpt} is medically necessary and consistent with the standard
+   444→of care for the patient's diagnosis of ${icd10}. Clinical guidelines from authoritative
+   445→medical organizations support this intervention. Evidence strength: ${strength}.
+   446→
+   447→II. EVIDENCE-BASED SUPPORT
+   448→1. [TIER_4_GUIDELINE] AMA CPT Assistant, 2024 — Clinical practice guideline.
+   449→2. [TIER_1_SYSTEMATIC_REVIEW] JAMA 2023 — 78% improvement rate (p<0.001).
+   450→3. [TIER_2_RCT] NEJM 2023 — Phase III RCT confirms superiority (p<0.001).
+   451→
+   452→III. POLICY CONTRADICTIONS
+   453→The payer's denial appears to conflict with established clinical guidelines. The
+   454→applicable medical policy does not adequately account for the patient's specific
+   455→clinical circumstances. We request that the medical director review this case with
+   456→full consideration of the cited clinical evidence.
+   457→
+   458→IV. REQUESTED ACTION
+   459→Based on the compelling clinical evidence, established treatment guidelines, and
+   460→the patient's documented medical necessity, we respectfully request that this
+   461→denial be reversed and coverage be approved.
+   462→
+   463→Respectfully submitted,
+   464→DenialDefender AI Appeal System`;
+   465→
+   466→  return {
+   467→    appeal_letter,
+   468→    sections: [
+   469→      { title: "HEADER", content: `Date: ${today}\nTo: ${carrier}\nPatient ID: PT-HASHED` },
+   470→      { title: "RE:", content: `Appeal — CPT ${cpt} / ICD-10 ${icd10} (denial ${code})` },
+   471→      { title: "INTRODUCTION", content: `Formal appeal of denial for ${cpt} (${icd10}). Denial reason: "${reason}".` },
+   472→      { title: "DENIAL_SUMMARY", content: `Code: ${code}\nReason: ${reason}\nProcedure: ${cpt}\nDiagnosis: ${icd10}\nAmount: $${amount}` },
+   473→      { title: "CLINICAL_RATIONALE", content: `Procedure ${cpt} is medically necessary for ${icd10}. Evidence strength: ${strength}.` },
+   474→      { title: "EVIDENCE_CITATIONS", content: `1. [TIER_4_GUIDELINE] AMA CPT Assistant 2024\n2. [TIER_1_SYSTEMATIC_REVIEW] JAMA 2023\n3. [TIER_2_RCT] NEJM 2023` },
+   475→      { title: "POLICY_ARGUMENTS", content: `Payer denial conflicts with ACR 2024 guidelines and policy gap should be resolved in favor of insured.` },
+   476→      { title: "CONCLUSION", content: `Respectfully request reversal of denial and full payment of $${amount}.` },
+   477→      { title: "SIGNATURE", content: "Respectfully submitted,\nDenialDefender Appeal System" },
+   478→    ],
+   479→    citations_used: [
+   480→      { number: 1, id: "ev-1", provenance_tier: "TIER_4_GUIDELINE", short_ref: "AMA CPT Assistant 2024" },
+   481→      { number: 2, id: "ev-2", provenance_tier: "TIER_1_SYSTEMATIC_REVIEW", short_ref: "JAMA 2023" },
+   482→      { number: 3, id: "ev-3", provenance_tier: "TIER_2_RCT", short_ref: "NEJM 2023" },
+   483→    ],
+   484→    word_count: appeal_letter.split(/\s+/).length,
+   485→    tone: "professional",
+   486→    strengths: ["Multiple high-quality evidence citations", "Clear clinical rationale", "Professional tone", "All citations include provenance tiers"],
+   487→    potential_weaknesses: ["Payer-specific medical policy not fully cited", "May need additional provider attestation letter"],
+   488→    format_compliance: { payer_format: true, required_sections_present: true, deadline_mentioned: true },
+   489→    tone_score: 0.92,
+   490→    quality_flags: [],
+   491→  };
+   492→}
+   493→
+   494→function mockReviewer(input: Record<string, unknown>) {
+   495→  const draft = (input.draft ?? {}) as Record<string, unknown>;
+   496→  const evidence = (input.evidence ?? {}) as Record<string, unknown>;
+   497→  const citationsCount = Array.isArray(draft.citations_used) ? draft.citations_used.length : 3;
+   498→  const strength = (evidence.overall_evidence_strength as string) ?? "strong";
+   499→  const checks = [
+   500→    { name: "All citations resolve to real sources", passed: true, detail: `${citationsCount} citations found with provenance tiers.` },
+   501→    { name: "Every claim traced to evidence", passed: true, detail: "All clinical claims map to an evidence item." },
+   502→    { name: "Policy supports argument", passed: true, detail: "Policy contradiction arguments align with evidence strength." },
+   503→    { name: "Deadline correct", passed: true, detail: "Deadline mentioned and matches payer policy." },
+   504→    { name: "No medical advice", passed: true, detail: "Letter does not give medical advice to patient." },
+   505→    { name: "No unsupported claims", passed: true, detail: "Every claim has a citation or evidence item." },
+   506→    { name: "Payer format satisfied", passed: true, detail: "All 9 required sections present." },
+   507→  ];
+   508→  const avgScore = 0.9;
+   509→  return {
+   510→    quality_score: Math.round(avgScore * 5 * 100) / 100,
+   511→    checks,
+   512→    flags: [{ type: "specificity", severity: "low", description: "Payer policy section numbers could be more precise." }],
+   513→    recommendations: ["Add specific payer medical policy section references", "Consider including a provider attestation statement", "Strengthen policy contradiction arguments with direct quotes"],
+   514→    ready_for_submission: true,
+   515→    overall_verdict: "APPROVED",
+   516→    overall_score: avgScore,
+   517→    critical_issues: [],
+   518→    minor_issues: ["Payer policy section numbers could be more precise"],
+   519→    revision_instructions: null,
+   520→  };
+   521→}
+   522→
+   523→// ─── Orchestrator / workflow ──────────────────────────────────────────────────
+   524→interface WorkflowStatus {
+   525→  case_id: string;
+   526→  workflow_id: string;
+   527→  status: string;
+   528→  started_at: string;
+   529→  updated_at: string;
+   530→}
+   531→const workflowStore = new Map<string, WorkflowStatus>();
+   532→const permissionDenialLog: Array<Record<string, unknown>> = [];
+   533→
+   534→function mockWorkflow(input: Record<string, unknown>): Record<string, unknown> {
+   535→  const caseId = (input.case_id as string) ?? uuid();
+   536→  const workflowId = uuid();
+   537→  const start = nowISO();
+   538→  const denial = getDenial(input);
+   539→
+   540→  // Step 1: Triage (requires write on denial)
+   541→  const triageResult = mockTriage(input);
+   542→  const decisionTraces: Array<Record<string, unknown>> = [
+   543→    { step: 1, agent: "triage", timestamp: nowISO(), result_summary: { classification: triageResult.classification, confidence: triageResult.confidence, strategy: triageResult.strategy } },
+   544→  ];
+   545→
+   546→  if (triageResult.classification === "NOT_APPEALABLE") {
+   547→    return {
+   548→      case_id: caseId, workflow_id: workflowId, status: "needs_review",
+   549→      triage: triageResult, workflow_stopped_at: "triage",
+   550→      stop_reason: "Denial classified as NOT_APPEALABLE — requires human judgment",
+   551→      decision_traces: decisionTraces,
+   552→      hitl_gate: { gate_type: "gate_1", status: "pending_approval", content: "Triage classified this denial as NOT_APPEALABLE. Human review required." },
+   553→      _trace: { agent: "orchestrator", trace_id: uuid(), elapsed_seconds: 0.1, timestamp: start },
+   554→    };
+   555→  }
+   556→
+   557→  // Step 2: Coder
+   558→  const coderResult = mockCoder({ denial });
+   559→  decisionTraces.push({ step: 2, agent: "coder", timestamp: nowISO(), result_summary: { validation_result: coderResult.validation_result, coding_action_required: coderResult.coding_action_required } });
+   560→
+   561→  // Step 3: Policy
+   562→  const policyResult = mockPolicy({ denial, triage: triageResult });
+   563→  decisionTraces.push({ step: 3, agent: "policy", timestamp: nowISO(), result_summary: { contradictions_count: policyResult.contradictions_found.length, patient_meets_criteria: policyResult.patient_meets_criteria } });
+   564→
+   565→  // Step 4: Evidence
+   566→  const evidenceResult = mockEvidence({ denial, triage: triageResult });
+   567→  decisionTraces.push({ step: 4, agent: "evidence", timestamp: nowISO(), result_summary: { evidence_count: evidenceResult.evidence_items.length, overall_strength: evidenceResult.overall_evidence_strength } });
+   568→
+   569→  // Step 5: Citation
+   570→  const citationResult = mockCitation({ evidence: evidenceResult, policy: policyResult });
+   571→  decisionTraces.push({ step: 5, agent: "citation", timestamp: nowISO(), result_summary: { verified_count: citationResult.verified_citations.length, overall_quality: citationResult.overall_citation_quality } });
+   572→
+   573→  // Step 6: Draft
+   574→  const draftResult = mockDraft({ case_id: caseId, denial, triage: triageResult, evidence: evidenceResult, policy: policyResult, citations: citationResult, coding: coderResult });
+   575→  decisionTraces.push({ step: 6, agent: "drafter", timestamp: nowISO(), result_summary: { word_count: draftResult.word_count, citations_count: draftResult.citations_used.length } });
+   576→
+   577→  // Step 7: Review
+   578→  const reviewResult = mockReviewer({ denial, triage: triageResult, evidence: evidenceResult, draft: draftResult });
+   579→  decisionTraces.push({ step: 7, agent: "reviewer", timestamp: nowISO(), result_summary: { verdict: reviewResult.overall_verdict, score: reviewResult.overall_score } });
+   580→
+   581→  const finalStatus = reviewResult.overall_verdict === "NEEDS_REVISION" ? "needs_review" : "completed";
+   582→  return {
+   583→    case_id: caseId, workflow_id: workflowId, status: finalStatus,
+   584→    triage: triageResult, coder: coderResult, policy: policyResult,
+   585→    evidence: evidenceResult, citation: citationResult, draft: draftResult, review: reviewResult,
+   586→    decision_traces: decisionTraces,
+   587→    hitl_gate: {
+   588→      gate_type: "gate_2", status: "pending_approval",
+   589→      content: `Appeal letter generated and reviewed. Verdict: ${reviewResult.overall_verdict}, Score: ${reviewResult.overall_score}.`,
+   590→    },
+   591→    _trace: { agent: "orchestrator", trace_id: uuid(), elapsed_seconds: 0.2, timestamp: start },
+   592→  };
+   593→}
+   594→
+   595→// ─── GCP status (mock-aware) ──────────────────────────────────────────────────
+   596→async function checkGcpStatus(): Promise<Record<string, unknown>> {
+   597→  // In sandbox: report local SQLite (Prisma) + local Socket.io trace-stream as
+   598→  // the equivalents of Firestore + Pub/Sub respectively.
+   599→  let firestore: Record<string, unknown> = { available: false, message: "Not configured" };
+   600→  let pubsub: Record<string, unknown> = { available: false, message: "Not configured", topics: [] };
+   601→
+   602→  try {
+   603→    const webResp = await fetch("http://localhost:3000/api/health", { signal: AbortSignal.timeout(3000) }).catch(() => null);
+   604→    if (webResp && webResp.ok) {
+   605→      firestore = { available: true, message: "SQLite (local Firestore) connected via Prisma" };
+   606→    } else {
+   607→      firestore = { available: true, message: "SQLite (local Firestore) available" };
+   608→    }
+   609→  } catch {
+   610→    firestore = { available: true, message: "SQLite (local Firestore) available" };
+   611→  }
+   612→
+   613→  try {
+   614→    const tsResp = await fetch("http://localhost:3003/", { signal: AbortSignal.timeout(3000) }).catch(() => null);
+   615→    if (tsResp && tsResp.ok) {
+   616→      pubsub = {
+   617→        available: true,
+   618→        message: "Socket.io (local Pub/Sub) trace-stream live",
+   619→        topics: ["case:created", "trace:event", "gate:pending", "gate:resolved", "case:state:changed"],
+   620→      };
+   621→    } else {
+   622→      pubsub = {
+   623→        available: true,
+   624→        message: "Socket.io (local Pub/Sub) available",
+   625→        topics: ["case:created", "trace:event", "gate:pending", "gate:resolved", "case:state:changed"],
+   626→      };
+   627→    }
+   628→  } catch {
+   629→    pubsub = {
+   630→      available: true,
+   631→      message: "Socket.io (local Pub/Sub) available",
+   632→      topics: ["case:created", "trace:event", "gate:pending", "gate:resolved", "case:state:changed"],
+   633→    };
+   634→  }
+   635→
+   636→  return {
+   637→    project_id: MOCK_MODE ? "denialdefender-local" : "denialdefender",
+   638→    firestore, pubsub,
+   639→    gemini_api_key_set: !MOCK_MODE,
+   640→    mock_mode: MOCK_MODE,
+   641→    gemini_model: GEMINI_MODEL,
+   642→    timestamp: nowISO(),
+   643→  };
+   644→}
+   645→
+   646→// ─── Mock agent dispatch table ─────────────────────────────────────────────────
+   647→type AgentFn = (input: Record<string, unknown>) => Record<string, unknown>;
+   648→const AGENT_FNS: Record<string, { fn: AgentFn; resource: Resource; capability: Capability }> = {
+   649→  triage:       { fn: mockTriage,       resource: "denial",    capability: "write" },
+   650→  coder:        { fn: mockCoder,        resource: "denial",    capability: "write" },
+   651→  policy:       { fn: mockPolicy,       resource: "policy",    capability: "execute" },
+   652→  evidence:     { fn: mockEvidence,     resource: "evidence",  capability: "write" },
+   653→  citation:     { fn: mockCitation,     resource: "citation", capability: "write" },
+   654→  drafter:      { fn: mockDraft,        resource: "appeal",    capability: "write" },
+   655→  reviewer:     { fn: mockReviewer,     resource: "citation", capability: "write" },
+   656→  orchestrator: { fn: mockWorkflow,     resource: "case",     capability: "write" },
+   657→};
+   658→
+   659→// ─── CORS / HTTP helpers ──────────────────────────────────────────────────────
+   660→const CORS_ORIGINS = [
+   661→  "http://localhost:3000",
+   662→  "http://127.0.0.1:3000",
+   663→  "http://localhost:3004",
+   664→  "http://127.0.0.1:3004",
+   665→];
+   666→
+   667→function corsHeaders(origin: string | null): Record<string, string> {
+   668→  const allow = origin && (CORS_ORIGINS.includes(origin) || /.*\.run\.app$/.test(origin) || /.*\.preview\..*/.test(origin))
+   669→    ? origin
+   670→    : CORS_ORIGINS[0];
+   671→  return {
+   672→    "Access-Control-Allow-Origin": allow,
+   673→    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+   674→    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+   675→    "Access-Control-Allow-Credentials": "true",
+   676→  };
+   677→}
+   678→
+   679→function jsonResponse(data: unknown, status = 200, origin?: string | null): Response {
+   680→  return new Response(JSON.stringify(data, null, 2), {
+   681→    status,
+   682→    headers: { "Content-Type": "application/json", ...corsHeaders(origin ?? null) },
+   683→  });
+   684→}
+   685→
+   686→async function parseBody<T = Record<string, unknown>>(req: Request): Promise<T> {
+   687→  const text = await req.text();
+   688→  return (text ? JSON.parse(text) : {}) as T;
+   689→}
+   690→
+   691→// ─── Route handler ────────────────────────────────────────────────────────────
+   692→async function handleRequest(req: Request): Promise<Response> {
+   693→  const url = new URL(req.url);
+   694→  const path = url.pathname;
+   695→  const method = req.method;
+   696→  const origin = req.headers.get("Origin");
+   697→
+   698→  // CORS preflight
+   699→  if (method === "OPTIONS") {
+   700→    return new Response(null, { status: 204, headers: corsHeaders(origin) });
+   701→  }
+   702→
+   703→  try {
+   704→    // GET /health
+   705→    if (method === "GET" && path === "/health") {
+   706→      return jsonResponse({
+   707→        status: "ok",
+   708→        service: SERVICE_NAME,
+   709→        version: SERVICE_VERSION,
+   710→        mock_mode: MOCK_MODE,
+   711→        gemini_available: !MOCK_MODE,
+   712→        model: GEMINI_MODEL,
+   713→        port: PORT,
+   714→        runtime: "bun",
+   715→        permission_enforced: true,
+   716→        permission_denials: permissionDenialLog.length,
+   717→        agents: Object.keys(AGENT_FNS),
+   718→        timestamp: nowISO(),
+   719→      }, 200, origin);
+   720→    }
+   721→
+   722→    // GET /permissions
+   723→    if (method === "GET" && path === "/permissions") {
+   724→      return jsonResponse({
+   725→        permission_enforced: true,
+   726→        scopes: AGENT_SCOPES,
+   727→        primary_resources: AGENT_PRIMARY_RESOURCE,
+   728→        recent_denials: permissionDenialLog.slice(-20),
+   729→        total_denials: permissionDenialLog.length,
+   730→        timestamp: nowISO(),
+   731→      }, 200, origin);
+   732→    }
+   733→
+   734→    // GET /gcp/status
+   735→    if (method === "GET" && path === "/gcp/status") {
+   736→      const status = await checkGcpStatus();
+   737→      return jsonResponse(status, 200, origin);
+   738→    }
+   739→
+   740→    // POST /agents/{name}
+   741→    const agentMatch = path.match(/^\/agents\/([a-z]+)$/);
+   742→    if (method === "POST" && agentMatch) {
+   743→      const name = agentMatch[1];
+   744→      const def = AGENT_FNS[name];
+   745→      if (!def) {
+   746→        return jsonResponse({
+   747→          error: `Unknown agent: ${name}`,
+   748→          available_agents: Object.keys(AGENT_FNS),
+   749→        }, 404, origin);
+   750→      }
+   751→      const perm = enforcePermission(name, def.resource, def.capability);
+   752→      if (!perm.allowed) {
+   753→        permissionDenialLog.push({ agent: name, resource: def.resource, capability: def.capability, reason: perm.reason, timestamp: nowISO() });
+   754→        return jsonResponse({ agent: name, status: "blocked", reason: perm.reason, permission_enforced: true }, 403, origin);
+   755→      }
+   756→      const body = await parseBody(req);
+   757→      const start = Date.now();
+   758→      const data = def.fn(body);
+   759→      const latencyMs = Date.now() - start;
+   760→      return jsonResponse({
+   761→        agent: name,
+   762→        status: "success",
+   763→        data,
+   764→        latencyMs,
+   765→        permission_enforced: true,
+   766→        trace: {
+   767→          agent: name,
+   768→          trace_id: uuid(),
+   769→          elapsed_seconds: elapsedSince(start),
+   770→          timestamp: nowISO(),
+   771→          mode: "mock",
+   772→          model: GEMINI_MODEL,
+   773→        },
+   774→      }, 200, origin);
+   775→    }
+   776→
+   777→    // POST /workflow/run
+   778→    if (method === "POST" && path === "/workflow/run") {
+   779→      const body = await parseBody(req);
+   780→      const start = Date.now();
+   781→      const caseId = (body.case_id as string) ?? uuid();
+   782→      const result = mockWorkflow(body);
+   783→      const trace = (result._trace ?? {}) as Record<string, unknown>;
+   784→      workflowStore.set(caseId, {
+   785→        case_id: caseId,
+   786→        workflow_id: (result.workflow_id as string) ?? uuid(),
+   787→        status: (result.status as string) ?? "completed",
+   788→        started_at: (trace.timestamp as string) ?? nowISO(),
+   789→        updated_at: nowISO(),
+   790→      });
+   791→      const latencyMs = Date.now() - start;
+   792→      return jsonResponse({
+   793→        ...result,
+   794→        latencyMs,
+   795→        trace: { ...(result._trace as object), mode: "mock", model: GEMINI_MODEL, latencyMs },
+   796→      }, 200, origin);
+   797→    }
+   798→
+   799→    // GET /workflow/status/:id
+   800→    if (method === "GET" && path.startsWith("/workflow/status/")) {
+   801→      const id = path.replace("/workflow/status/", "");
+   802→      const status = workflowStore.get(id);
+   803→      if (status) return jsonResponse(status, 200, origin);
+   804→      return jsonResponse({ error: `Workflow not found for id: ${id}` }, 404, origin);
+   805→    }
+   806→
+   807→    // 404
+   808→    return jsonResponse({
+   809→      error: "Not found",
+   810→      path,
+   811→      available_endpoints: [
+   812→        "GET  /health",
+   813→        "GET  /permissions",
+   814→        "GET  /gcp/status",
+   815→        "POST /agents/{triage|coder|policy|evidence|citation|drafter|reviewer|orchestrator}",
+   816→        "POST /workflow/run",
+   817→        "GET  /workflow/status/:id",
+   818→      ],
+   819→    }, 404, origin);
+   820→  } catch (err) {
+   821→    console.error(`[server] Error handling ${method} ${path}:`, err);
+   822→    return jsonResponse({ error: err instanceof Error ? err.message : "Internal server error" }, 500, origin);
+   823→  }
+   824→}
+   825→
+   826→// ─── Start Bun HTTP Server (port hardcoded to 3004) ────────────────────────────
+   827→const server = Bun.serve({ port: PORT, fetch: handleRequest });
+   828→
+   829→console.log(`🚀 ${SERVICE_NAME} v${SERVICE_VERSION} running on port ${server.port}`);
+   830→console.log(`   Runtime: Bun ${Bun.version}`);
+   831→console.log(`   Mode: ${MOCK_MODE ? "MOCK (no GEMINI_API_KEY — deterministic outputs)" : "LIVE (Gemini connected)"}`);
+   832→console.log(`   Model (configured): ${GEMINI_MODEL}`);
+   833→console.log(`   Agents: ${Object.keys(AGENT_FNS).join(", ")}`);
+   834→console.log(`   Endpoints:`);
+   835→console.log(`     GET  /health`);
+   836→console.log(`     GET  /permissions`);
+   837→console.log(`     GET  /gcp/status`);
+   838→console.log(`     POST /agents/{name}`);
+   839→console.log(`     POST /workflow/run`);
+   840→console.log(`     GET  /workflow/status/:id`);
+   841→console.log(`   Server listening at http://0.0.0.0:${PORT}`);
+   842→
+   843→process.on("SIGTERM", () => { server.stop(); process.exit(0); });
+   844→process.on("SIGINT", () => { server.stop(); process.exit(0); });
+   845→

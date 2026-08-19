@@ -1,0 +1,112 @@
+# DenialDefender Web — Cloud Run Service (Next.js)
+# Deploy: gcloud run services replace nextjs-service.yaml
+#
+# This service serves the DenialDefender web UI and API routes.
+# It connects to Firestore for case data, Pub/Sub for agent task dispatch,
+# and the trace-stream service for real-time decision-trace WebSocket updates.
+#
+# Project:    denialdefender (315133452553)
+# Region:     europe-west1
+# Firestore:  eur3 (multi-region)
+# Provider:   GEMINI_PROVIDER=vertex_ai, ADK_FRAMEWORK=google-adk
+# Model:      gemini-2.5-flash
+
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: denialdefender-web
+  namespace: denialdefender
+  labels:
+    app: denialdefender
+    component: web
+    tier: frontend
+  annotations:
+    run.googleapis.com/ingress: all
+    run.googleapis.com/ingress-status: all
+spec:
+  template:
+    metadata:
+      annotations:
+        # 2 vCPU, 1 GiB RAM for SSR + API workloads
+        run.googleapis.com/cpu: "2"
+        run.googleapis.com/memory: "1Gi"
+        # Auto-scale 0 → 4 instances
+        autoscaling.knative.dev/minScale: "0"
+        autoscaling.knative.dev/maxScale: "4"
+        # VPC connector for Cloud SQL access (if used)
+        run.googleapis.com/vpc-access-connector: projects/denialdefender/locations/europe-west1/connectors/dd-vpc-connector
+        run.googleapis.com/vpc-access-egress: private-ranges-only
+    spec:
+      containerConcurrency: 80
+      timeoutSeconds: 300
+      serviceAccountName: dd-runtime@denialdefender.iam.gserviceaccount.com
+      containers:
+      - name: web
+        image: europe-west1-docker.pkg.dev/denialdefender/denialdefender/denialdefender-web:latest
+        ports:
+        - name: http1
+          containerPort: 8080
+        env:
+        - name: NODE_ENV
+          value: production
+        - name: PORT
+          value: "8080"
+        - name: GCP_PROJECT_ID
+          value: denialdefender
+        - name: GCP_REGION
+          value: europe-west1
+        - name: FIRESTORE_LOCATION
+          value: eur3
+        - name: NEXT_PUBLIC_GCP_PROJECT_ID
+          value: denialdefender
+        - name: NEXT_PUBLIC_APP_NAME
+          value: DenialDefender
+        # GEAP — Model Armor safety shield
+        - name: MODEL_ARMOR_POLICY_ID
+          value: "dd-model-armor"
+        - name: MODEL_ARMOR_LOCATION
+          value: europe-west1
+        # GEAP — Memory Bank (Vertex AI Reasoning Engine)
+        - name: MEMORY_BANK_STORE
+          value: vertex_ai
+        # GEAP — LLM provider & ADK framework
+        - name: GEMINI_PROVIDER
+          value: vertex_ai
+        - name: ADK_FRAMEWORK
+          value: google-adk
+        - name: GEMINI_MODEL
+          value: gemini-2.5-flash
+        # Agent fleet URL — set by deploy script after agents deploy
+        - name: AGENT_FLEET_URL
+          value: https://denialdefender-agents-315133452553.europe-west1.run.app
+        # Trace stream URL — set by deploy script after trace-stream deploy
+        - name: NEXT_PUBLIC_TRACE_STREAM_URL
+          value: https://denialdefender-trace-stream-315133452553.europe-west1.run.app
+        # Secrets
+        - name: GEMINI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: gemini-api-key
+              key: latest
+        resources:
+          limits:
+            cpu: "2"
+            memory: 1Gi
+        # Liveness probe — Next.js health endpoint
+        livenessProbe:
+          httpGet:
+            path: /api/health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 3
+        # Readiness probe — wait for service to be ready
+        readinessProbe:
+          httpGet:
+            path: /api/health
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 3
+          failureThreshold: 3

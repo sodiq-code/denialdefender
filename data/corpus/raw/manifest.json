@@ -1,0 +1,62 @@
+{
+  "generatedDate": "2026-08-16",
+  "totalDocuments": 8,
+  "documents": [
+    {
+      "source": "CMS",
+      "document": "Medicare Claims Synthetic Public Use Files (SynPUFs)",
+      "url": "https://www.cms.gov/data-research/statistics-trends-and-reports/medicare-claims-synthetic-public-use-files",
+      "filename": "cms_synpufs.json",
+      "retrievedDate": "2026-08-16"
+    },
+    {
+      "source": "CMS",
+      "document": "Medicare Claims Public-Use Files",
+      "url": "https://www.cms.gov/data-research/statistics-trends-and-reports/medicare-claims-public-use-files",
+      "filename": "cms_medicare_claims_puf.json",
+      "retrievedDate": "2026-08-16"
+    },
+    {
+      "source": "Medicare.gov",
+      "document": "Appeals in Original Medicare (5 Levels)",
+      "url": "https://www.medicare.gov/claims-appeals/appeals/original-medicare",
+      "filename": "medicare_appeals_original.json",
+      "retrievedDate": "2026-08-16"
+    },
+    {
+      "source": "CMS",
+      "document": "First Level of Appeal: Redetermination",
+      "url": "https://www.cms.gov/medicare-claims-appeals/redetermination",
+      "filename": "cms_redetermination.json",
+      "retrievedDate": "2026-08-16"
+    },
+    {
+      "source": "HHS",
+      "document": "HIPAA De-identification Guidance",
+      "url": "https://www.hhs.gov/hipaa/for-professionals/privacy/special-topics/de-identification/index.html",
+      "filename": "hhs_hipaa_deidentification.json",
+      "retrievedDate": "2026-08-16"
+    },
+    {
+      "source": "CMS",
+      "document": "Medicare Claims Appeals Overview",
+      "url": "https://www.cms.gov/medicare-claims-appeals",
+      "filename": "cms_claims_appeals_overview.json",
+      "retrievedDate": "2026-08-16"
+    },
+    {
+      "source": "CMS",
+      "document": "Medicare Fee-for-Service Appeals Process",
+      "url": "https://www.cms.gov/medicare-claims-appeals/rights-and-protections",
+      "filename": "cms_appeals_rights_protections.json",
+      "retrievedDate": "2026-08-16"
+    },
+    {
+      "source": "CMS",
+      "document": "Medicare Coverage General Information",
+      "url": "https://www.cms.gov/medicare-coverage-database/overview-and-general-information",
+      "filename": "cms_coverage_general.json",
+      "retrievedDate": "2026-08-16"
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "id": "held-out-004",
+  "name": "Experimental/Investigational — Epidural Steroid Injection",
+  "description": "Service classified as experimental. Moderate appeal difficulty — evidence base is mixed but recent systematic reviews favor ESI.",
+  "denial": {
+    "payer": "Cigna",
+    "reasonCode": "CO27",
+    "category": "experimental",
+    "denialLetterText": "Cigna\nClaims Adjudication Department\n\nDATE: March 1, 2026\n\nRE: Denial of Claim — 64483 (Epidural steroid injection)\n\nDear Provider,\n\nThis letter is to inform you that the claim submitted for the above-referenced service has been denied.\n\nDENIAL REASON: CO27 — Expenses not covered under the patient's plan\n\nPAYER STATEMENT: Service classified as experimental/investigational and not covered under the member's benefit plan. Epidural steroid injections for low back pain are not supported by sufficient evidence of clinical efficacy.\n\nPROCEDURE: 64483 — Epidural steroid injection\nDIAGNOSIS: M54.5 — Low back pain\n\nAPPEAL RIGHTS: You have the right to appeal this denial within 120 days.\n\nAPPEAL DEADLINE: June 29, 2026\n\nSincerely,\nClaims Adjudication Department\nCigna",
+    "cptCode": "64483",
+    "icd10Code": "M54.5",
+    "amount": 1200.00,
+    "appealDeadline": "2026-06-29"
+  },
+  "expectedOutcome": {
+    "appealStrategy": "evidence_based_overturn",
+    "estimatedSuccessRate": 0.45,
+    "keyFactors": ["Recent systematic reviews favor ESI", "CMS covers ESI under specific conditions", "Mixed evidence base is challenge", "Specialty society support available"]
+  },
+  "groundTruth": {
+    "correctStrategy": "experimental",
+    "correctCitations": ["CMS LCD L35035", "Cigna Medical Coverage Policy CMP-001", "Cochrane Review 2024"],
+    "minimumQualityScore": 0.55,
+    "shouldAppeal": true
+  }
+}

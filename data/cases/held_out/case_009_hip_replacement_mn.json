@@ -1,0 +1,26 @@
+{
+  "id": "held-out-009",
+  "name": "Medical Necessity — Total Hip Arthroplasty (High Complexity)",
+  "description": "Medical necessity denial for THA with complex comorbidities. Requires detailed clinical documentation and specialty society guidelines.",
+  "denial": {
+    "payer": "Centene",
+    "reasonCode": "CO16",
+    "category": "medical_necessity",
+    "denialLetterText": "Centene\nClaims Adjudication Department\n\nDATE: May 1, 2026\n\nRE: Denial of Claim — 27130 (Total hip arthroplasty)\n\nDear Provider,\n\nThis letter is to inform you that the claim submitted for the above-referenced service has been denied.\n\nDENIAL REASON: CO16 — Claim/service lacks information or has submission/billing error(s)\n\nPAYER STATEMENT: Service not medically necessary based on clinical guidelines. The submitted documentation does not demonstrate that conservative treatment was attempted and failed for a minimum of 6 months.\n\nPROCEDURE: 27130 — Total hip arthroplasty\nDIAGNOSIS: M16.11 — Primary osteoarthritis, right hip\n\nAPPEAL RIGHTS: You have the right to appeal this denial within 120 days.\n\nAPPEAL DEADLINE: August 29, 2026\n\nSincerely,\nClaims Adjudication Department\nCentene",
+    "cptCode": "27130",
+    "icd10Code": "M16.11",
+    "amount": 42000.00,
+    "appealDeadline": "2026-08-29"
+  },
+  "expectedOutcome": {
+    "appealStrategy": "medical_necessity_with_conservative_tx_documentation",
+    "estimatedSuccessRate": 0.68,
+    "keyFactors": ["Conservative treatment documentation key", "AAOS THA guidelines", "CMS NCD 160.8 coverage", "6-month trial period evidence"]
+  },
+  "groundTruth": {
+    "correctStrategy": "medical_necessity",
+    "correctCitations": ["CMS NCD 160.8", "AAOS Clinical Practice Guideline for THA", "Centene Medical Policy SURG-001"],
+    "minimumQualityScore": 0.65,
+    "shouldAppeal": true
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "id": "held-out-006",
+  "name": "Coordination of Benefits — Echocardiography",
+  "description": "COB denial. Common in dual-eligible patients. Straightforward appeal with correct payer order.",
+  "denial": {
+    "payer": "Kaiser Permanente",
+    "reasonCode": "CO22",
+    "category": "other",
+    "denialLetterText": "Kaiser Permanente\nClaims Adjudication Department\n\nDATE: March 18, 2026\n\nRE: Denial of Claim — 93306 (Transthoracic echocardiography)\n\nDear Provider,\n\nThis letter is to inform you that the claim submitted for the above-referenced service has been denied.\n\nDENIAL REASON: CO22 — This care may be covered by another payer per coordination of benefits\n\nPAYER STATEMENT: Payment adjusted per coordination of benefits rules. Another insurer has been identified as the primary payer for this service.\n\nPROCEDURE: 93306 — Transthoracic echocardiography\nDIAGNOSIS: I25.10 — Atherosclerotic coronary artery disease\n\nAPPEAL RIGHTS: You have the right to appeal this denial within 120 days.\n\nAPPEAL DEADLINE: July 16, 2026\n\nSincerely,\nClaims Adjudication Department\nKaiser Permanente",
+    "cptCode": "93306",
+    "icd10Code": "I25.10",
+    "amount": 2800.00,
+    "appealDeadline": "2026-07-16"
+  },
+  "expectedOutcome": {
+    "appealStrategy": "cob_correction",
+    "estimatedSuccessRate": 0.70,
+    "keyFactors": ["Payer order determination", "Primary payer EOB documentation", "CMS COB rules", "Dual-eligible coordination"]
+  },
+  "groundTruth": {
+    "correctStrategy": "other",
+    "correctCitations": ["CMS COB Guidelines", "X12 837 COB Segment", "HIPAA Transaction Standards"],
+    "minimumQualityScore": 0.6,
+    "shouldAppeal": true
+  }
+}

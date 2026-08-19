@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 40" fill="none">
+  <defs>
+    <linearGradient id="dd-logo-grad" x1="0" y1="0" x2="40" y2="40" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0f766e"/>
+      <stop offset="0.55" stop-color="#047857"/>
+      <stop offset="1" stop-color="#b45309"/>
+    </linearGradient>
+  </defs>
+  <path d="M20 2 L34 7 V19 C34 28 27.5 34.5 20 38 C12.5 34.5 6 28 6 19 V7 Z" fill="url(#dd-logo-grad)"/>
+  <path d="M14 20 L18 24 L27 14" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="48" y="27" font-family="ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="22" font-weight="700" letter-spacing="-0.5" fill="currentColor">
+    Denial<tspan fill="#047857">Defender</tspan>
+  </text>
+</svg>

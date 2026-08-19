@@ -1,0 +1,282 @@
+// DenialDefender - Medical Insurance Denial Appeal System
+// Core Data Model
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// ENUMS
+// ============================================
+
+enum CaseState {
+  created
+  triage_active
+  triage_complete
+  hitl_gate_1
+  evidence_active
+  drafting_active
+  quality_review
+  hitl_gate_2
+  approved
+  submitted
+  won
+  lost
+}
+
+enum DenialCategory {
+  medical_necessity
+  coding
+  prior_auth
+  experimental
+  out_of_network
+  other
+}
+
+enum ProvenanceTier {
+  primary_source
+  secondary_summary
+  tertiary_commentary
+}
+
+enum EvidenceStatus {
+  active
+  superseded
+  retired
+}
+
+enum CitationStatus {
+  verified
+  unverified
+  disputed
+  unsupported
+}
+
+enum OutcomeVerdict {
+  won
+  lost
+  partial
+  pending
+}
+
+enum OutcomeLevel {
+  initial
+  first_appeal
+  second_appeal
+  external_review
+}
+
+enum TraceStatus {
+  started
+  completed
+  error
+  blocked
+}
+
+enum HitlGateStatus {
+  pending
+  approved
+  rejected
+  edited
+}
+
+// ============================================
+// CORE ENTITIES
+// ============================================
+
+model Case {
+  id         String     @id @default(cuid())
+  patient_id String     // hashed patient identifier
+  state      CaseState  @default(created)
+  deadline   DateTime?
+  persona    String?
+  created_at DateTime   @default(now())
+  updated_at DateTime   @updatedAt
+
+  // Relations
+  denial    Denial?
+  outcomes  Outcome[]
+  traces    DecisionTraceEvent[]
+  gates     HitlGate[]
+}
+
+model Denial {
+  id                 String         @id @default(cuid())
+  case_id            String         @unique
+  payer              String
+  reason_code        String
+  category           DenialCategory
+  denial_letter_text String
+  deadline           DateTime?
+  confidence         Float?
+  structured_json    String?
+  created_at         DateTime       @default(now())
+
+  // Relations
+  case    Case     @relation(fields: [case_id], references: [id], onDelete: Cascade)
+}
+
+model Evidence {
+  id              String         @id @default(cuid())
+  source          String
+  document_name   String
+  section         String?
+  effective_date  DateTime?
+  content_hash    String         // SHA-256 hash of content — required for provenance tracking
+  embedding       String?        // URL stored temporarily; will be replaced with vector embedding
+  provenance_tier ProvenanceTier @default(primary_source)
+  status          EvidenceStatus @default(active)
+  retrieved_date  DateTime       @default(now())
+  content         String
+  created_at      DateTime       @default(now())
+
+  // Policy Research fields (Day 2 — Policy Research Agent)
+  payer_name      String?        // Payer-specific policy (e.g., "UnitedHealthcare", "Aetna")
+  denial_type     String?        // Denial classification (e.g., "medical_necessity", "prior_auth", "coding")
+  retrieval_weight Float         @default(1.0) // Re-ranking weight for policy retrieval (higher = more relevant)
+  clause_id       String?        // Payer policy clause ID (e.g., "UHC-MP-001.4.B")
+
+  // Relations
+  citations Citation[]
+
+  // Index for deduplication and search
+  @@index([content_hash])
+  @@index([source])
+  @@index([provenance_tier])
+  @@index([status])
+  @@index([payer_name])
+  @@index([denial_type])
+  @@index([clause_id])
+}
+
+model Citation {
+  id          String         @id @default(cuid())
+  evidence_id String
+  span_start  Int
+  span_end    Int
+  claim_text  String
+  status      CitationStatus @default(unverified)
+  created_at  DateTime       @default(now())
+
+  // Relations
+  evidence Evidence @relation(fields: [evidence_id], references: [id], onDelete: Cascade)
+}
+
+model Outcome {
+  id          String         @id @default(cuid())
+  case_id     String
+  verdict     OutcomeVerdict @default(pending)
+  level       OutcomeLevel   @default(initial)
+  recorded_at DateTime       @default(now())
+
+  // Relations
+  case Case @relation(fields: [case_id], references: [id], onDelete: Cascade)
+}
+
+model DecisionTraceEvent {
+  id         String      @id @default(cuid())
+  case_id    String
+  agent_name String
+  step       String
+  status     TraceStatus @default(started)
+  details    String?     // JSON string
+  references String?     // JSON string
+  timestamp  DateTime    @default(now())
+
+  // Relations
+  case Case @relation(fields: [case_id], references: [id], onDelete: Cascade)
+}
+
+model HitlGate {
+  id            String         @id @default(cuid())
+  case_id       String
+  gate_number   Int            // 1 or 2
+  status        HitlGateStatus @default(pending)
+  reviewer_note String?
+  resolved_at   DateTime?
+  created_at    DateTime       @default(now())
+
+  // Relations
+  case Case @relation(fields: [case_id], references: [id], onDelete: Cascade)
+}
+
+// Day 10 — PHI Guard Audit Log
+model PhiGuardAudit {
+  id              String   @id @default(cuid())
+  case_id         String
+  content_hash    String   // SHA-256 of classified content
+  verdict         String   // "ALLOW" or "BLOCK"
+  risk_score      Int      // 0-100
+  pattern_count   Int      // Number of PHI patterns detected
+  pattern_types   String   // JSON array of pattern type strings
+  model_invocations Int    @default(0) // MUST be 0 on BLOCK — the gate guarantee
+  blocked_at      DateTime?
+  allowed_at      DateTime?
+  content_preview String   // First 100 chars
+  details         String?  // JSON with patterns and reason
+  timestamp       DateTime @default(now())
+
+  @@index([case_id])
+  @@index([verdict])
+  @@index([content_hash])
+}
+
+// Day 11 — Governance Audit Log (Model Armor, Agent Identity, Agent Observability)
+model GovernanceAudit {
+  id            String   @id @default(cuid())
+  case_id       String?
+  component     String   // "model_armor" | "agent_identity" | "agent_observability"
+  action        String   // "scan" | "block" | "allow" | "permission_check" | "permission_deny" | "audit_query" | "reconstruct"
+  agent_name    String?  // Which agent (e.g., "quality-review", "letter-drafting")
+  verdict       String   // "ALLOW" | "BLOCK" | "DENY" | "PASS" | "FAIL"
+  risk_score    Int      @default(0)  // 0-100
+  details       String?  // JSON with scan results, permission details, etc.
+  content_hash  String?  // SHA-256 of scanned content (for dedup)
+  timestamp     DateTime @default(now())
+
+  @@index([component])
+  @@index([action])
+  @@index([agent_name])
+  @@index([case_id])
+  @@index([verdict])
+}
+
+// Day 6 — GEAP Memory Bank (Learned Patterns & Case State)
+model LearnedPattern {
+  id            String   @id @default(cuid())
+  pattern_type  String   // "strategy_weight" | "citation_relevance" | "payer_behavior" | "outcome_prediction"
+  denial_category String
+  payer         String
+  data          String   // JSON — pattern-specific data
+  confidence    Float   @default(0.5)
+  source_outcomes String // JSON array of outcome IDs
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+
+  @@index([pattern_type])
+  @@index([denial_category])
+  @@index([payer])
+  @@index([confidence])
+}
+
+model CaseMemoryState {
+  id              String   @id @default(cuid())
+  case_id         String   @unique
+  state           String   @default("intake") // "intake" | "triaged" | "researched" | "drafted" | "verified" | "approved" | "submitted" | "outcome_recorded" | "learned"
+  denial_category String?
+  payer           String?
+  deadline        DateTime?
+  hitl_gates      String   @default("{\"gate1\":false,\"gate2\":false}") // JSON
+  agent_results   String   @default("{}") // JSON
+  decision_trace  String   @default("[]") // JSON array of TraceEvent
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+
+  @@index([case_id])
+  @@index([state])
+}

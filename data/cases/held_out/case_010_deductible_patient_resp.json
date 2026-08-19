@@ -1,0 +1,26 @@
+{
+  "id": "held-out-010",
+  "name": "Patient Responsibility — Deductible (Low Appeal Potential)",
+  "description": "Deductible amount — patient responsibility. NOT typically appealable. Tests that the system correctly identifies non-appealable denials.",
+  "denial": {
+    "payer": "WellCare",
+    "reasonCode": "PR1",
+    "category": "other",
+    "denialLetterText": "WellCare\nClaims Adjudication Department\n\nDATE: May 10, 2026\n\nRE: Denial of Claim — 99213 (Office visit, established patient, level 3)\n\nDear Provider,\n\nThis letter is to inform you that the claim submitted for the above-referenced service has been denied.\n\nDENIAL REASON: PR1 — Deductible amount\n\nPAYER STATEMENT: Patient responsibility: deductible amount applies. This is not a denial of medical necessity but a cost-sharing requirement under the benefit plan.\n\nPROCEDURE: 99213 — Office visit, established patient, level 3\nDIAGNOSIS: I10 — Essential (primary) hypertension\n\nAPPEAL RIGHTS: Cost-sharing amounts are generally not subject to appeal unless the deductible was applied in error.\n\nAPPEAL DEADLINE: September 7, 2026\n\nSincerely,\nClaims Adjudication Department\nWellCare",
+    "cptCode": "99213",
+    "icd10Code": "I10",
+    "amount": 125.00,
+    "appealDeadline": "2026-09-07"
+  },
+  "expectedOutcome": {
+    "appealStrategy": "not_appealable_patient_responsibility",
+    "estimatedSuccessRate": 0.05,
+    "keyFactors": ["PR1 is patient responsibility", "Not typically appealable", "Only appealable if applied in error", "System should correctly identify as non-appealable"]
+  },
+  "groundTruth": {
+    "correctStrategy": "other",
+    "correctCitations": ["CMS Claims Processing Manual Chapter 3", "X12 835 PR Casg Code Definition"],
+    "minimumQualityScore": 0.3,
+    "shouldAppeal": false
+  }
+}

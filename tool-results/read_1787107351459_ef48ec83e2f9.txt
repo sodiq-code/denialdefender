@@ -1,0 +1,602 @@
+   400→   400→
+   401→   401→// ── Triage Mock ────────────────────────────────────────────────────────
+   402→   402→
+   403→   403→function mockTriage(inputData: Record<string, unknown>) {
+   404→   404→  const denial = getDenial(inputData);
+   405→   405→  const denialCode = denial.denial_code ?? "CO-50";
+   406→   406→  const denialReason = denial.denial_reason ?? "Non-covered service";
+   407→   407→
+   408→   408→  let classification = "APPEALABLE";
+   409→   409→  let strategy = "MEDICAL_NECESSITY";
+   410→   410→  let confidence = 0.85;
+   411→   411→
+   412→   412→  if (denialCode.startsWith("CO-197")) {
+   413→   413→    classification = "NOT_APPEALABLE";
+   414→   414→    strategy = "PRIOR_AUTH";
+   415→   415→    confidence = 0.15;
+   416→   416→  } else if (denialCode.startsWith("CO-4")) {
+   417→   417→    classification = "PARTIALLY_APPEALABLE";
+   418→   418→    strategy = "CODING_ERROR";
+   419→   419→    confidence = 0.65;
+   420→   420→  } else if (denialCode.startsWith("CO-50") || denialCode.startsWith("CO-236")) {
+   421→   421→    classification = "APPEALABLE";
+   422→   422→    strategy = "MEDICAL_NECESSITY";
+   423→   423→    confidence = 0.78;
+   424→   424→  }
+   425→   425→
+   426→   426→  return {
+   427→   427→    classification,
+   428→   428→    confidence,
+   429→   429→    factors: [
+   430→   430→      `Denial code ${denialCode} indicates ${denialReason}`,
+   431→   431→      "Clinical documentation may support medical necessity",
+   432→   432→      "Payer policy may have internal contradictions with clinical guidelines",
+   433→   433→    ],
+   434→   434→    strategy,
+   435→   435→    reasoning: `The denial code ${denialCode} with reason '${denialReason}' suggests the payer has determined this service does not meet coverage criteria. However, based on common appeal patterns for this code, the ${strategy} strategy has a reasonable chance of success when supported by appropriate clinical evidence and documentation.`,
+   436→   436→    appeal_urgency: confidence > 0.6 ? "high" : "medium",
+   437→   437→    estimated_success_rate: Math.round(confidence * 0.9 * 100) / 100,
+   438→   438→    recommended_next_steps: [
+   439→   439→      "Validate CPT/ICD-10 codes with MedicalCoderAgent",
+   440→   440→      "Search payer policy for contradictions with PolicyAnalystAgent",
+   441→   441→      "Gather clinical evidence with EvidenceAgent",
+   442→   442→      "Generate appeal letter with DraftAgent",
+   443→   443→    ],
+   444→   444→  };
+   445→   445→}
+   446→   446→
+   447→   447→// ── Evidence Mock ──────────────────────────────────────────────────────
+   448→   448→
+   449→   449→function mockEvidence(inputData: Record<string, unknown>) {
+   450→   450→  const denial = getDenial(inputData);
+   451→   451→  const triage = (inputData.triage ?? {}) as Record<string, unknown>;
+   452→   452→  const strategy = (triage.strategy as string) ?? "MEDICAL_NECESSITY";
+   453→   453→  const cpt = denial.cpt_code ?? "99213";
+   454→   454→  const icd10 = denial.icd10_code ?? "M54.5";
+   455→   455→
+   456→   456→  return {
+   457→   457→    clinical_question: `Is the procedure ${cpt} medically necessary for diagnosis ${icd10}?`,
+   458→   458→    evidence_items: [
+   459→   459→      {
+   460→   460→        id: "ev-1",
+   461→   461→        title: "Clinical Practice Guideline for Diagnosis Management",
+   462→   462→        description: `National guideline recommends ${cpt} as first-line intervention for patients with ${icd10} when conservative measures have failed.`,
+   463→   463→        source: "American Medical Association - CPT Assistant",
+   464→   464→        provenance_tier: "TIER_4_GUIDELINE",
+   465→   465→        relevance_score: 0.92,
+   466→   466→        supports_appeal: true,
+   467→   467→        key_findings: [
+   468→   468→          `${cpt} is indicated for ${icd10} per clinical guidelines`,
+   469→   469→          "Conservative treatment failure documented",
+   470→   470→          "Procedure aligned with standard of care",
+   471→   471→        ],
+   472→   472→        year: 2024,
+   473→   473→      },
+   474→   474→      {
+   475→   475→        id: "ev-2",
+   476→   476→        title: "Systematic Review of Treatment Efficacy",
+   477→   477→        description: "Multi-center systematic review demonstrating significant improvement in patient outcomes with this intervention.",
+   478→   478→        source: "Journal of the American Medical Association (JAMA)",
+   479→   479→        provenance_tier: "TIER_1_SYSTEMATIC_REVIEW",
+   480→   480→        relevance_score: 0.88,
+   481→   481→        supports_appeal: true,
+   482→   482→        key_findings: [
+   483→   483→          "Pooled analysis shows 78% improvement rate",
+   484→   484→          "Number needed to treat (NNT) of 4.2",
+   485→   485→          "Statistically significant vs. conservative management (p<0.001)",
+   486→   486→        ],
+   487→   487→        year: 2023,
+   488→   488→      },
+   489→   489→      {
+   490→   490→        id: "ev-3",
+   491→   491→        title: "Randomized Controlled Trial of Procedure vs. Usual Care",
+   492→   492→        description: "Phase III RCT comparing the procedure to usual care demonstrating superiority in the target population.",
+   493→   493→        source: "New England Journal of Medicine (NEJM)",
+   494→   494→        provenance_tier: "TIER_2_RCT",
+   495→   495→        relevance_score: 0.85,
+   496→   496→        supports_appeal: true,
+   497→   497→        key_findings: [
+   498→   498→          "Primary endpoint met with p<0.001",
+   499→   499→          "Mean difference in outcome: 2.4 (95% CI: 1.8-3.0)",
+   500→   500→          "Safety profile favorable with no serious adverse events",
+   501→   501→        ],
+   502→   502→        year: 2023,
+   503→   503→      },
+   504→   504→    ],
+   505→   505→    guideline_references: [
+   506→   506→      "AMA CPT Assistant, 2024 edition",
+   507→   507→      "ACR Appropriateness Criteria",
+   508→   508→      "NICE Clinical Guideline NG235",
+   509→   509→    ],
+   510→   510→    overall_evidence_strength: "strong",
+   511→   511→    evidence_summary: `The clinical evidence strongly supports the medical necessity of ${cpt} for diagnosis ${icd10}. Multiple high-quality sources including a systematic review (JAMA 2023), RCT (NEJM 2023), and clinical practice guidelines consistently recommend this intervention. The evidence aligns with the ${strategy} appeal strategy.`,
+   512→   512→    gaps: [
+   513→   513→      "No payer-specific medical policy found — need PolicyAnalystAgent to verify",
+   514→   514→      "Long-term outcome data (>2 years) is limited",
+   515→   515→    ],
+   516→   516→  };
+   517→   517→}
+   518→   518→
+   519→   519→// ── Draft Mock ─────────────────────────────────────────────────────────
+   520→   520→
+   521→   521→function mockDraft(inputData: Record<string, unknown>) {
+   522→   522→  const denial = getDenial(inputData);
+   523→   523→  const triage = (inputData.triage ?? {}) as Record<string, unknown>;
+   524→   524→  const evidence = (inputData.evidence ?? {}) as Record<string, unknown>;
+   525→   525→
+   526→   526→  const carrier = denial.carrier_name ?? "Insurance Carrier";
+   527→   527→  const denialCode = denial.denial_code ?? "CO-50";
+   528→   528→  const denialReason = denial.denial_reason ?? "Non-covered service";
+   529→   529→  const cpt = denial.cpt_code ?? "99213";
+   530→   530→  const icd10 = denial.icd10_code ?? "M54.5";
+   531→   531→  const amount = denial.amount_denied ?? 1500.0;
+   532→   532→  const strategy = (triage.strategy as string) ?? "MEDICAL_NECESSITY";
+   533→   533→  const evidenceStrength = (evidence.overall_evidence_strength as string) ?? "strong";
+   534→   534→  const caseId = (inputData.case_id as string) ?? "CASE-001";
+   535→   535→  const patientHash = "PT-7f3a2b1c";
+   536→   536→  const today = todayDate();
+   537→   537→
+   538→   538→  // Generate the formal appeal letter as specified in the task
+   539→   539→  const appealLetter = `APPEAL OF DENIAL OF MEDICAL COVERAGE
+   540→   540→
+   541→   541→Date: ${today}
+   542→   542→Case ID: ${caseId}
+   543→   543→
+   544→   544→To: ${carrier} Medical Review Department
+   545→   545→From: DenialDefender Appeal System
+   546→   546→Re: Appeal of Denial for CPT ${cpt} (ICD-10: ${icd10})
+   547→   547→
+   548→   548→DEAR REVIEWER,
+   549→   549→
+   550→   550→We are writing to appeal the denial of coverage for ${cpt} - Procedure ${cpt} for Diagnosis ${icd10},
+   551→   551→denied under code ${denialCode} with the stated reason: "${denialReason}".
+   552→   552→
+   553→   553→I. CLINICAL RATIONALE
+   554→   554→
+   555→   555→The denied procedure ${cpt} is medically necessary and consistent with the
+   556→   556→standard of care for the patient's diagnosis of ${icd10}. Clinical guidelines
+   557→   557→from authoritative medical organizations support the use of this procedure
+   558→   558→as an appropriate intervention. The evidence strength supporting this appeal
+   559→   559→is rated as ${evidenceStrength}. The patient's clinical presentation,
+   560→   560→treatment history, and documented failure of conservative measures all
+   561→   561→support the medical necessity of this intervention.
+   562→   562→
+   563→   563→II. EVIDENCE-BASED SUPPORT
+   564→   564→
+   565→   565→1. [TIER_4_GUIDELINE] AMA CPT Assistant, 2024 — Clinical practice guideline
+   566→   566→   recommends this procedure as indicated for the diagnosed condition.
+   567→   567→
+   568→   568→2. [TIER_1_SYSTEMATIC_REVIEW] JAMA 2023 — Systematic review demonstrates
+   569→   569→   78% improvement rate with statistically significant outcomes (p<0.001).
+   570→   570→
+   571→   571→3. [TIER_2_RCT] NEJM 2023 — Phase III RCT confirms superiority vs. usual
+   572→   572→   care with primary endpoint met (p<0.001).
+   573→   573→
+   574→   574→III. POLICY CONTRADICTIONS
+   575→   575→
+   576→   576→The payer's denial appears to conflict with established clinical guidelines.
+   577→   577→The applicable medical policy does not adequately account for the patient's
+   578→   578→specific clinical circumstances, including documented failure of conservative
+   579→   579→treatment and severity of symptoms. We request that the medical director
+   580→   580→review this case with full consideration of the cited clinical evidence.
+   581→   581→
+   582→   582→IV. REQUESTED ACTION
+   583→   583→
+   584→   584→Based on the compelling clinical evidence, established treatment guidelines,
+   585→   585→and the patient's documented medical necessity, we respectfully request that
+   586→   586→this denial be reversed and coverage be approved for the medically necessary
+   587→   587→service described above.
+   588→   588→
+   589→   589→Respectfully submitted,
+   590→   590→DenialDefender AI Appeal System`;
+   591→   591→
+   592→   592→  const sections = [
+   593→   593→    { title: "HEADER", content: `Date: ${today}\nTo: ${carrier}, Appeals Department\nFrom: DenialDefender Appeal System\nPatient ID: ${patientHash}\nClaim Reference: CLM-${denialCode}-2024` },
+   594→   594→    { title: "RE:", content: `Appeal of Denial — Procedure ${cpt} for Diagnosis ${icd10}\nAmount Denied: $${amount.toLocaleString("en-US", { minimumFractionDigits: 2 })}\nDenial Code: ${denialCode}` },
+   595→   595→    { title: "INTRODUCTION", content: `We are writing to formally appeal the denial of claim for procedure ${cpt} associated with diagnosis code ${icd10}. The denial was issued under code ${denialCode} with the stated reason: "${denialReason}". We believe this denial was issued in error and respectfully request its reversal.` },
+   596→   596→    { title: "DENIAL_SUMMARY", content: `Denial Code: ${denialCode}\nDenial Reason: ${denialReason}\nProcedure: ${cpt}\nDiagnosis: ${icd10}\nAmount Denied: $${amount.toLocaleString("en-US", { minimumFractionDigits: 2 })}\nAppeal Strategy: ${strategy}` },
+   597→   597→    { title: "CLINICAL_RATIONALE", content: `The denied procedure ${cpt} is medically necessary and consistent with the standard of care for the patient's diagnosis of ${icd10}. Clinical guidelines from authoritative medical organizations support the use of this procedure as an appropriate intervention. The evidence strength supporting this appeal is rated as ${evidenceStrength}. The patient's clinical presentation, treatment history, and documented failure of conservative measures all support the medical necessity of this intervention.` },
+   598→   598→    { title: "EVIDENCE_CITATIONS", content: `1. [TIER_4_GUIDELINE] AMA CPT Assistant, 2024 — Clinical practice guideline recommends this procedure as indicated for the diagnosed condition.\n\n2. [TIER_1_SYSTEMATIC_REVIEW] JAMA 2023 — Systematic review demonstrates 78% improvement rate with statistically significant outcomes (p<0.001).\n\n3. [TIER_2_RCT] NEJM 2023 — Phase III RCT confirms superiority vs. usual care with primary endpoint met (p<0.001).` },
+   599→   599→    { title: "POLICY_ARGUMENTS", content: `The payer's denial appears to conflict with established clinical guidelines. The applicable medical policy does not adequately account for the patient's specific clinical circumstances, including documented failure of conservative treatment and severity of symptoms. We request that the medical director review this case with full consideration of the cited clinical evidence.` },
+   600→   600→    { title: "CONCLUSION", content: `Based on the compelling clinical evidence, established treatment guidelines, and the patient's documented medical necessity, we respectfully request that the denial be reversed and the claim for $${amount.toLocaleString("en-US", { minimumFractionDigits: 2 })} be paid in full. We are available to provide any additional documentation or clarification needed to support this appeal.` },
+   601→   601→    { title: "SIGNATURE", content: "Respectfully submitted,\nDenialDefender Appeal System\nOn behalf of the Treating Provider" },
+   602→   602→  ];
+   603→   603→
+   604→   604→  const wordCount = appealLetter.split(/\s+/).length;
+   605→   605→
+   606→   606→  return {
+   607→   607→    appeal_letter: appealLetter,
+   608→   608→    sections,
+   609→   609→    citations_used: [
+   610→   610→      { number: 1, id: "ev-1", provenance_tier: "TIER_4_GUIDELINE", short_ref: "AMA CPT Assistant 2024" },
+   611→   611→      { number: 2, id: "ev-2", provenance_tier: "TIER_1_SYSTEMATIC_REVIEW", short_ref: "JAMA 2023" },
+   612→   612→      { number: 3, id: "ev-3", provenance_tier: "TIER_2_RCT", short_ref: "NEJM 2023" },
+   613→   613→    ],
+   614→   614→    word_count: wordCount,
+   615→   615→    tone: "professional",
+   616→   616→    strengths: [
+   617→   617→      "Multiple high-quality evidence citations (systematic review, RCT, guideline)",
+   618→   618→      "Clear clinical rationale aligned with appeal strategy",
+   619→   619→      "Professional tone with specific, factual arguments",
+   620→   620→      "All citations include provenance tiers for transparency",
+   621→   621→    ],
+   622→   622→    potential_weaknesses: [
+   623→   623→      "Payer-specific medical policy not fully cited",
+   624→   624→      "May need additional provider attestation letter",
+   625→   625→    ],
+   626→   626→  };
+   627→   627→}
+   628→   628→
+   629→   629→// ── Reviewer Mock ──────────────────────────────────────────────────────
+   630→   630→
+   631→   631→function mockReviewer(inputData: Record<string, unknown>) {
+   632→   632→  const draft = (inputData.draft ?? {}) as Record<string, unknown>;
+   633→   633→  const evidence = (inputData.evidence ?? {}) as Record<string, unknown>;
+   634→   634→  const citationsCount = Array.isArray(draft.citations_used) ? draft.citations_used.length : 3;
+   635→   635→  const evidenceStrength = (evidence.overall_evidence_strength as string) ?? "strong";
+   636→   636→
+   637→   637→  const checks = [
+   638→   638→    { category: "COMPLETENESS", status: "pass", score: 0.95, details: "All 9 required sections are present and contain substantive content.", severity: "info" },
+   639→   639→    { category: "CITATION_ACCURACY", status: "pass", score: 0.90, details: `${citationsCount} citations found with provenance tiers. All evidence items properly referenced.`, severity: "info" },
+   640→   640→    { category: "CLINICAL_ACCURACY", status: "pass", score: 0.88, details: `Clinical rationale aligns with evidence strength (${evidenceStrength}). Medical arguments are sound.`, severity: "info" },
+   641→   641→    { category: "TONE_APPROPRIATENESS", status: "pass", score: 0.92, details: "Tone is professional and factual. No adversarial or emotional language detected.", severity: "info" },
+   642→   642→    { category: "COMPLIANCE", status: "pass", score: 0.95, details: "No PHI detected. Patient identified by hash only. No SSN, DOB, or real names present.", severity: "info" },
+   643→   643→    { category: "PERSUASIVENESS", status: "pass", score: 0.85, details: "Arguments are logical and well-structured. Evidence hierarchy supports the case effectively.", severity: "info" },
+   644→   644→    { category: "FORMATTING", status: "pass", score: 0.90, details: "Business letter format followed. Clear section delineation and professional layout.", severity: "info" },
+   645→   645→    { category: "SPECIFICITY", status: "needs_improvement", score: 0.75, details: "Denial codes are referenced but payer-specific policy section numbers could be more precise.", severity: "minor" },
+   646→   646→  ];
+   647→   647→
+   648→   648→  const avgScore = Math.round((checks.reduce((s, c) => s + c.score, 0) / checks.length) * 1000) / 1000;
+   649→   649→  const critical = checks.filter((c) => c.severity === "critical" && c.status === "fail");
+   650→   650→  const minor = checks.filter((c) => c.severity === "minor" && c.status !== "pass");
+   651→   651→
+   652→   652→  let verdict = "APPROVED";
+   653→   653→  let revisionInstructions: string | null = null;
+   654→   654→  if (critical.length > 0) {
+   655→   655→    verdict = "NEEDS_REVISION";
+   656→   656→    revisionInstructions = "Fix critical issues: " + critical.map((c) => c.details).join("; ");
+   657→   657→  } else if (minor.length >= 2) {
+   658→   658→    verdict = "NEEDS_REVISION";
+   659→   659→    revisionInstructions = "Address minor issues for higher quality: " + minor.map((c) => c.details).join("; ");
+   660→   660→  }
+   661→   661→
+   662→   662→  return {
+   663→   663→    overall_verdict: verdict,
+   664→   664→    overall_score: avgScore,
+   665→   665→    checks,
+   666→   666→    critical_issues: critical.map((c) => c.details),
+   667→   667→    minor_issues: minor.map((c) => c.details),
+   668→   668→    recommendations: [
+   669→   669→      "Add specific payer medical policy section references",
+   670→   670→      "Consider including a provider attestation statement",
+   671→   671→      "Strengthen the policy contradiction arguments with direct quotes",
+   672→   672→    ],
+   673→   673→    revision_instructions: revisionInstructions,
+   674→   674→  };
+   675→   675→}
+   676→   676→
+   677→   677→// ── Coder Mock ─────────────────────────────────────────────────────────
+   678→   678→
+   679→   679→function mockCoder(inputData: Record<string, unknown>) {
+   680→   680→  const denial = getDenial(inputData);
+   681→   681→  const cpt = denial.cpt_code ?? "99213";
+   682→   682→  const icd10 = denial.icd10_code ?? "M54.5";
+   683→   683→  const denialCode = denial.denial_code ?? "CO-50";
+   684→   684→
+   685→   685→  const issues: Array<{
+   686→   686→    category: string;
+   687→   687→    severity: string;
+   688→   688→    description: string;
+   689→   689→    original_code: string;
+   690→   690→    corrected_code: string | null;
+   691→   691→    correction_rationale: string;
+   692→   692→    would_reverse_denial: boolean;
+   693→   693→  }> = [];
+   694→   694→  let correctedCpt: string | null = null;
+   695→   695→  let correctedIcd10: string | null = null;
+   696→   696→
+   697→   697→  if (denialCode.startsWith("CO-4") || denialCode.startsWith("CO-11")) {
+   698→   698→    issues.push({
+   699→   699→      category: "CODE_DX_MATCH",
+   700→   700→      severity: "DIRECT_CAUSE",
+   701→   701→      description: `The ICD-10 code ${icd10} may not be a supported diagnosis for CPT ${cpt}. A more specific code may resolve the denial.`,
+   702→   702→      original_code: icd10,
+   703→   703→      corrected_code: "M54.16",
+   704→   704→      correction_rationale: "Increasing ICD-10 specificity to the appropriate subcategory",
+   705→   705→      would_reverse_denial: true,
+   706→   706→    });
+   707→   707→    correctedIcd10 = "M54.16";
+   708→   708→  }
+   709→   709→
+   710→   710→  if (denialCode.startsWith("CO-97")) {
+   711→   711→    issues.push({
+   712→   712→      category: "BUNDLING_ISSUES",
+   713→   713→      severity: "CONTRIBUTING",
+   714→   714→      description: `CPT ${cpt} may be bundled with another procedure. Adding modifier -59 may be appropriate.`,
+   715→   715→      original_code: cpt,
+   716→   716→      corrected_code: `${cpt}-59`,
+   717→   717→      correction_rationale: "Distinct procedural service modifier to unbundle appropriately",
+   718→   718→      would_reverse_denial: true,
+   719→   719→    });
+   720→   720→    correctedCpt = `${cpt}-59`;
+   721→   721→  }
+   722→   722→
+   723→   723→  let validationResult = "VALID";
+   724→   724→  if (issues.some((i) => i.severity === "DIRECT_CAUSE")) {
+   725→   725→    validationResult = "CORRECTABLE";
+   726→   726→  } else if (issues.length > 0) {
+   727→   727→    validationResult = "CORRECTABLE";
+   728→   728→  }
+   729→   729→
+   730→   730→  if (issues.length === 0) {
+   731→   731→    issues.push({
+   732→   732→      category: "CODE_SPECIFICITY",
+   733→   733→      severity: "UNRELATED",
+   734→   734→      description: `ICD-10 code ${icd10} could be more specific but this is not the primary cause of denial.`,
+   735→   735→      original_code: icd10,
+   736→   736→      corrected_code: null,
+   737→   737→      correction_rationale: "Increased specificity may strengthen the appeal but won't reverse the denial alone",
+   738→   738→      would_reverse_denial: false,
+   739→   739→    });
+   740→   740→  }
+   741→   741→
+   742→   742→  return {
+   743→   743→    validation_result: validationResult,
+   744→   744→    overall_assessment: correctedCpt || correctedIcd10
+   745→   745→      ? `CPT ${cpt} with ICD-10 ${icd10}: Coding corrections available that may help the appeal.`
+   746→   746→      : `CPT ${cpt} with ICD-10 ${icd10}: Codes appear valid. Denial is likely based on medical necessity rather than coding.`,
+   747→   747→    issues_found: issues,
+   748→   748→    corrected_codes: {
+   749→   749→      cpt: correctedCpt,
+   750→   750→      icd10: correctedIcd10,
+   751→   751→      modifiers: correctedCpt?.includes("-59") ? ["59"] : [],
+   752→   752→    },
+   753→   753→    coding_action_required: correctedCpt !== null || correctedIcd10 !== null,
+   754→   754→    confidence: 0.87,
+   755→   755→  };
+   756→   756→}
+   757→   757→
+   758→   758→// ── Policy Mock ────────────────────────────────────────────────────────
+   759→   759→
+   760→   760→function mockPolicy(inputData: Record<string, unknown>) {
+   761→   761→  const denial = getDenial(inputData);
+   762→   762→  const carrier = denial.carrier_name ?? "Insurance Carrier";
+   763→   763→  const cpt = denial.cpt_code ?? "99213";
+   764→   764→  const icd10 = denial.icd10_code ?? "M54.5";
+   765→   765→  const triage = (inputData.triage ?? {}) as Record<string, unknown>;
+   766→   766→  const strategy = (triage.strategy as string) ?? "MEDICAL_NECESSITY";
+   767→   767→
+   768→   768→  return {
+   769→   769→    contradictions_found: [
+   770→   770→      {
+   771→   771→        id: "pol-1",
+   772→   772→        type: "POLICY_CONTRADICTION",
+   773→   773→        strength: "STRONG",
+   774→   774→        description: `${carrier}'s medical policy for ${cpt} requires 'failure of 6 weeks of conservative therapy,' but the clinical guideline (ACR 2024) recommends intervention after 4 weeks when specific red flags are present.`,
+   775→   775→        payer_position: "Requires 6 weeks conservative therapy before intervention",
+   776→   776→        counter_position: "ACR Appropriateness Criteria 2024 recommends intervention after 4 weeks with documented red flags",
+   777→   777→        source: "ACR Appropriateness Criteria, 2024 Update",
+   778→   778→        impact_on_appeal: "Patient met the more stringent clinical guideline threshold; payer's requirement exceeds standard of care",
+   779→   779→      },
+   780→   780→      {
+   781→   781→        id: "pol-2",
+   782→   782→        type: "POLICY_GAP",
+   783→   783→        strength: "MODERATE",
+   784→   784→        description: `Payer policy for ${cpt} does not address the patient's specific clinical presentation with ${icd10}. The policy is silent on this diagnosis-procedure combination.`,
+   785→   785→        payer_position: `Policy does not explicitly address ${cpt} for ${icd10}`,
+   786→   786→        counter_position: "Silence in policy should be interpreted in favor of coverage per ambiguity doctrine",
+   787→   787→        source: "State Insurance Regulation - Ambiguity Doctrine",
+   788→   788→        impact_on_appeal: "Policy ambiguity should be resolved in the insured's favor",
+   789→   789→      },
+   790→   790→    ],
+   791→   791→    policy_gaps: [
+   792→   792→      `Payer policy does not address ${cpt} specifically for ${icd10}`,
+   793→   793→      "Policy cites guidelines from 2019 — current 2024 guidelines differ significantly",
+   794→   794→      "No separate medical review pathway described for complex cases",
+   795→   795→    ],
+   796→   796→    coverage_criteria: [
+   797→   797→      "Documented failure of conservative therapy (6+ weeks per payer, 4+ weeks per guidelines)",
+   798→   798→      "Imaging confirmation of condition",
+   799→   799→      "Symptoms interfering with activities of daily living",
+   800→   800→      "No contraindications to the procedure",
+   801→   801→    ],
+   802→   802→    patient_meets_criteria: "partial",
+   803→   803→    policy_references: [
+   804→   804→      {
+   805→   805→        title: `${carrier} Medical Policy — Procedure ${cpt}`,
+   806→   806→        section: "Section IV.B — Medical Necessity Criteria",
+   807→   807→        url: null,
+   808→   808→      },
+   809→   809→      {
+   810→   810→        title: "CMS LCD L35027 — Related Procedure Coverage",
+   811→   811→        section: "Coverage Determination",
+   812→   812→        url: "https://www.cms.gov/medicare-coverage-database/view/lcd.aspx?lcdid=35027",
+   813→   813→      },
+   814→   814→    ],
+   815→   815→    regulatory_arguments: [
+   816→   816→      "State External Review Law: Patient has right to independent external review of medical necessity denials",
+   817→   817→      "Ambiguity Doctrine: Policy gaps should be interpreted in favor of the insured",
+   818→   818→      "Mental Health Parity: If applicable, parity requirements may apply",
+   819→   819→    ],
+   820→   820→    overall_policy_assessment: `The policy analysis reveals 2 contradictions between ${carrier}'s medical policy and authoritative clinical guidelines. The strongest argument is that the payer's conservative therapy requirement exceeds the standard of care established by ACR 2024. Combined with the policy gap for this specific diagnosis-procedure combination, these findings substantially support the ${strategy} appeal strategy.`,
+   821→   821→  };
+   822→   822→}
+   823→   823→
+   824→   824→// ── Citation Mock ──────────────────────────────────────────────────────
+   825→   825→
+   826→   826→function mockCitation(inputData: Record<string, unknown>) {
+   827→   827→  const evidence = (inputData.evidence ?? {}) as Record<string, unknown>;
+   828→   828→  const evidenceItems = (evidence.evidence_items ?? [
+   829→   829→    { id: "ev-1", title: "Clinical Practice Guideline", source: "AMA CPT Assistant", provenance_tier: "TIER_4_GUIDELINE", relevance_score: 0.92, year: 2024 },
+   830→   830→    { id: "ev-2", title: "Systematic Review of Treatment Efficacy", source: "JAMA", provenance_tier: "TIER_1_SYSTEMATIC_REVIEW", relevance_score: 0.88, year: 2023 },
+   831→   831→    { id: "ev-3", title: "RCT of Procedure vs. Usual Care", source: "NEJM", provenance_tier: "TIER_2_RCT", relevance_score: 0.85, year: 2023 },
+   832→   832→  ]) as Array<Record<string, unknown>>;
+   833→   833→
+   834→   834→  const tierWeights: Record<string, number> = {
+   835→   835→    TIER_1_SYSTEMATIC_REVIEW: 1.0,
+   836→   836→    TIER_2_RCT: 0.8,
+   837→   837→    TIER_3_OBSERVATIONAL: 0.6,
+   838→   838→    TIER_4_GUIDELINE: 0.7,
+   839→   839→    TIER_5_EXPERT_OPINION: 0.4,
+   840→   840→  };
+   841→   841→
+   842→   842→  const tierDistribution: Record<string, number> = {
+   843→   843→    TIER_1_SYSTEMATIC_REVIEW: 0,
+   844→   844→    TIER_2_RCT: 0,
+   845→   845→    TIER_3_OBSERVATIONAL: 0,
+   846→   846→    TIER_4_GUIDELINE: 0,
+   847→   847→    TIER_5_EXPERT_OPINION: 0,
+   848→   848→  };
+   849→   849→
+   850→   850→  const verified: Array<Record<string, unknown>> = [];
+   851→   851→  let idx = 0;
+   852→   852→
+   853→   853→  for (const item of evidenceItems) {
+   854→   854→    idx++;
+   855→   855→    const tier = (item.provenance_tier as string) ?? "TIER_5_EXPERT_OPINION";
+   856→   856→    const relevance = (item.relevance_score as number) ?? 0.5;
+   857→   857→    const year = (item.year as number) ?? 2023;
+   858→   858→    const weight = tierWeights[tier] ?? 0.4;
+   859→   859→    const recencyBonus = Math.max(-0.15, (year - 2023) * 0.05);
+   860→   860→    const combined = Math.min(1.0, Math.round((weight * relevance + recencyBonus) * 1000) / 1000);
+   861→   861→
+   862→   862→    tierDistribution[tier] = (tierDistribution[tier] ?? 0) + 1;
+   863→   863→
+   864→   864→    verified.push({
+   865→   865→      number: idx,
+   866→   866→      id: (item.id as string) ?? `ev-${idx}`,
+   867→   867→      formatted_citation: `${item.source ?? "Unknown"}. ${item.title ?? "Untitled"}. ${year}.`,
+   868→   868→      provenance_tier: tier,
+   869→   869→      tier_weight: weight,
+   870→   870→      relevance_score: relevance,
+   871→   871→      combined_score: combined,
+   872→   872→      year,
+   873→   873→      source_type: tier.includes("TIER_4") ? "guideline" : "journal",
+   874→   874→      doi: null,
+   875→   875→      pmid: null,
+   876→   876→      verified: true,
+   877→   877→      verification_note: "Citation format verified; provenance tier confirmed",
+   878→   878→    });
+   879→   879→  }
+   880→   880→
+   881→   881→  // Also add policy citations
+   882→   882→  const policy = (inputData.policy ?? {}) as Record<string, unknown>;
+   883→   883→  const policyRefs = (policy.policy_references ?? []) as Array<Record<string, unknown>>;
+   884→   884→  for (const polRef of policyRefs) {
+   885→   885→    idx++;
+   886→   886→    verified.push({
+   887→   887→      number: idx,
+   888→   888→      id: `pol-${idx}`,
+   889→   889→      formatted_citation: `${polRef.title ?? "Policy Reference"}. Section: ${polRef.section ?? "N/A"}.`,
+   890→   890→      provenance_tier: "TIER_4_GUIDELINE",
+   891→   891→      tier_weight: 0.7,
+   892→   892→      relevance_score: 0.80,
+   893→   893→      combined_score: 0.56,
+   894→   894→      year: 2024,
+   895→   895→      source_type: "regulation",
+   896→   896→      doi: null,
+   897→   897→      pmid: null,
+   898→   898→      verified: true,
+   899→   899→      verification_note: "Policy reference included; direct link may be available",
+   900→   900→    });
+   901→   901→    tierDistribution["TIER_4_GUIDELINE"]++;
+   902→   902→  }
+   903→   903→
+   904→   904→  const avgCombined = verified.length > 0
+   905→   905→    ? verified.reduce((s, v) => s + (v.combined_score as number), 0) / verified.length
+   906→   906→    : 0;
+   907→   907→
+   908→   908→  let quality = "weak";
+   909→   909→  if (avgCombined >= 0.8) quality = "excellent";
+   910→   910→  else if (avgCombined >= 0.6) quality = "good";
+   911→   911→  else if (avgCombined >= 0.4) quality = "adequate";
+   912→   912→
+   913→   913→  return {
+   914→   914→    verified_citations: verified,
+   915→   915→    tier_distribution: tierDistribution,
+   916→   916→    overall_citation_quality: quality,
+   917→   917→    recommendations: [
+   918→   918→      "Consider adding DOI/PMID references for journal citations",
+   919→   919→      "Policy references should include direct URLs where available",
+   920→   920→      "All citations meet minimum provenance standards for appeal",
+   921→   921→    ],
+   922→   922→  };
+   923→   923→}
+   924→   924→
+   925→   925→// ── Orchestrator / Workflow Mock ───────────────────────────────────────
+   926→   926→
+   927→   927→function mockWorkflow(inputData: Record<string, unknown>) {
+   928→   928→  const caseId = (inputData.case_id as string) ?? randomUUID();
+   929→   929→  const workflowId = randomUUID();
+   930→   930→  const denial = getDenial(inputData);
+   931→   931→  const startTime = nowISO();
+   932→   932→
+   933→   933→  // Step 1: Triage
+   934→   934→  const triageResult = mockTriage(inputData);
+   935→   935→  const decisionTraces: Array<Record<string, unknown>> = [
+   936→   936→    { step: 1, agent: "triage", timestamp: nowISO(), result_summary: { classification: triageResult.classification, confidence: triageResult.confidence, strategy: triageResult.strategy } },
+   937→   937→  ];
+   938→   938→
+   939→   939→  // If NOT_APPEALABLE, stop and flag for human
+   940→   940→  if (triageResult.classification === "NOT_APPEALABLE") {
+   941→   941→    return {
+   942→   942→      case_id: caseId,
+   943→   943→      workflow_id: workflowId,
+   944→   944→      status: "needs_review",
+   945→   945→      triage: triageResult,
+   946→   946→      workflow_stopped_at: "triage",
+   947→   947→      stop_reason: "Denial classified as NOT_APPEALABLE — requires human judgment",
+   948→   948→      decision_traces: decisionTraces,
+   949→   949→      hitl_gate: {
+   950→   950→        gate_type: "gate_1",
+   951→   951→        status: "pending_approval",
+   952→   952→        content: "Triage classified this denial as NOT_APPEALABLE. Human review required to determine if appeal should proceed.",
+   953→   953→      },
+   954→   954→      _trace: { agent: "orchestrator", trace_id: randomUUID(), elapsed_seconds: 0.1, timestamp: startTime },
+   955→   955→    };
+   956→   956→  }
+   957→   957→
+   958→   958→  // Step 2: Coder
+   959→   959→  const coderInput = { denial, patient_context: inputData.patient_context ?? {} };
+   960→   960→  const coderResult = mockCoder(coderInput);
+   961→   961→  decisionTraces.push({ step: 2, agent: "coder", timestamp: nowISO(), result_summary: { validation_result: coderResult.validation_result, coding_action_required: coderResult.coding_action_required } });
+   962→   962→
+   963→   963→  // Step 3: Policy
+   964→   964→  const policyInput = { denial, patient_context: inputData.patient_context ?? {}, triage: triageResult, coding: coderResult };
+   965→   965→  const policyResult = mockPolicy(policyInput);
+   966→   966→  decisionTraces.push({ step: 3, agent: "policy", timestamp: nowISO(), result_summary: { contradictions_count: policyResult.contradictions_found.length, patient_meets_criteria: policyResult.patient_meets_criteria } });
+   967→   967→
+   968→   968→  // Step 4: Evidence
+   969→   969→  const evidenceInput = { denial, patient_context: inputData.patient_context ?? {}, triage: triageResult };
+   970→   970→  const evidenceResult = mockEvidence(evidenceInput);
+   971→   971→  decisionTraces.push({ step: 4, agent: "evidence", timestamp: nowISO(), result_summary: { evidence_count: evidenceResult.evidence_items.length, overall_strength: evidenceResult.overall_evidence_strength } });
+   972→   972→
+   973→   973→  // Step 5: Citation
+   974→   974→  const citationInput = { evidence: evidenceResult, policy: policyResult };
+   975→   975→  const citationResult = mockCitation(citationInput);
+   976→   976→  decisionTraces.push({ step: 5, agent: "citation", timestamp: nowISO(), result_summary: { verified_count: citationResult.verified_citations.length, overall_quality: citationResult.overall_citation_quality } });
+   977→   977→
+   978→   978→  // Steps 6-8: Draft → Review → (revise if needed)
+   979→   979→  let draftResult: Record<string, unknown> = {};
+   980→   980→  let reviewResult: Record<string, unknown> = {};
+   981→   981→
+   982→   982→  for (let loop = 0; loop < MAX_REVISION_LOOPS; loop++) {
+   983→   983→    const loopLabel = loop > 0 ? `revision_${loop}` : "initial";
+   984→   984→
+   985→   985→    // Step 6: Draft
+   986→   986→    const draftInput: Record<string, unknown> = {
+   987→   987→      case_id: caseId,
+   988→   988→      denial,
+   989→   989→      patient_context: inputData.patient_context ?? {},
+   990→   990→      triage: triageResult,
+   991→   991→      evidence: evidenceResult,
+   992→   992→      policy: policyResult,
+   993→   993→      citations: citationResult,
+   994→   994→      coding: coderResult,
+   995→   995→    };
+   996→   996→    if (reviewResult.revision_instructions) {
+   997→   997→      draftInput.revision_instructions = reviewResult.revision_instructions;
+   998→   998→    }
+   999→   999→    draftResult = mockDraft(draftInput);
+
+[showing lines 400-999 of 1762; use offset=1000 with limit to continue reading]
