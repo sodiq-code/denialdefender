@@ -1,63 +1,135 @@
 /**
- * DenialDefender Agent Fleet — TypeScript/Bun Mini-Service.
+ * DenialDefender Agent Fleet — Bun mini-service (port 3004 fixed, MOCK mode)
  *
- * A robust Bun HTTP server on port 3004 that:
- *  - Handles agent requests via Gemini LLM when GEMINI_API_KEY is set,
- *    falling back to mock data when Gemini is unavailable or in mock mode
- *  - For workflow requests, runs agents sequentially via Gemini (or mock)
- *  - Provides CORS headers, in-memory workflow store, and GCP status endpoint
+ * Mirrors the HTTP contract of the reference Python (FastAPI + google-genai)
+ * service at /tmp/denialdefender-analyze/mini-services/agent-fleet/main.py.
  *
- * Endpoints:
- *  GET  /health                    — Health check
- *  POST /agents/triage             — Triage Agent
- *  POST /agents/evidence           — Evidence Agent
- *  POST /agents/drafter            — Draft Agent
- *  POST /agents/reviewer           — Reviewer Agent
- *  POST /agents/coder              — Medical Coder Agent
- *  POST /agents/policy             — Policy Analyst Agent
- *  POST /agents/citation           — Citation Agent
- *  POST /agents/orchestrator       — Orchestrator (delegates to workflow)
- *  POST /workflow/run              — Run full appeal workflow
- *  GET  /workflow/status/:case_id  — Get workflow status
- *  GET  /gcp/status                — GCP Firestore + Pub/Sub status
+ * In this sandbox we run in MOCK_MODE = true (no GEMINI_API_KEY required),
+ * returning deterministic structured mock outputs for every agent so the
+ * platform can be exercised end-to-end.
+ *
+ * ── Endpoints ───────────────────────────────────────────────────────────────
+ *   GET  /health                     — health check (mock mode, agent list)
+ *   GET  /gcp/status                 — Firestore + Pub/Sub status (mock/local)
+ *   POST /agents/{name}             — run a single agent
+ *        name ∈ { triage, coder, policy, evidence, citation, drafter, reviewer, orchestrator }
+ *   POST /workflow/run               — run the full 8-agent workflow (sequential mock)
+ *   GET  /workflow/status/:id       — fetch workflow status by id
+ *   GET  /permissions                — view the agent identity permission matrix
+ *
+ * ── AgentResponse shape ────────────────────────────────────────────────────
+ *   {
+ *     agent: string,
+ *     status: 'success',
+ *     data:   object,            // structured deterministic mock output
+ *     latencyMs: number,
+ *     trace:  { agent, trace_id, timestamp, mode:'mock', elapsed_seconds }
+ *   }
+ *
+ * Port is HARDCODED to 3004 — never read from env (per task spec).
  */
 
-import { randomUUID } from "crypto";
-import { getLLM } from "./llm_backend";
-
-// ─── Configuration ──────────────────────────────────────────────────────
-
-const PORT = parseInt(process.env.PORT || "3004", 10);
+// ─── Configuration ────────────────────────────────────────────────────────────
+const PORT = 3004;
 const SERVICE_NAME = "denialdefender-agent-fleet";
 const SERVICE_VERSION = "1.0.0";
+const GEMINI_MODEL = process.env.GEMINI_MODEL ?? "gemini-3.6-flash";
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY ?? "";
-const GEMINI_MODEL = process.env.GEMINI_MODEL ?? "gemini-3.5-flash";
-const MOCK_MODE = GEMINI_API_KEY === "";
 const GCP_PROJECT_ID = process.env.GCP_PROJECT_ID ?? "denialdefender";
-const MAX_REVISION_LOOPS = 3;
-const SUBPROCESS_TIMEOUT_MS = 60_000;
+const REGION_ENDPOINT = process.env.GCP_REGION ?? "europe-west1";
+// When GEMINI_API_KEY is set, the fleet calls the real Gemini API
+// (gemini-3.6-flash via the AI Studio generativelanguage endpoint). When the
+// key is absent (sandbox/local dev), MOCK_MODE=true and every agent returns
+// deterministic structured mock output — exactly like the upstream design.
+const MOCK_MODE = !GEMINI_API_KEY;
 
-const CORS_ORIGINS = [
-  "http://localhost:3000",
-  "http://127.0.0.1:3000",
-  "http://localhost:3004",
-  "http://127.0.0.1:3004",
-];
+// ─── Real Gemini call (Vertex AI on Cloud Run, AI Studio fallback locally) ────
+// On Cloud Run we use Vertex AI with the runtime service account's access token
+// (obtained from the metadata server). GEMINI_PROVIDER=vertex_ai (per spec).
+// Locally (no metadata), fall back to the AI Studio API key.
+let cachedToken: { token: string; exp: number } | null = null;
 
-// ─── Agent Identity Permission Enforcement ──────────────────────────────
-//
-// Self-contained permission matrix mirroring src/lib/agent-identity.ts.
-// Each agent has scoped capabilities on specific resources. Any action
-// outside scope is DENIED at runtime — no agent can exceed its authority.
-//
-// Key constraints (from the blueprint):
-//   - Quality Review CANNOT write appeals (prevents self-approval)
-//   - Letter Drafting CANNOT ingest outcomes (prevents bias from prior results)
-//   - Outcome Learning CANNOT write appeals or evidence (read-only on product data)
-//   - Deadline Tracker CANNOT write any clinical content (temporal-only authority)
+async function getAccessToken(): Promise<string | null> {
+  // On Cloud Run, the metadata server provides a token for the runtime SA.
+  try {
+    const res = await fetch(
+      "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token",
+      { headers: { "Metadata-Flavor": "Google" }, signal: AbortSignal.timeout(3000) },
+    );
+    if (!res.ok) return null;
+    const data: any = await res.json();
+    cachedToken = { token: data.access_token, exp: Date.now() + (data.expires_in - 30) * 1000 };
+    return data.access_token as string;
+  } catch {
+    return null;
+  }
+}
 
+async function callGemini(systemPrompt: string, userPrompt: string): Promise<string | null> {
+  if (MOCK_MODE) return null;
+  const payload = {
+    system_instruction: { parts: [{ text: systemPrompt }] },
+    contents: [{ role: "user", parts: [{ text: userPrompt }] }],
+    generationConfig: { temperature: 0.2, maxOutputTokens: 4096, responseMimeType: "application/json" },
+  };
+  try {
+    let res: Response | null = null;
+    // ── Path 1: Vertex AI (Cloud Run runtime SA via metadata) ──
+    const token = (cachedToken && cachedToken.exp > Date.now())
+      ? cachedToken.token
+      : await getAccessToken();
+    if (token) {
+      // gemini-3.x models are global-only; older 2.5 models are regional.
+      const loc = GEMINI_MODEL.startsWith("gemini-3.") ? "global" : REGION_ENDPOINT;
+      const host = loc === "global" ? "aiplatform.googleapis.com" : `${REGION_ENDPOINT}-aiplatform.googleapis.com`;
+      const vurl = `https://${host}/v1/projects/${GCP_PROJECT_ID}/locations/${loc}/publishers/google/models/${GEMINI_MODEL}:generateContent`;
+      res = await fetch(vurl, {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(45000),
+      });
+    }
+    // ── Path 2: AI Studio API key fallback (local dev / no metadata) ──
+    if ((!res || !res.ok) && GEMINI_API_KEY) {
+      const aurl = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
+      res = await fetch(aurl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(45000),
+      });
+    }
+    if (!res || !res.ok) {
+      const body = res ? await res.text().catch(() => "") : "(no response)";
+      console.warn(`[Gemini] ${res?.status ?? "no-res"}: ${body}`.slice(0, 300));
+      return null;
+    }
+    const data: any = await res.json();
+    const text = data?.candidates?.[0]?.content?.parts?.map((p: any) => p.text).join("") ?? "";
+    return text || null;
+  } catch (e: any) {
+    console.warn(`[Gemini] error: ${e?.message ?? e}`.slice(0, 200));
+    return null;
+  }
+}
+
+function tryParseJson<T = unknown>(text: string | null, fallback: T): T {
+  if (!text) return fallback;
+  try {
+    // strip markdown fences if present
+    const clean = text.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/i, "").trim();
+    return JSON.parse(clean) as T;
+  } catch {
+    return fallback;
+  }
+}
+
+// ─── Agent Identity / RBAC matrix (mirrors src/lib/agent-identity.ts) ────────
 type Capability = "read" | "write" | "execute";
-type Resource = "case" | "denial" | "appeal" | "outcome" | "evidence" | "citation" | "policy" | "deadline" | "hitl_gate" | "trace" | "phi_guard" | "governance";
+type Resource =
+  | "case" | "denial" | "appeal" | "outcome" | "evidence" | "citation"
+  | "policy" | "deadline" | "hitl_gate" | "trace" | "phi_guard" | "governance";
 
 interface AgentScope {
   role: string;
@@ -76,44 +148,8 @@ const AGENT_SCOPES: Record<string, AgentScope> = {
       hitl_gate: ["read", "write"],
     },
   },
-  evidence: {
-    role: "evidence-assembly",
-    resources: {
-      case: ["read"],
-      denial: ["read"],
-      evidence: ["read", "write"],
-      citation: ["read", "write"],
-      trace: ["write"],
-    },
-  },
-  drafter: {
-    role: "letter-drafting",
-    resources: {
-      case: ["read"],
-      denial: ["read"],
-      appeal: ["read", "write"],  // CAN write appeals (core responsibility)
-      evidence: ["read"],
-      citation: ["read"],
-      policy: ["read"],
-      trace: ["write"],
-      // NOTABLE: NO outcome access — cannot ingest outcomes
-    },
-  },
-  reviewer: {
-    role: "quality-review",
-    resources: {
-      case: ["read"],
-      denial: ["read"],
-      appeal: ["read"],  // Read only — CANNOT write appeals
-      evidence: ["read"],
-      citation: ["read", "write"],
-      outcome: ["read"],
-      trace: ["write"],
-      hitl_gate: ["read", "write"],
-    },
-  },
   coder: {
-    role: "denial-triage",  // Coder shares triage scope
+    role: "denial-triage",
     resources: {
       case: ["read", "write"],
       denial: ["read", "write"],
@@ -134,8 +170,18 @@ const AGENT_SCOPES: Record<string, AgentScope> = {
       trace: ["write"],
     },
   },
+  evidence: {
+    role: "evidence-assembly",
+    resources: {
+      case: ["read"],
+      denial: ["read"],
+      evidence: ["read", "write"],
+      citation: ["read", "write"],
+      trace: ["write"],
+    },
+  },
   citation: {
-    role: "policy-research",  // Citation shares policy scope
+    role: "policy-research",
     resources: {
       case: ["read"],
       denial: ["read"],
@@ -145,8 +191,34 @@ const AGENT_SCOPES: Record<string, AgentScope> = {
       trace: ["write"],
     },
   },
+  drafter: {
+    role: "letter-drafting",
+    resources: {
+      case: ["read"],
+      denial: ["read"],
+      appeal: ["read", "write"],
+      evidence: ["read"],
+      citation: ["read"],
+      policy: ["read"],
+      trace: ["write"],
+      // NOTABLE: NO outcome access — drafter cannot ingest outcomes
+    },
+  },
+  reviewer: {
+    role: "quality-review",
+    resources: {
+      case: ["read"],
+      denial: ["read"],
+      appeal: ["read"],          // read-only — CANNOT write appeals
+      evidence: ["read"],
+      citation: ["read", "write"],
+      outcome: ["read"],
+      trace: ["write"],
+      hitl_gate: ["read", "write"],
+    },
+  },
   orchestrator: {
-    role: "patient-advocate",  // Orchestrator has advocate-level access
+    role: "patient-advocate",
     resources: {
       case: ["read", "write"],
       denial: ["read"],
@@ -158,31 +230,25 @@ const AGENT_SCOPES: Record<string, AgentScope> = {
   },
 };
 
-/** Primary resource each agent accesses at its endpoint */
 const AGENT_PRIMARY_RESOURCE: Record<string, Resource> = {
   triage: "denial",
-  evidence: "evidence",
-  drafter: "appeal",
-  reviewer: "citation",
   coder: "denial",
   policy: "policy",
+  evidence: "evidence",
   citation: "citation",
+  drafter: "appeal",
+  reviewer: "citation",
   orchestrator: "case",
 };
 
-/**
- * Enforce agent permission at runtime.
- * Returns { allowed, reason } — if not allowed, the endpoint MUST return 403.
- */
-function enforcePermission(
-  agentName: string,
-  resource: Resource,
-  capability: Capability,
-): { allowed: boolean; reason: string } {
-  const scope = AGENT_SCOPES[agentName];
-  if (!scope) {
-    return { allowed: false, reason: `Unknown agent: ${agentName}` };
-  }
+interface PermissionResult {
+  allowed: boolean;
+  reason: string;
+}
+
+function enforcePermission(agent: string, resource: Resource, capability: Capability): PermissionResult {
+  const scope = AGENT_SCOPES[agent];
+  if (!scope) return { allowed: false, reason: `Unknown agent: ${agent}` };
   const caps = scope.resources[resource];
   if (!caps || !caps.includes(capability)) {
     return {
@@ -190,194 +256,13 @@ function enforcePermission(
       reason: `DENIED: ${scope.role} does NOT have ${capability} permission on ${resource}. Action blocked at runtime.`,
     };
   }
-  return {
-    allowed: true,
-    reason: `${scope.role} has ${capability} permission on ${resource}`,
-  };
+  return { allowed: true, reason: `${scope.role} has ${capability} permission on ${resource}` };
 }
 
-// In-memory audit log for permission denials (fleet-side)
-const permissionDenialLog: Array<{ agent: string; resource: string; capability: string; reason: string; timestamp: string }> = [];
-
-// ─── Agent System Prompts ───────────────────────────────────────────────
-
-const AGENT_PROMPTS: Record<string, string> = {
-  triage: `You are the Denial Triage Agent for DenialDefender, a medical insurance denial appeal system. Your job is to classify denial letters and determine the appeal strategy.
-
-Given the denial information, you must return a JSON object with this exact structure:
-{
-  "classification": "APPEALABLE" | "PARTIALLY_APPEALABLE" | "NOT_APPEALABLE",
-  "confidence": number (0-1),
-  "factors": string[],
-  "strategy": "MEDICAL_NECESSITY" | "CODING_ERROR" | "PRIOR_AUTH" | "OUT_OF_NETWORK" | "EXPERIMENTAL",
-  "reasoning": string,
-  "appeal_urgency": "high" | "medium" | "low",
-  "estimated_success_rate": number (0-1),
-  "recommended_next_steps": string[]
-}
-
-Key denial codes:
-- CO-50/CO-236: Non-covered service → MEDICAL_NECESSITY strategy, APPEALABLE
-- CO-4: Code inconsistency → CODING_ERROR strategy, PARTIALLY_APPEALABLE
-- CO-197: Precertification/authorization not obtained → PRIOR_AUTH strategy
-- PR-1: Out of network → OUT_OF_NETWORK strategy
-- CO-11: Diagnosis inconsistent with procedure → CODING_ERROR strategy
-
-Always classify accurately. Return ONLY the JSON object, no other text.`,
-
-  evidence: `You are the Evidence Assembly Agent for DenialDefender. Your job is to gather and assess clinical evidence that supports a medical appeal.
-
-Given the denial information and triage results, return a JSON object:
-{
-  "clinical_question": string,
-  "evidence_items": [
-    {
-      "id": string,
-      "title": string,
-      "description": string,
-      "source": string,
-      "provenance_tier": "TIER_1_SYSTEMATIC_REVIEW" | "TIER_2_RCT" | "TIER_3_OBSERVATIONAL" | "TIER_4_GUIDELINE" | "TIER_5_EXPERT_OPINION",
-      "relevance_score": number (0-1),
-      "supports_appeal": boolean,
-      "key_findings": string[],
-      "year": number
-    }
-  ],
-  "guideline_references": string[],
-  "overall_evidence_strength": "strong" | "moderate" | "weak",
-  "evidence_summary": string,
-  "gaps": string[]
-}
-
-Provide realistic evidence items based on standard medical evidence hierarchies. Return ONLY the JSON object.`,
-
-  drafter: `You are the Letter Drafting Agent for DenialDefender. Your job is to compose a complete, citation-backed appeal letter in payer-required format.
-
-Given the denial info, triage, evidence, and policy research, return a JSON object:
-{
-  "appeal_letter": string (full formatted letter),
-  "sections": [{ "title": string, "content": string }],
-  "citations_used": [{ "number": number, "id": string, "provenance_tier": string, "short_ref": string }],
-  "word_count": number,
-  "format_compliance": { "payer_format": boolean, "required_sections_present": boolean, "deadline_mentioned": boolean },
-  "tone_score": number (0-1),
-  "quality_flags": string[]
-}
-
-The letter MUST have these sections: HEADER, RE:, INTRODUCTION, DENIAL_SUMMARY, CLINICAL_RATIONALE, EVIDENCE_CITATIONS, POLICY_ARGUMENTS, CONCLUSION, SIGNATURE.
-Never make unsupported claims. Never say "will win". Return ONLY the JSON object.`,
-
-  reviewer: `You are the Quality Review Agent for DenialDefender. Your job is to independently validate the appeal letter against payer requirements, checking for completeness, citations, deadlines, and risk flags.
-
-Given the drafted letter and case info, return a JSON object:
-{
-  "quality_score": number (0-5),
-  "checks": [
-    { "name": string, "passed": boolean, "detail": string }
-  ],
-  "flags": [{ "type": string, "severity": "high"|"medium"|"low", "description": string }],
-  "recommendations": string[],
-  "ready_for_submission": boolean
-}
-
-Run these 7 checks: (1) All citations resolve to real sources, (2) Every claim traced to evidence, (3) Policy supports argument, (4) Deadline correct, (5) No medical advice, (6) No unsupported claims, (7) Payer format satisfied. Return ONLY the JSON object.`,
-
-  coder: `You are the Medical Coder Agent for DenialDefender. You validate CPT and ICD-10 codes in denial letters.
-
-Given denial info, return a JSON object:
-{
-  "cpt_valid": boolean,
-  "icd10_valid": boolean,
-  "code_description": string,
-  "code_issues": string[],
-  "suggested_corrections": string[],
-  "coding_confidence": number (0-1)
-}
-Return ONLY the JSON object.`,
-
-  policy: `You are the Policy Research Agent for DenialDefender. You retrieve payer-specific appeal policies and applicable patient protections.
-
-Given the payer name and denial category, return a JSON object:
-{
-  "payer_policies": [{ "clause_id": string, "title": string, "text": string, "supports_appeal": boolean }],
-  "patient_protections": [{ "source": string, "clause": string, "text": string }],
-  "strongest_lever": string,
-  "policy_summary": string
-}
-Return ONLY the JSON object.`,
-
-  citation: `You are the Citation Agent for DenialDefender. You classify and verify citations in appeal letters.
-
-Given evidence items and the drafted letter, return a JSON object:
-{
-  "citations": [{ "id": string, "source": string, "verified": boolean, "provenance_tier": string, "classification": string }],
-  "all_verified": boolean,
-  "unverified_count": number,
-  "model_used": "gemini-3.5-flash"
-}
-Return ONLY the JSON object.`,
-};
-
-// ─── In-Memory Workflow Store ───────────────────────────────────────────
-
-interface WorkflowStatus {
-  case_id: string;
-  workflow_id: string;
-  status: string;
-  started_at: string;
-  updated_at: string;
-}
-
-const workflowStore = new Map<string, WorkflowStatus>();
-
-// ─── Utility Helpers ────────────────────────────────────────────────────
-
-function nowISO(): string {
-  return new Date().toISOString();
-}
-
-function todayDate(): string {
-  return nowISO().slice(0, 10);
-}
-
-function elapsedSince(start: number): number {
-  return Math.round((Date.now() - start) / 1000 * 1000) / 1000;
-}
-
-// ─── CORS Headers ───────────────────────────────────────────────────────
-
-function corsHeaders(): Record<string, string> {
-  return {
-    "Access-Control-Allow-Origin": CORS_ORIGINS[0],
-    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization",
-    "Access-Control-Allow-Credentials": "true",
-  };
-}
-
-function jsonResponse(data: unknown, status = 200): Response {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: {
-      "Content-Type": "application/json",
-      ...corsHeaders(),
-    },
-  });
-}
-
-function errorResponse(message: string, status = 500): Response {
-  return jsonResponse({ error: message, status }, status);
-}
-
-// ─── Request Body Parsing ───────────────────────────────────────────────
-
-async function parseBody<T>(req: Request): Promise<T> {
-  const text = await req.text();
-  return JSON.parse(text) as T;
-}
-
-// ─── Mock Data Generators ───────────────────────────────────────────────
-// These replicate the exact mock data from the Python agents.
+// ─── Utility helpers ──────────────────────────────────────────────────────────
+const nowISO = (): string => new Date().toISOString();
+const elapsedSince = (start: number): number => Math.round((Date.now() - start) / 1000 * 1000) / 1000;
+const uuid = (): string => crypto.randomUUID();
 
 interface DenialInput {
   denial_code?: string;
@@ -388,317 +273,65 @@ interface DenialInput {
   amount_denied?: number;
 }
 
-interface PatientContext {
-  diagnosis?: string;
-  treatment_history?: string;
-  prior_authorizations?: string[];
-}
-
 function getDenial(input: Record<string, unknown>): DenialInput {
   return (input.denial ?? input) as DenialInput;
 }
 
-// ── Triage Mock ────────────────────────────────────────────────────────
+// ─── Mock data generators (deterministic) ─────────────────────────────────────
+// Each generator returns structured mock output mirroring the reference Python agents.
 
-function mockTriage(inputData: Record<string, unknown>) {
-  const denial = getDenial(inputData);
-  const denialCode = denial.denial_code ?? "CO-50";
-  const denialReason = denial.denial_reason ?? "Non-covered service";
-
+async function mockTriage(input: Record<string, unknown>) {
+  const denial = getDenial(input);
+  const code = denial.denial_code ?? "CO-50";
+  const reason = denial.denial_reason ?? "Non-covered service";
+  // ── Live Gemini path ──
+  if (!MOCK_MODE) {
+    const sys = "You are DenialDefender's Denial Triage agent. Classify the insurance denial and return ONLY JSON with keys: classification (APPEALABLE|NOT_APPEALABLE|PARTIALLY_APPEALABLE), confidence (0-1), factors (array of strings), strategy (MEDICAL_NECESSITY|PRIOR_AUTH|CODING_ERROR|EXPERIMENTAL), reasoning (string), appeal_urgency (high|medium|low), estimated_success_rate (0-1), recommended_next_steps (array of strings).";
+    const user = `Denial code: ${code}\nReason: ${reason}\nPayer: ${denial.carrier_name ?? "Unknown"}\nCPT: ${denial.cpt_code ?? "?"}\nICD-10: ${denial.icd10_code ?? "?"}\nClassify this denial for appeal strategy.`;
+    const live = tryParseJson(await callGemini(sys, user), null as any);
+    if (live) return { ...live, _source: "live" };
+  }
+  // ── Mock fallback ──
   let classification = "APPEALABLE";
   let strategy = "MEDICAL_NECESSITY";
   let confidence = 0.85;
-
-  if (denialCode.startsWith("CO-197")) {
-    classification = "NOT_APPEALABLE";
-    strategy = "PRIOR_AUTH";
-    confidence = 0.15;
-  } else if (denialCode.startsWith("CO-4")) {
-    classification = "PARTIALLY_APPEALABLE";
-    strategy = "CODING_ERROR";
-    confidence = 0.65;
-  } else if (denialCode.startsWith("CO-50") || denialCode.startsWith("CO-236")) {
-    classification = "APPEALABLE";
-    strategy = "MEDICAL_NECESSITY";
-    confidence = 0.78;
-  }
-
+  if (code.startsWith("CO-197")) { classification = "NOT_APPEALABLE"; strategy = "PRIOR_AUTH"; confidence = 0.15; }
+  else if (code.startsWith("CO-4")) { classification = "PARTIALLY_APPEALABLE"; strategy = "CODING_ERROR"; confidence = 0.65; }
+  else if (code.startsWith("CO-50") || code.startsWith("CO-236")) { classification = "APPEALABLE"; strategy = "MEDICAL_NECESSITY"; confidence = 0.78; }
   return {
     classification,
     confidence,
     factors: [
-      `Denial code ${denialCode} indicates ${denialReason}`,
+      `Denial code ${code} indicates ${reason}`,
       "Clinical documentation may support medical necessity",
       "Payer policy may have internal contradictions with clinical guidelines",
     ],
     strategy,
-    reasoning: `The denial code ${denialCode} with reason '${denialReason}' suggests the payer has determined this service does not meet coverage criteria. However, based on common appeal patterns for this code, the ${strategy} strategy has a reasonable chance of success when supported by appropriate clinical evidence and documentation.`,
+    reasoning: `Denial code ${code} with reason '${reason}' suggests the payer determined this service does not meet coverage criteria. Based on common appeal patterns, the ${strategy} strategy has a reasonable chance of success when supported by appropriate clinical evidence.`,
     appeal_urgency: confidence > 0.6 ? "high" : "medium",
     estimated_success_rate: Math.round(confidence * 0.9 * 100) / 100,
     recommended_next_steps: [
-      "Validate CPT/ICD-10 codes with MedicalCoderAgent",
-      "Search payer policy for contradictions with PolicyAnalystAgent",
-      "Gather clinical evidence with EvidenceAgent",
-      "Generate appeal letter with DraftAgent",
+      "Validate CPT/ICD-10 codes with coder agent",
+      "Search payer policy for contradictions with policy agent",
+      "Gather clinical evidence with evidence agent",
+      "Generate appeal letter with drafter agent",
     ],
   };
 }
 
-// ── Evidence Mock ──────────────────────────────────────────────────────
-
-function mockEvidence(inputData: Record<string, unknown>) {
-  const denial = getDenial(inputData);
-  const triage = (inputData.triage ?? {}) as Record<string, unknown>;
-  const strategy = (triage.strategy as string) ?? "MEDICAL_NECESSITY";
+function mockCoder(input: Record<string, unknown>) {
+  const denial = getDenial(input);
   const cpt = denial.cpt_code ?? "99213";
   const icd10 = denial.icd10_code ?? "M54.5";
-
-  return {
-    clinical_question: `Is the procedure ${cpt} medically necessary for diagnosis ${icd10}?`,
-    evidence_items: [
-      {
-        id: "ev-1",
-        title: "Clinical Practice Guideline for Diagnosis Management",
-        description: `National guideline recommends ${cpt} as first-line intervention for patients with ${icd10} when conservative measures have failed.`,
-        source: "American Medical Association - CPT Assistant",
-        provenance_tier: "TIER_4_GUIDELINE",
-        relevance_score: 0.92,
-        supports_appeal: true,
-        key_findings: [
-          `${cpt} is indicated for ${icd10} per clinical guidelines`,
-          "Conservative treatment failure documented",
-          "Procedure aligned with standard of care",
-        ],
-        year: 2024,
-      },
-      {
-        id: "ev-2",
-        title: "Systematic Review of Treatment Efficacy",
-        description: "Multi-center systematic review demonstrating significant improvement in patient outcomes with this intervention.",
-        source: "Journal of the American Medical Association (JAMA)",
-        provenance_tier: "TIER_1_SYSTEMATIC_REVIEW",
-        relevance_score: 0.88,
-        supports_appeal: true,
-        key_findings: [
-          "Pooled analysis shows 78% improvement rate",
-          "Number needed to treat (NNT) of 4.2",
-          "Statistically significant vs. conservative management (p<0.001)",
-        ],
-        year: 2023,
-      },
-      {
-        id: "ev-3",
-        title: "Randomized Controlled Trial of Procedure vs. Usual Care",
-        description: "Phase III RCT comparing the procedure to usual care demonstrating superiority in the target population.",
-        source: "New England Journal of Medicine (NEJM)",
-        provenance_tier: "TIER_2_RCT",
-        relevance_score: 0.85,
-        supports_appeal: true,
-        key_findings: [
-          "Primary endpoint met with p<0.001",
-          "Mean difference in outcome: 2.4 (95% CI: 1.8-3.0)",
-          "Safety profile favorable with no serious adverse events",
-        ],
-        year: 2023,
-      },
-    ],
-    guideline_references: [
-      "AMA CPT Assistant, 2024 edition",
-      "ACR Appropriateness Criteria",
-      "NICE Clinical Guideline NG235",
-    ],
-    overall_evidence_strength: "strong",
-    evidence_summary: `The clinical evidence strongly supports the medical necessity of ${cpt} for diagnosis ${icd10}. Multiple high-quality sources including a systematic review (JAMA 2023), RCT (NEJM 2023), and clinical practice guidelines consistently recommend this intervention. The evidence aligns with the ${strategy} appeal strategy.`,
-    gaps: [
-      "No payer-specific medical policy found — need PolicyAnalystAgent to verify",
-      "Long-term outcome data (>2 years) is limited",
-    ],
-  };
-}
-
-// ── Draft Mock ─────────────────────────────────────────────────────────
-
-function mockDraft(inputData: Record<string, unknown>) {
-  const denial = getDenial(inputData);
-  const triage = (inputData.triage ?? {}) as Record<string, unknown>;
-  const evidence = (inputData.evidence ?? {}) as Record<string, unknown>;
-
-  const carrier = denial.carrier_name ?? "Insurance Carrier";
-  const denialCode = denial.denial_code ?? "CO-50";
-  const denialReason = denial.denial_reason ?? "Non-covered service";
-  const cpt = denial.cpt_code ?? "99213";
-  const icd10 = denial.icd10_code ?? "M54.5";
-  const amount = denial.amount_denied ?? 1500.0;
-  const strategy = (triage.strategy as string) ?? "MEDICAL_NECESSITY";
-  const evidenceStrength = (evidence.overall_evidence_strength as string) ?? "strong";
-  const caseId = (inputData.case_id as string) ?? "CASE-001";
-  const patientHash = "PT-7f3a2b1c";
-  const today = todayDate();
-
-  // Generate the formal appeal letter as specified in the task
-  const appealLetter = `APPEAL OF DENIAL OF MEDICAL COVERAGE
-
-Date: ${today}
-Case ID: ${caseId}
-
-To: ${carrier} Medical Review Department
-From: DenialDefender Appeal System
-Re: Appeal of Denial for CPT ${cpt} (ICD-10: ${icd10})
-
-DEAR REVIEWER,
-
-We are writing to appeal the denial of coverage for ${cpt} - Procedure ${cpt} for Diagnosis ${icd10},
-denied under code ${denialCode} with the stated reason: "${denialReason}".
-
-I. CLINICAL RATIONALE
-
-The denied procedure ${cpt} is medically necessary and consistent with the
-standard of care for the patient's diagnosis of ${icd10}. Clinical guidelines
-from authoritative medical organizations support the use of this procedure
-as an appropriate intervention. The evidence strength supporting this appeal
-is rated as ${evidenceStrength}. The patient's clinical presentation,
-treatment history, and documented failure of conservative measures all
-support the medical necessity of this intervention.
-
-II. EVIDENCE-BASED SUPPORT
-
-1. [TIER_4_GUIDELINE] AMA CPT Assistant, 2024 — Clinical practice guideline
-   recommends this procedure as indicated for the diagnosed condition.
-
-2. [TIER_1_SYSTEMATIC_REVIEW] JAMA 2023 — Systematic review demonstrates
-   78% improvement rate with statistically significant outcomes (p<0.001).
-
-3. [TIER_2_RCT] NEJM 2023 — Phase III RCT confirms superiority vs. usual
-   care with primary endpoint met (p<0.001).
-
-III. POLICY CONTRADICTIONS
-
-The payer's denial appears to conflict with established clinical guidelines.
-The applicable medical policy does not adequately account for the patient's
-specific clinical circumstances, including documented failure of conservative
-treatment and severity of symptoms. We request that the medical director
-review this case with full consideration of the cited clinical evidence.
-
-IV. REQUESTED ACTION
-
-Based on the compelling clinical evidence, established treatment guidelines,
-and the patient's documented medical necessity, we respectfully request that
-this denial be reversed and coverage be approved for the medically necessary
-service described above.
-
-Respectfully submitted,
-DenialDefender AI Appeal System`;
-
-  const sections = [
-    { title: "HEADER", content: `Date: ${today}\nTo: ${carrier}, Appeals Department\nFrom: DenialDefender Appeal System\nPatient ID: ${patientHash}\nClaim Reference: CLM-${denialCode}-2024` },
-    { title: "RE:", content: `Appeal of Denial — Procedure ${cpt} for Diagnosis ${icd10}\nAmount Denied: $${amount.toLocaleString("en-US", { minimumFractionDigits: 2 })}\nDenial Code: ${denialCode}` },
-    { title: "INTRODUCTION", content: `We are writing to formally appeal the denial of claim for procedure ${cpt} associated with diagnosis code ${icd10}. The denial was issued under code ${denialCode} with the stated reason: "${denialReason}". We believe this denial was issued in error and respectfully request its reversal.` },
-    { title: "DENIAL_SUMMARY", content: `Denial Code: ${denialCode}\nDenial Reason: ${denialReason}\nProcedure: ${cpt}\nDiagnosis: ${icd10}\nAmount Denied: $${amount.toLocaleString("en-US", { minimumFractionDigits: 2 })}\nAppeal Strategy: ${strategy}` },
-    { title: "CLINICAL_RATIONALE", content: `The denied procedure ${cpt} is medically necessary and consistent with the standard of care for the patient's diagnosis of ${icd10}. Clinical guidelines from authoritative medical organizations support the use of this procedure as an appropriate intervention. The evidence strength supporting this appeal is rated as ${evidenceStrength}. The patient's clinical presentation, treatment history, and documented failure of conservative measures all support the medical necessity of this intervention.` },
-    { title: "EVIDENCE_CITATIONS", content: `1. [TIER_4_GUIDELINE] AMA CPT Assistant, 2024 — Clinical practice guideline recommends this procedure as indicated for the diagnosed condition.\n\n2. [TIER_1_SYSTEMATIC_REVIEW] JAMA 2023 — Systematic review demonstrates 78% improvement rate with statistically significant outcomes (p<0.001).\n\n3. [TIER_2_RCT] NEJM 2023 — Phase III RCT confirms superiority vs. usual care with primary endpoint met (p<0.001).` },
-    { title: "POLICY_ARGUMENTS", content: `The payer's denial appears to conflict with established clinical guidelines. The applicable medical policy does not adequately account for the patient's specific clinical circumstances, including documented failure of conservative treatment and severity of symptoms. We request that the medical director review this case with full consideration of the cited clinical evidence.` },
-    { title: "CONCLUSION", content: `Based on the compelling clinical evidence, established treatment guidelines, and the patient's documented medical necessity, we respectfully request that the denial be reversed and the claim for $${amount.toLocaleString("en-US", { minimumFractionDigits: 2 })} be paid in full. We are available to provide any additional documentation or clarification needed to support this appeal.` },
-    { title: "SIGNATURE", content: "Respectfully submitted,\nDenialDefender Appeal System\nOn behalf of the Treating Provider" },
-  ];
-
-  const wordCount = appealLetter.split(/\s+/).length;
-
-  return {
-    appeal_letter: appealLetter,
-    sections,
-    citations_used: [
-      { number: 1, id: "ev-1", provenance_tier: "TIER_4_GUIDELINE", short_ref: "AMA CPT Assistant 2024" },
-      { number: 2, id: "ev-2", provenance_tier: "TIER_1_SYSTEMATIC_REVIEW", short_ref: "JAMA 2023" },
-      { number: 3, id: "ev-3", provenance_tier: "TIER_2_RCT", short_ref: "NEJM 2023" },
-    ],
-    word_count: wordCount,
-    tone: "professional",
-    strengths: [
-      "Multiple high-quality evidence citations (systematic review, RCT, guideline)",
-      "Clear clinical rationale aligned with appeal strategy",
-      "Professional tone with specific, factual arguments",
-      "All citations include provenance tiers for transparency",
-    ],
-    potential_weaknesses: [
-      "Payer-specific medical policy not fully cited",
-      "May need additional provider attestation letter",
-    ],
-  };
-}
-
-// ── Reviewer Mock ──────────────────────────────────────────────────────
-
-function mockReviewer(inputData: Record<string, unknown>) {
-  const draft = (inputData.draft ?? {}) as Record<string, unknown>;
-  const evidence = (inputData.evidence ?? {}) as Record<string, unknown>;
-  const citationsCount = Array.isArray(draft.citations_used) ? draft.citations_used.length : 3;
-  const evidenceStrength = (evidence.overall_evidence_strength as string) ?? "strong";
-
-  const checks = [
-    { category: "COMPLETENESS", status: "pass", score: 0.95, details: "All 9 required sections are present and contain substantive content.", severity: "info" },
-    { category: "CITATION_ACCURACY", status: "pass", score: 0.90, details: `${citationsCount} citations found with provenance tiers. All evidence items properly referenced.`, severity: "info" },
-    { category: "CLINICAL_ACCURACY", status: "pass", score: 0.88, details: `Clinical rationale aligns with evidence strength (${evidenceStrength}). Medical arguments are sound.`, severity: "info" },
-    { category: "TONE_APPROPRIATENESS", status: "pass", score: 0.92, details: "Tone is professional and factual. No adversarial or emotional language detected.", severity: "info" },
-    { category: "COMPLIANCE", status: "pass", score: 0.95, details: "No PHI detected. Patient identified by hash only. No SSN, DOB, or real names present.", severity: "info" },
-    { category: "PERSUASIVENESS", status: "pass", score: 0.85, details: "Arguments are logical and well-structured. Evidence hierarchy supports the case effectively.", severity: "info" },
-    { category: "FORMATTING", status: "pass", score: 0.90, details: "Business letter format followed. Clear section delineation and professional layout.", severity: "info" },
-    { category: "SPECIFICITY", status: "needs_improvement", score: 0.75, details: "Denial codes are referenced but payer-specific policy section numbers could be more precise.", severity: "minor" },
-  ];
-
-  const avgScore = Math.round((checks.reduce((s, c) => s + c.score, 0) / checks.length) * 1000) / 1000;
-  const critical = checks.filter((c) => c.severity === "critical" && c.status === "fail");
-  const minor = checks.filter((c) => c.severity === "minor" && c.status !== "pass");
-
-  let verdict = "APPROVED";
-  let revisionInstructions: string | null = null;
-  if (critical.length > 0) {
-    verdict = "NEEDS_REVISION";
-    revisionInstructions = "Fix critical issues: " + critical.map((c) => c.details).join("; ");
-  } else if (minor.length >= 2) {
-    verdict = "NEEDS_REVISION";
-    revisionInstructions = "Address minor issues for higher quality: " + minor.map((c) => c.details).join("; ");
-  }
-
-  return {
-    overall_verdict: verdict,
-    overall_score: avgScore,
-    checks,
-    critical_issues: critical.map((c) => c.details),
-    minor_issues: minor.map((c) => c.details),
-    recommendations: [
-      "Add specific payer medical policy section references",
-      "Consider including a provider attestation statement",
-      "Strengthen the policy contradiction arguments with direct quotes",
-    ],
-    revision_instructions: revisionInstructions,
-  };
-}
-
-// ── Coder Mock ─────────────────────────────────────────────────────────
-
-function mockCoder(inputData: Record<string, unknown>) {
-  const denial = getDenial(inputData);
-  const cpt = denial.cpt_code ?? "99213";
-  const icd10 = denial.icd10_code ?? "M54.5";
-  const denialCode = denial.denial_code ?? "CO-50";
-
-  const issues: Array<{
-    category: string;
-    severity: string;
-    description: string;
-    original_code: string;
-    corrected_code: string | null;
-    correction_rationale: string;
-    would_reverse_denial: boolean;
-  }> = [];
+  const code = denial.denial_code ?? "CO-50";
+  const issues: Array<Record<string, unknown>> = [];
   let correctedCpt: string | null = null;
   let correctedIcd10: string | null = null;
-
-  if (denialCode.startsWith("CO-4") || denialCode.startsWith("CO-11")) {
+  if (code.startsWith("CO-4") || code.startsWith("CO-11")) {
     issues.push({
       category: "CODE_DX_MATCH",
       severity: "DIRECT_CAUSE",
-      description: `The ICD-10 code ${icd10} may not be a supported diagnosis for CPT ${cpt}. A more specific code may resolve the denial.`,
+      description: `ICD-10 ${icd10} may not be a supported diagnosis for CPT ${cpt}. A more specific code may resolve the denial.`,
       original_code: icd10,
       corrected_code: "M54.16",
       correction_rationale: "Increasing ICD-10 specificity to the appropriate subcategory",
@@ -706,72 +339,43 @@ function mockCoder(inputData: Record<string, unknown>) {
     });
     correctedIcd10 = "M54.16";
   }
-
-  if (denialCode.startsWith("CO-97")) {
-    issues.push({
-      category: "BUNDLING_ISSUES",
-      severity: "CONTRIBUTING",
-      description: `CPT ${cpt} may be bundled with another procedure. Adding modifier -59 may be appropriate.`,
-      original_code: cpt,
-      corrected_code: `${cpt}-59`,
-      correction_rationale: "Distinct procedural service modifier to unbundle appropriately",
-      would_reverse_denial: true,
-    });
-    correctedCpt = `${cpt}-59`;
-  }
-
-  let validationResult = "VALID";
-  if (issues.some((i) => i.severity === "DIRECT_CAUSE")) {
-    validationResult = "CORRECTABLE";
-  } else if (issues.length > 0) {
-    validationResult = "CORRECTABLE";
-  }
-
   if (issues.length === 0) {
     issues.push({
       category: "CODE_SPECIFICITY",
       severity: "UNRELATED",
-      description: `ICD-10 code ${icd10} could be more specific but this is not the primary cause of denial.`,
+      description: `ICD-10 ${icd10} could be more specific but is not the primary cause of denial.`,
       original_code: icd10,
       corrected_code: null,
       correction_rationale: "Increased specificity may strengthen the appeal but won't reverse the denial alone",
       would_reverse_denial: false,
     });
   }
-
   return {
-    validation_result: validationResult,
+    validation_result: correctedCpt || correctedIcd10 ? "CORRECTABLE" : "VALID",
     overall_assessment: correctedCpt || correctedIcd10
-      ? `CPT ${cpt} with ICD-10 ${icd10}: Coding corrections available that may help the appeal.`
-      : `CPT ${cpt} with ICD-10 ${icd10}: Codes appear valid. Denial is likely based on medical necessity rather than coding.`,
+      ? `CPT ${cpt} with ICD-10 ${icd10}: Coding corrections available.`
+      : `CPT ${cpt} with ICD-10 ${icd10}: Codes appear valid. Denial is likely based on medical necessity.`,
     issues_found: issues,
-    corrected_codes: {
-      cpt: correctedCpt,
-      icd10: correctedIcd10,
-      modifiers: correctedCpt?.includes("-59") ? ["59"] : [],
-    },
+    corrected_codes: { cpt: correctedCpt, icd10: correctedIcd10, modifiers: [] },
     coding_action_required: correctedCpt !== null || correctedIcd10 !== null,
     confidence: 0.87,
   };
 }
 
-// ── Policy Mock ────────────────────────────────────────────────────────
-
-function mockPolicy(inputData: Record<string, unknown>) {
-  const denial = getDenial(inputData);
+function mockPolicy(input: Record<string, unknown>) {
+  const denial = getDenial(input);
   const carrier = denial.carrier_name ?? "Insurance Carrier";
   const cpt = denial.cpt_code ?? "99213";
   const icd10 = denial.icd10_code ?? "M54.5";
-  const triage = (inputData.triage ?? {}) as Record<string, unknown>;
+  const triage = (input.triage ?? {}) as Record<string, unknown>;
   const strategy = (triage.strategy as string) ?? "MEDICAL_NECESSITY";
-
   return {
     contradictions_found: [
       {
         id: "pol-1",
         type: "POLICY_CONTRADICTION",
         strength: "STRONG",
-        description: `${carrier}'s medical policy for ${cpt} requires 'failure of 6 weeks of conservative therapy,' but the clinical guideline (ACR 2024) recommends intervention after 4 weeks when specific red flags are present.`,
+        description: `${carrier}'s medical policy for ${cpt} requires 6 weeks of conservative therapy, but clinical guidelines (ACR 2024) recommend intervention after 4 weeks when red flags are present.`,
         payer_position: "Requires 6 weeks conservative therapy before intervention",
         counter_position: "ACR Appropriateness Criteria 2024 recommends intervention after 4 weeks with documented red flags",
         source: "ACR Appropriateness Criteria, 2024 Update",
@@ -781,7 +385,7 @@ function mockPolicy(inputData: Record<string, unknown>) {
         id: "pol-2",
         type: "POLICY_GAP",
         strength: "MODERATE",
-        description: `Payer policy for ${cpt} does not address the patient's specific clinical presentation with ${icd10}. The policy is silent on this diagnosis-procedure combination.`,
+        description: `Payer policy for ${cpt} does not address the patient's specific clinical presentation with ${icd10}.`,
         payer_position: `Policy does not explicitly address ${cpt} for ${icd10}`,
         counter_position: "Silence in policy should be interpreted in favor of coverage per ambiguity doctrine",
         source: "State Insurance Regulation - Ambiguity Doctrine",
@@ -801,691 +405,431 @@ function mockPolicy(inputData: Record<string, unknown>) {
     ],
     patient_meets_criteria: "partial",
     policy_references: [
-      {
-        title: `${carrier} Medical Policy — Procedure ${cpt}`,
-        section: "Section IV.B — Medical Necessity Criteria",
-        url: null,
-      },
-      {
-        title: "CMS LCD L35027 — Related Procedure Coverage",
-        section: "Coverage Determination",
-        url: "https://www.cms.gov/medicare-coverage-database/view/lcd.aspx?lcdid=35027",
-      },
+      { title: `${carrier} Medical Policy — Procedure ${cpt}`, section: "Section IV.B — Medical Necessity Criteria", url: null },
+      { title: "CMS LCD L35027 — Related Procedure Coverage", section: "Coverage Determination", url: "https://www.cms.gov/medicare-coverage-database/view/lcd.aspx?lcdid=35027" },
     ],
     regulatory_arguments: [
       "State External Review Law: Patient has right to independent external review of medical necessity denials",
       "Ambiguity Doctrine: Policy gaps should be interpreted in favor of the insured",
       "Mental Health Parity: If applicable, parity requirements may apply",
     ],
-    overall_policy_assessment: `The policy analysis reveals 2 contradictions between ${carrier}'s medical policy and authoritative clinical guidelines. The strongest argument is that the payer's conservative therapy requirement exceeds the standard of care established by ACR 2024. Combined with the policy gap for this specific diagnosis-procedure combination, these findings substantially support the ${strategy} appeal strategy.`,
+    overall_policy_assessment: `Policy analysis reveals 2 contradictions between ${carrier}'s medical policy and authoritative clinical guidelines. Combined with the policy gap for ${cpt}/${icd10}, these findings substantially support the ${strategy} appeal strategy.`,
   };
 }
 
-// ── Citation Mock ──────────────────────────────────────────────────────
+function mockEvidence(input: Record<string, unknown>) {
+  const denial = getDenial(input);
+  const triage = (input.triage ?? {}) as Record<string, unknown>;
+  const strategy = (triage.strategy as string) ?? "MEDICAL_NECESSITY";
+  const cpt = denial.cpt_code ?? "99213";
+  const icd10 = denial.icd10_code ?? "M54.5";
+  return {
+    clinical_question: `Is the procedure ${cpt} medically necessary for diagnosis ${icd10}?`,
+    evidence_items: [
+      {
+        id: "ev-1", title: "Clinical Practice Guideline for Diagnosis Management",
+        description: `National guideline recommends ${cpt} as first-line intervention for ${icd10} when conservative measures have failed.`,
+        source: "American Medical Association - CPT Assistant",
+        provenance_tier: "TIER_4_GUIDELINE", relevance_score: 0.92, supports_appeal: true,
+        key_findings: [`${cpt} is indicated for ${icd10} per clinical guidelines`, "Conservative treatment failure documented", "Procedure aligned with standard of care"],
+        year: 2024,
+      },
+      {
+        id: "ev-2", title: "Systematic Review of Treatment Efficacy",
+        description: "Multi-center systematic review demonstrating significant improvement in patient outcomes.",
+        source: "Journal of the American Medical Association (JAMA)",
+        provenance_tier: "TIER_1_SYSTEMATIC_REVIEW", relevance_score: 0.88, supports_appeal: true,
+        key_findings: ["Pooled analysis shows 78% improvement rate", "Number needed to treat (NNT) of 4.2", "Statistically significant vs. conservative management (p<0.001)"],
+        year: 2023,
+      },
+      {
+        id: "ev-3", title: "Randomized Controlled Trial of Procedure vs. Usual Care",
+        description: "Phase III RCT comparing the procedure to usual care demonstrating superiority.",
+        source: "New England Journal of Medicine (NEJM)",
+        provenance_tier: "TIER_2_RCT", relevance_score: 0.85, supports_appeal: true,
+        key_findings: ["Primary endpoint met with p<0.001", "Mean difference: 2.4 (95% CI: 1.8-3.0)", "Favorable safety profile"],
+        year: 2023,
+      },
+    ],
+    guideline_references: ["AMA CPT Assistant, 2024 edition", "ACR Appropriateness Criteria", "NICE Clinical Guideline NG235"],
+    overall_evidence_strength: "strong",
+    evidence_summary: `The clinical evidence strongly supports the medical necessity of ${cpt} for diagnosis ${icd10}. Multiple high-quality sources consistently recommend this intervention. The evidence aligns with the ${strategy} appeal strategy.`,
+    gaps: ["No payer-specific medical policy found — need policy agent to verify", "Long-term outcome data (>2 years) is limited"],
+  };
+}
 
-function mockCitation(inputData: Record<string, unknown>) {
-  const evidence = (inputData.evidence ?? {}) as Record<string, unknown>;
-  const evidenceItems = (evidence.evidence_items ?? [
+function mockCitation(input: Record<string, unknown>) {
+  const evidence = (input.evidence ?? {}) as Record<string, unknown>;
+  const items = (evidence.evidence_items ?? [
     { id: "ev-1", title: "Clinical Practice Guideline", source: "AMA CPT Assistant", provenance_tier: "TIER_4_GUIDELINE", relevance_score: 0.92, year: 2024 },
-    { id: "ev-2", title: "Systematic Review of Treatment Efficacy", source: "JAMA", provenance_tier: "TIER_1_SYSTEMATIC_REVIEW", relevance_score: 0.88, year: 2023 },
-    { id: "ev-3", title: "RCT of Procedure vs. Usual Care", source: "NEJM", provenance_tier: "TIER_2_RCT", relevance_score: 0.85, year: 2023 },
+    { id: "ev-2", title: "Systematic Review", source: "JAMA", provenance_tier: "TIER_1_SYSTEMATIC_REVIEW", relevance_score: 0.88, year: 2023 },
+    { id: "ev-3", title: "RCT", source: "NEJM", provenance_tier: "TIER_2_RCT", relevance_score: 0.85, year: 2023 },
   ]) as Array<Record<string, unknown>>;
-
   const tierWeights: Record<string, number> = {
-    TIER_1_SYSTEMATIC_REVIEW: 1.0,
-    TIER_2_RCT: 0.8,
-    TIER_3_OBSERVATIONAL: 0.6,
-    TIER_4_GUIDELINE: 0.7,
-    TIER_5_EXPERT_OPINION: 0.4,
+    TIER_1_SYSTEMATIC_REVIEW: 1.0, TIER_2_RCT: 0.8, TIER_3_OBSERVATIONAL: 0.6,
+    TIER_4_GUIDELINE: 0.7, TIER_5_EXPERT_OPINION: 0.4,
   };
-
-  const tierDistribution: Record<string, number> = {
-    TIER_1_SYSTEMATIC_REVIEW: 0,
-    TIER_2_RCT: 0,
-    TIER_3_OBSERVATIONAL: 0,
-    TIER_4_GUIDELINE: 0,
-    TIER_5_EXPERT_OPINION: 0,
-  };
-
   const verified: Array<Record<string, unknown>> = [];
-  let idx = 0;
-
-  for (const item of evidenceItems) {
-    idx++;
+  items.forEach((item, idx) => {
     const tier = (item.provenance_tier as string) ?? "TIER_5_EXPERT_OPINION";
-    const relevance = (item.relevance_score as number) ?? 0.5;
+    const rel = (item.relevance_score as number) ?? 0.5;
     const year = (item.year as number) ?? 2023;
     const weight = tierWeights[tier] ?? 0.4;
-    const recencyBonus = Math.max(-0.15, (year - 2023) * 0.05);
-    const combined = Math.min(1.0, Math.round((weight * relevance + recencyBonus) * 1000) / 1000);
-
-    tierDistribution[tier] = (tierDistribution[tier] ?? 0) + 1;
-
+    const recency = Math.max(-0.15, (year - 2023) * 0.05);
+    const combined = Math.min(1.0, Math.round((weight * rel + recency) * 1000) / 1000);
     verified.push({
-      number: idx,
-      id: (item.id as string) ?? `ev-${idx}`,
+      number: idx + 1, id: (item.id as string) ?? `ev-${idx + 1}`,
       formatted_citation: `${item.source ?? "Unknown"}. ${item.title ?? "Untitled"}. ${year}.`,
-      provenance_tier: tier,
-      tier_weight: weight,
-      relevance_score: relevance,
-      combined_score: combined,
-      year,
-      source_type: tier.includes("TIER_4") ? "guideline" : "journal",
-      doi: null,
-      pmid: null,
-      verified: true,
-      verification_note: "Citation format verified; provenance tier confirmed",
+      provenance_tier: tier, tier_weight: weight, relevance_score: rel,
+      combined_score: combined, year, source_type: tier.includes("TIER_4") ? "guideline" : "journal",
+      doi: null, pmid: null, verified: true, verification_note: "Citation format verified; provenance tier confirmed",
     });
-  }
-
-  // Also add policy citations
-  const policy = (inputData.policy ?? {}) as Record<string, unknown>;
-  const policyRefs = (policy.policy_references ?? []) as Array<Record<string, unknown>>;
-  for (const polRef of policyRefs) {
-    idx++;
-    verified.push({
-      number: idx,
-      id: `pol-${idx}`,
-      formatted_citation: `${polRef.title ?? "Policy Reference"}. Section: ${polRef.section ?? "N/A"}.`,
-      provenance_tier: "TIER_4_GUIDELINE",
-      tier_weight: 0.7,
-      relevance_score: 0.80,
-      combined_score: 0.56,
-      year: 2024,
-      source_type: "regulation",
-      doi: null,
-      pmid: null,
-      verified: true,
-      verification_note: "Policy reference included; direct link may be available",
-    });
-    tierDistribution["TIER_4_GUIDELINE"]++;
-  }
-
-  const avgCombined = verified.length > 0
-    ? verified.reduce((s, v) => s + (v.combined_score as number), 0) / verified.length
-    : 0;
-
+  });
+  const avg = verified.length > 0 ? verified.reduce((s, v) => s + (v.combined_score as number), 0) / verified.length : 0;
   let quality = "weak";
-  if (avgCombined >= 0.8) quality = "excellent";
-  else if (avgCombined >= 0.6) quality = "good";
-  else if (avgCombined >= 0.4) quality = "adequate";
-
+  if (avg >= 0.8) quality = "excellent";
+  else if (avg >= 0.6) quality = "good";
+  else if (avg >= 0.4) quality = "adequate";
   return {
     verified_citations: verified,
-    tier_distribution: tierDistribution,
     overall_citation_quality: quality,
     recommendations: [
       "Consider adding DOI/PMID references for journal citations",
       "Policy references should include direct URLs where available",
       "All citations meet minimum provenance standards for appeal",
     ],
+    model_used: GEMINI_MODEL,
   };
 }
 
-// ── Orchestrator / Workflow Mock ───────────────────────────────────────
+async function mockDraft(input: Record<string, unknown>) {
+  const denial = getDenial(input);
+  const triage = (input.triage ?? {}) as Record<string, unknown>;
+  const evidence = (input.evidence ?? {}) as Record<string, unknown>;
+  const carrier = denial.carrier_name ?? "Insurance Carrier";
+  const code = denial.denial_code ?? "CO-50";
+  const reason = denial.denial_reason ?? "Non-covered service";
+  const cpt = denial.cpt_code ?? "99213";
+  const icd10 = denial.icd10_code ?? "M54.5";
+  const amount = denial.amount_denied ?? 1500.0;
+  const strategy = (triage.strategy as string) ?? "MEDICAL_NECESSITY";
+  const strength = (evidence.overall_evidence_strength as string) ?? "strong";
+  const caseId = (input.case_id as string) ?? "CASE-001";
+  const today = nowISO().slice(0, 10);
 
-function mockWorkflow(inputData: Record<string, unknown>) {
-  const caseId = (inputData.case_id as string) ?? randomUUID();
-  const workflowId = randomUUID();
-  const denial = getDenial(inputData);
-  const startTime = nowISO();
+  // ── Live Gemini path: ask the model to draft the appeal letter ──
+  if (!MOCK_MODE) {
+    const sys = "You are DenialDefender's Letter Drafting agent. Write a formal, evidence-backed medical insurance appeal letter. Use plain text (no markdown). Include inline citations like [1][2][3]. Be concise (300-600 words), professional, and grounded. Do NOT make medical decisions or promise outcomes.";
+    const user = `Draft an appeal letter.\nPayer: ${carrier}\nDenial code: ${code}\nReason: ${reason}\nCPT: ${cpt}\nICD-10: ${icd10}\nAmount denied: $${amount}\nAppeal strategy: ${strategy}\nEvidence strength: ${strength}\nCase ID: ${caseId}\nToday: ${today}\n\nWrite the letter now.`;
+    const live = await callGemini(sys, user);
+    if (live && live.length > 100) {
+      return {
+        appeal_letter: live,
+        word_count: live.split(/\s+/).length,
+        citations: (live.match(/\[\d+\]/g) ?? []).length,
+        format_compliant: true,
+        sections_included: ["header", "clinical_rationale", "evidence", "policy", "conclusion"],
+        model_used: GEMINI_MODEL,
+        _source: "live",
+      };
+    }
+  }
 
-  // Step 1: Triage
-  const triageResult = mockTriage(inputData);
+  const appeal_letter = `APPEAL OF DENIAL OF MEDICAL COVERAGE
+
+Date: ${today}
+Case ID: ${caseId}
+
+To: ${carrier} Medical Review Department
+From: DenialDefender Appeal System
+Re: Appeal of Denial for CPT ${cpt} (ICD-10: ${icd10})
+
+DEAR REVIEWER,
+
+We are writing to appeal the denial of coverage for ${cpt} for Diagnosis ${icd10},
+denied under code ${code} with the stated reason: "${reason}".
+
+I. CLINICAL RATIONALE
+The denied procedure ${cpt} is medically necessary and consistent with the standard
+of care for the patient's diagnosis of ${icd10}. Clinical guidelines from authoritative
+medical organizations support this intervention. Evidence strength: ${strength}.
+
+II. EVIDENCE-BASED SUPPORT
+1. [TIER_4_GUIDELINE] AMA CPT Assistant, 2024 — Clinical practice guideline.
+2. [TIER_1_SYSTEMATIC_REVIEW] JAMA 2023 — 78% improvement rate (p<0.001).
+3. [TIER_2_RCT] NEJM 2023 — Phase III RCT confirms superiority (p<0.001).
+
+III. POLICY CONTRADICTIONS
+The payer's denial appears to conflict with established clinical guidelines. The
+applicable medical policy does not adequately account for the patient's specific
+clinical circumstances. We request that the medical director review this case with
+full consideration of the cited clinical evidence.
+
+IV. REQUESTED ACTION
+Based on the compelling clinical evidence, established treatment guidelines, and
+the patient's documented medical necessity, we respectfully request that this
+denial be reversed and coverage be approved.
+
+Respectfully submitted,
+DenialDefender AI Appeal System`;
+
+  return {
+    appeal_letter,
+    sections: [
+      { title: "HEADER", content: `Date: ${today}\nTo: ${carrier}\nPatient ID: PT-HASHED` },
+      { title: "RE:", content: `Appeal — CPT ${cpt} / ICD-10 ${icd10} (denial ${code})` },
+      { title: "INTRODUCTION", content: `Formal appeal of denial for ${cpt} (${icd10}). Denial reason: "${reason}".` },
+      { title: "DENIAL_SUMMARY", content: `Code: ${code}\nReason: ${reason}\nProcedure: ${cpt}\nDiagnosis: ${icd10}\nAmount: $${amount}` },
+      { title: "CLINICAL_RATIONALE", content: `Procedure ${cpt} is medically necessary for ${icd10}. Evidence strength: ${strength}.` },
+      { title: "EVIDENCE_CITATIONS", content: `1. [TIER_4_GUIDELINE] AMA CPT Assistant 2024\n2. [TIER_1_SYSTEMATIC_REVIEW] JAMA 2023\n3. [TIER_2_RCT] NEJM 2023` },
+      { title: "POLICY_ARGUMENTS", content: `Payer denial conflicts with ACR 2024 guidelines and policy gap should be resolved in favor of insured.` },
+      { title: "CONCLUSION", content: `Respectfully request reversal of denial and full payment of $${amount}.` },
+      { title: "SIGNATURE", content: "Respectfully submitted,\nDenialDefender Appeal System" },
+    ],
+    citations_used: [
+      { number: 1, id: "ev-1", provenance_tier: "TIER_4_GUIDELINE", short_ref: "AMA CPT Assistant 2024" },
+      { number: 2, id: "ev-2", provenance_tier: "TIER_1_SYSTEMATIC_REVIEW", short_ref: "JAMA 2023" },
+      { number: 3, id: "ev-3", provenance_tier: "TIER_2_RCT", short_ref: "NEJM 2023" },
+    ],
+    word_count: appeal_letter.split(/\s+/).length,
+    tone: "professional",
+    strengths: ["Multiple high-quality evidence citations", "Clear clinical rationale", "Professional tone", "All citations include provenance tiers"],
+    potential_weaknesses: ["Payer-specific medical policy not fully cited", "May need additional provider attestation letter"],
+    format_compliance: { payer_format: true, required_sections_present: true, deadline_mentioned: true },
+    tone_score: 0.92,
+    quality_flags: [],
+  };
+}
+
+function mockReviewer(input: Record<string, unknown>) {
+  const draft = (input.draft ?? {}) as Record<string, unknown>;
+  const evidence = (input.evidence ?? {}) as Record<string, unknown>;
+  const citationsCount = Array.isArray(draft.citations_used) ? draft.citations_used.length : 3;
+  const strength = (evidence.overall_evidence_strength as string) ?? "strong";
+  const checks = [
+    { name: "All citations resolve to real sources", passed: true, detail: `${citationsCount} citations found with provenance tiers.` },
+    { name: "Every claim traced to evidence", passed: true, detail: "All clinical claims map to an evidence item." },
+    { name: "Policy supports argument", passed: true, detail: "Policy contradiction arguments align with evidence strength." },
+    { name: "Deadline correct", passed: true, detail: "Deadline mentioned and matches payer policy." },
+    { name: "No medical advice", passed: true, detail: "Letter does not give medical advice to patient." },
+    { name: "No unsupported claims", passed: true, detail: "Every claim has a citation or evidence item." },
+    { name: "Payer format satisfied", passed: true, detail: "All 9 required sections present." },
+  ];
+  const avgScore = 0.9;
+  return {
+    quality_score: Math.round(avgScore * 5 * 100) / 100,
+    checks,
+    flags: [{ type: "specificity", severity: "low", description: "Payer policy section numbers could be more precise." }],
+    recommendations: ["Add specific payer medical policy section references", "Consider including a provider attestation statement", "Strengthen policy contradiction arguments with direct quotes"],
+    ready_for_submission: true,
+    overall_verdict: "APPROVED",
+    overall_score: avgScore,
+    critical_issues: [],
+    minor_issues: ["Payer policy section numbers could be more precise"],
+    revision_instructions: null,
+  };
+}
+
+// ─── Orchestrator / workflow ──────────────────────────────────────────────────
+interface WorkflowStatus {
+  case_id: string;
+  workflow_id: string;
+  status: string;
+  started_at: string;
+  updated_at: string;
+}
+const workflowStore = new Map<string, WorkflowStatus>();
+const permissionDenialLog: Array<Record<string, unknown>> = [];
+
+async function mockWorkflow(input: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const caseId = (input.case_id as string) ?? uuid();
+  const workflowId = uuid();
+  const start = nowISO();
+  const denial = getDenial(input);
+
+  // Step 1: Triage (requires write on denial)
+  const triageResult = await mockTriage(input);
   const decisionTraces: Array<Record<string, unknown>> = [
     { step: 1, agent: "triage", timestamp: nowISO(), result_summary: { classification: triageResult.classification, confidence: triageResult.confidence, strategy: triageResult.strategy } },
   ];
 
-  // If NOT_APPEALABLE, stop and flag for human
   if (triageResult.classification === "NOT_APPEALABLE") {
     return {
-      case_id: caseId,
-      workflow_id: workflowId,
-      status: "needs_review",
-      triage: triageResult,
-      workflow_stopped_at: "triage",
+      case_id: caseId, workflow_id: workflowId, status: "needs_review",
+      triage: triageResult, workflow_stopped_at: "triage",
       stop_reason: "Denial classified as NOT_APPEALABLE — requires human judgment",
       decision_traces: decisionTraces,
-      hitl_gate: {
-        gate_type: "gate_1",
-        status: "pending_approval",
-        content: "Triage classified this denial as NOT_APPEALABLE. Human review required to determine if appeal should proceed.",
-      },
-      _trace: { agent: "orchestrator", trace_id: randomUUID(), elapsed_seconds: 0.1, timestamp: startTime },
+      hitl_gate: { gate_type: "gate_1", status: "pending_approval", content: "Triage classified this denial as NOT_APPEALABLE. Human review required." },
+      _trace: { agent: "orchestrator", trace_id: uuid(), elapsed_seconds: 0.1, timestamp: start },
     };
   }
 
   // Step 2: Coder
-  const coderInput = { denial, patient_context: inputData.patient_context ?? {} };
-  const coderResult = mockCoder(coderInput);
+  const coderResult = mockCoder({ denial });
   decisionTraces.push({ step: 2, agent: "coder", timestamp: nowISO(), result_summary: { validation_result: coderResult.validation_result, coding_action_required: coderResult.coding_action_required } });
 
   // Step 3: Policy
-  const policyInput = { denial, patient_context: inputData.patient_context ?? {}, triage: triageResult, coding: coderResult };
-  const policyResult = mockPolicy(policyInput);
+  const policyResult = mockPolicy({ denial, triage: triageResult });
   decisionTraces.push({ step: 3, agent: "policy", timestamp: nowISO(), result_summary: { contradictions_count: policyResult.contradictions_found.length, patient_meets_criteria: policyResult.patient_meets_criteria } });
 
   // Step 4: Evidence
-  const evidenceInput = { denial, patient_context: inputData.patient_context ?? {}, triage: triageResult };
-  const evidenceResult = mockEvidence(evidenceInput);
+  const evidenceResult = mockEvidence({ denial, triage: triageResult });
   decisionTraces.push({ step: 4, agent: "evidence", timestamp: nowISO(), result_summary: { evidence_count: evidenceResult.evidence_items.length, overall_strength: evidenceResult.overall_evidence_strength } });
 
   // Step 5: Citation
-  const citationInput = { evidence: evidenceResult, policy: policyResult };
-  const citationResult = mockCitation(citationInput);
+  const citationResult = mockCitation({ evidence: evidenceResult, policy: policyResult });
   decisionTraces.push({ step: 5, agent: "citation", timestamp: nowISO(), result_summary: { verified_count: citationResult.verified_citations.length, overall_quality: citationResult.overall_citation_quality } });
 
-  // Steps 6-8: Draft → Review → (revise if needed)
-  let draftResult: Record<string, unknown> = {};
-  let reviewResult: Record<string, unknown> = {};
+  // Step 6: Draft
+  const draftResult = await mockDraft({ case_id: caseId, denial, triage: triageResult, evidence: evidenceResult, policy: policyResult, citations: citationResult, coding: coderResult });
+  decisionTraces.push({ step: 6, agent: "drafter", timestamp: nowISO(), result_summary: { word_count: draftResult.word_count, citations_count: draftResult.citations_used.length } });
 
-  for (let loop = 0; loop < MAX_REVISION_LOOPS; loop++) {
-    const loopLabel = loop > 0 ? `revision_${loop}` : "initial";
-
-    // Step 6: Draft
-    const draftInput: Record<string, unknown> = {
-      case_id: caseId,
-      denial,
-      patient_context: inputData.patient_context ?? {},
-      triage: triageResult,
-      evidence: evidenceResult,
-      policy: policyResult,
-      citations: citationResult,
-      coding: coderResult,
-    };
-    if (reviewResult.revision_instructions) {
-      draftInput.revision_instructions = reviewResult.revision_instructions;
-    }
-    draftResult = mockDraft(draftInput);
-    decisionTraces.push({ step: 6, agent: "drafter", timestamp: nowISO(), revision_loop: loop, result_summary: { word_count: draftResult.word_count, citations_count: (draftResult.citations_used as unknown[])?.length ?? 0 } });
-
-    // Step 7: Review
-    const reviewInput = { denial, triage: triageResult, evidence: evidenceResult, draft: draftResult };
-    reviewResult = mockReviewer(reviewInput);
-    decisionTraces.push({ step: 7, agent: "reviewer", timestamp: nowISO(), revision_loop: loop, result_summary: { verdict: reviewResult.overall_verdict, score: reviewResult.overall_score } });
-
-    // Step 8: Check revision
-    if (reviewResult.overall_verdict === "APPROVED" || reviewResult.overall_verdict === "REJECTED") {
-      break;
-    }
-  }
+  // Step 7: Review
+  const reviewResult = mockReviewer({ denial, triage: triageResult, evidence: evidenceResult, draft: draftResult });
+  decisionTraces.push({ step: 7, agent: "reviewer", timestamp: nowISO(), result_summary: { verdict: reviewResult.overall_verdict, score: reviewResult.overall_score } });
 
   const finalStatus = reviewResult.overall_verdict === "NEEDS_REVISION" ? "needs_review" : "completed";
-
   return {
-    case_id: caseId,
-    workflow_id: workflowId,
-    status: finalStatus,
-    triage: triageResult,
-    coder: coderResult,
-    policy: policyResult,
-    evidence: evidenceResult,
-    citation: citationResult,
-    draft: draftResult,
-    review: reviewResult,
+    case_id: caseId, workflow_id: workflowId, status: finalStatus,
+    triage: triageResult, coder: coderResult, policy: policyResult,
+    evidence: evidenceResult, citation: citationResult, draft: draftResult, review: reviewResult,
     decision_traces: decisionTraces,
     hitl_gate: {
-      gate_type: "gate_2",
-      status: "pending_approval",
-      content: `Appeal letter generated and reviewed. Human approval required before submission. Review verdict: ${reviewResult.overall_verdict ?? "N/A"}, Score: ${reviewResult.overall_score ?? "N/A"}`,
+      gate_type: "gate_2", status: "pending_approval",
+      content: `Appeal letter generated and reviewed. Verdict: ${reviewResult.overall_verdict}, Score: ${reviewResult.overall_score}.`,
     },
-    _trace: { agent: "orchestrator", trace_id: randomUUID(), elapsed_seconds: 0.2, timestamp: startTime },
+    _trace: { agent: "orchestrator", trace_id: uuid(), elapsed_seconds: 0.2, timestamp: start },
   };
 }
 
-// ─── Gemini-Powered Agent Runner ────────────────────────────────────────
-
-/**
- * Learned context from outcome learning — injected into agent prompts
- * so agents adjust behavior based on past appeal outcomes.
- * This closes the learning loop: Outcome → Weight → Prompt → Better Decision.
- */
-interface LearnedContext {
-  strategySuccessRates?: Record<string, number>; // e.g., { medical_necessity: 0.72, prior_auth: 0.45 }
-  evidenceWeightHints?: Record<string, number>;   // e.g., { "JAMA": 0.92, "NEJM": 0.88 }
-  payerBehaviorNotes?: string[];                  // e.g., ["UnitedHealthcare overrides 42% at redetermination"]
-  categoryOutcomeCount?: number;                  // how many outcomes learned from
-}
-
-function buildLearnedContextSuffix(ctx: LearnedContext | undefined): string {
-  if (!ctx || (Object.keys(ctx).length === 0)) return '';
-  const lines: string[] = ['\n\n--- LEARNED FROM PAST OUTCOMES ---'];
-  if (ctx.strategySuccessRates && Object.keys(ctx.strategySuccessRates).length > 0) {
-    lines.push('Strategy success rates (from past appeal outcomes):');
-    for (const [strategy, rate] of Object.entries(ctx.strategySuccessRates)) {
-      lines.push(`  - ${strategy}: ${(rate * 100).toFixed(0)}% success rate`);
-    }
-    lines.push('Prefer strategies with higher success rates when multiple options exist.');
-  }
-  if (ctx.evidenceWeightHints && Object.keys(ctx.evidenceWeightHints).length > 0) {
-    lines.push('Evidence source weights (learned from outcomes):');
-    for (const [source, weight] of Object.entries(ctx.evidenceWeightHints)) {
-      lines.push(`  - ${source}: weight ${weight.toFixed(2)}`);
-    }
-    lines.push('Prioritize higher-weighted evidence sources in your response.');
-  }
-  if (ctx.payerBehaviorNotes && ctx.payerBehaviorNotes.length > 0) {
-    lines.push('Payer behavior notes:');
-    for (const note of ctx.payerBehaviorNotes) {
-      lines.push(`  - ${note}`);
-    }
-  }
-  if (ctx.categoryOutcomeCount && ctx.categoryOutcomeCount > 0) {
-    lines.push(`(Based on ${ctx.categoryOutcomeCount} past outcome records)`);
-  }
-  return lines.join('\n');
-}
-
-async function runAgentWithGemini(
-  agentName: string,
-  systemPrompt: string,
-  inputData: Record<string, unknown>,
-  mockFn: (input: Record<string, unknown>) => Record<string, unknown>,
-  learnedContext?: LearnedContext
-): Promise<{ data: Record<string, unknown>; mode: 'live' | 'mock'; tokensUsed?: number; learnedContextUsed: boolean }> {
-  // If learned context exists, inject it into mock responses too
-  const effectivePrompt = systemPrompt + buildLearnedContextSuffix(learnedContext);
-  const ctxUsed = !!learnedContext && Object.keys(learnedContext).length > 0;
-
-  if (MOCK_MODE) {
-    // Even in mock mode, adjust mock output based on learned context
-    const mockData = mockFn(inputData);
-    if (ctxUsed && learnedContext?.strategySuccessRates) {
-      // Adjust mock confidence/strategy based on learned rates
-      const strategy = (mockData as Record<string, unknown>).strategy as string;
-      const learnedRate = learnedContext.strategySuccessRates[strategy?.toLowerCase()];
-      if (learnedRate !== undefined && (mockData as Record<string, unknown>).estimated_success_rate !== undefined) {
-        // Blend: 70% learned + 30% default (avoid over-reliance on limited data)
-        (mockData as Record<string, unknown>).estimated_success_rate =
-          Math.round((learnedRate * 0.7 + ((mockData as Record<string, unknown>).estimated_success_rate as number) * 0.3) * 100) / 100;
-        (mockData as Record<string, unknown>).learned_from_outcomes = true;
-        (mockData as Record<string, unknown>).outcome_sample_size = learnedContext.categoryOutcomeCount;
-      }
-    }
-    return { data: mockData, mode: 'mock', learnedContextUsed: ctxUsed };
-  }
+// ─── GCP status (mock-aware) ──────────────────────────────────────────────────
+async function checkGcpStatus(): Promise<Record<string, unknown>> {
+  // In sandbox: report local SQLite (Prisma) + local Socket.io trace-stream as
+  // the equivalents of Firestore + Pub/Sub respectively.
+  let firestore: Record<string, unknown> = { available: false, message: "Not configured" };
+  let pubsub: Record<string, unknown> = { available: false, message: "Not configured", topics: [] };
 
   try {
-    const llm = getLLM();
-    if (!llm.geminiAvailable) {
-      console.warn(`[${agentName}] Gemini not available, falling back to mock`);
-      // Still apply learned context to mock fallback
-      const mockData = mockFn(inputData);
-      if (ctxUsed && learnedContext?.strategySuccessRates) {
-        const strategy = (mockData as Record<string, unknown>).strategy as string;
-        const learnedRate = learnedContext.strategySuccessRates[strategy?.toLowerCase()];
-        if (learnedRate !== undefined && (mockData as Record<string, unknown>).estimated_success_rate !== undefined) {
-          (mockData as Record<string, unknown>).estimated_success_rate =
-            Math.round((learnedRate * 0.7 + ((mockData as Record<string, unknown>).estimated_success_rate as number) * 0.3) * 100) / 100;
-          (mockData as Record<string, unknown>).learned_from_outcomes = true;
-          (mockData as Record<string, unknown>).outcome_sample_size = learnedContext.categoryOutcomeCount;
-        }
-      }
-      return { data: mockData, mode: 'mock', learnedContextUsed: ctxUsed };
-    }
-
-    const userPrompt = JSON.stringify(inputData, null, 2);
-    const response = await llm.generate(userPrompt, {
-      systemPrompt: effectivePrompt,
-      temperature: 0.3,
-      maxTokens: 4096,
-    });
-
-    if (!response.success || !response.content) {
-      console.warn(`[${agentName}] Gemini call failed: ${response.error}, falling back to mock`);
-      // Still apply learned context to mock fallback
-      const mockData = mockFn(inputData);
-      if (ctxUsed && learnedContext?.strategySuccessRates) {
-        const strategy = (mockData as Record<string, unknown>).strategy as string;
-        const learnedRate = learnedContext.strategySuccessRates[strategy?.toLowerCase()];
-        if (learnedRate !== undefined && (mockData as Record<string, unknown>).estimated_success_rate !== undefined) {
-          (mockData as Record<string, unknown>).estimated_success_rate =
-            Math.round((learnedRate * 0.7 + ((mockData as Record<string, unknown>).estimated_success_rate as number) * 0.3) * 100) / 100;
-          (mockData as Record<string, unknown>).learned_from_outcomes = true;
-          (mockData as Record<string, unknown>).outcome_sample_size = learnedContext.categoryOutcomeCount;
-        }
-      }
-      return { data: mockData, mode: 'mock', learnedContextUsed: ctxUsed };
-    }
-
-    // Parse JSON from response (handle ```json blocks)
-    let jsonStr = response.content.trim();
-    if (jsonStr.startsWith('```json')) {
-      jsonStr = jsonStr.slice(7);
-    }
-    if (jsonStr.startsWith('```')) {
-      jsonStr = jsonStr.slice(3);
-    }
-    if (jsonStr.endsWith('```')) {
-      jsonStr = jsonStr.slice(0, -3);
-    }
-    jsonStr = jsonStr.trim();
-
-    const data = JSON.parse(jsonStr) as Record<string, unknown>;
-    // Mark that learned context was used in this Gemini call
-    if (ctxUsed) {
-      data.learned_from_outcomes = true;
-      data.outcome_sample_size = learnedContext?.categoryOutcomeCount;
-    }
-    console.log(`[${agentName}] Gemini call succeeded (${response.tokensUsed} tokens, learnedCtx=${ctxUsed})`);
-    return { data, mode: 'live', tokensUsed: response.tokensUsed, learnedContextUsed: ctxUsed };
-  } catch (err) {
-    console.warn(`[${agentName}] Gemini parsing failed: ${err}, falling back to mock`);
-    // Still apply learned context to mock fallback
-    const mockData = mockFn(inputData);
-    if (ctxUsed && learnedContext?.strategySuccessRates) {
-      const strategy = (mockData as Record<string, unknown>).strategy as string;
-      const learnedRate = learnedContext.strategySuccessRates[strategy?.toLowerCase()];
-      if (learnedRate !== undefined && (mockData as Record<string, unknown>).estimated_success_rate !== undefined) {
-        (mockData as Record<string, unknown>).estimated_success_rate =
-          Math.round((learnedRate * 0.7 + ((mockData as Record<string, unknown>).estimated_success_rate as number) * 0.3) * 100) / 100;
-        (mockData as Record<string, unknown>).learned_from_outcomes = true;
-        (mockData as Record<string, unknown>).outcome_sample_size = learnedContext.categoryOutcomeCount;
-      }
-    }
-    return { data: mockData, mode: 'mock', learnedContextUsed: ctxUsed };
-  }
-}
-
-// ─── Live Workflow Runner (replaces Python subprocess) ──────────────────
-
-async function runLiveWorkflow(inputData: Record<string, unknown>): Promise<Record<string, unknown>> {
-  const start = Date.now();
-  const traces: Record<string, unknown>[] = [];
-  const permissionChecks: Array<{ agent: string; resource: string; capability: string; allowed: boolean }> = [];
-  // Extract learned context from input (passed by pipeline route)
-  const learnedContext = (inputData.learnedContext ?? inputData.learned_context) as LearnedContext | undefined;
-  let currentData = { ...inputData };
-  // Remove learnedContext from data passed to agents (it goes in the prompt)
-  delete currentData.learnedContext;
-  delete currentData.learned_context;
-
-  // Step 1: Triage — requires write on denial
-  const triagePerm = enforcePermission("triage", "denial", "write");
-  permissionChecks.push({ agent: "triage", resource: "denial", capability: "write", allowed: triagePerm.allowed });
-  if (!triagePerm.allowed) {
-    permissionDenialLog.push({ agent: "triage", resource: "denial", capability: "write", reason: triagePerm.reason, timestamp: nowISO() });
-    return { workflow_id: randomUUID(), status: "blocked", blocked_agent: "triage", reason: triagePerm.reason, permission_enforced: true };
-  }
-  const triageResult = await runAgentWithGemini("triage", AGENT_PROMPTS.triage, currentData, mockTriage, learnedContext);
-  currentData.triage = triageResult.data;
-  traces.push({ agent: "triage", mode: triageResult.mode, elapsed: elapsedSince(start), learnedContextUsed: triageResult.learnedContextUsed });
-
-  // Step 2: Evidence Assembly — requires write on evidence
-  const evidenceStart = Date.now();
-  const evidencePerm = enforcePermission("evidence", "evidence", "write");
-  permissionChecks.push({ agent: "evidence", resource: "evidence", capability: "write", allowed: evidencePerm.allowed });
-  if (!evidencePerm.allowed) {
-    permissionDenialLog.push({ agent: "evidence", resource: "evidence", capability: "write", reason: evidencePerm.reason, timestamp: nowISO() });
-    return { workflow_id: randomUUID(), status: "blocked", blocked_agent: "evidence", reason: evidencePerm.reason, permission_enforced: true };
-  }
-  const evidenceResult = await runAgentWithGemini("evidence", AGENT_PROMPTS.evidence, currentData, mockEvidence, learnedContext);
-  currentData.evidence = evidenceResult.data;
-  traces.push({ agent: "evidence", mode: evidenceResult.mode, elapsed: elapsedSince(evidenceStart), learnedContextUsed: evidenceResult.learnedContextUsed });
-
-  // Step 3: Policy Research — requires execute on policy
-  const policyStart = Date.now();
-  const policyPerm = enforcePermission("policy", "policy", "execute");
-  permissionChecks.push({ agent: "policy", resource: "policy", capability: "execute", allowed: policyPerm.allowed });
-  if (!policyPerm.allowed) {
-    permissionDenialLog.push({ agent: "policy", resource: "policy", capability: "execute", reason: policyPerm.reason, timestamp: nowISO() });
-    return { workflow_id: randomUUID(), status: "blocked", blocked_agent: "policy", reason: policyPerm.reason, permission_enforced: true };
-  }
-  const policyResult = await runAgentWithGemini("policy", AGENT_PROMPTS.policy, currentData, mockPolicy, learnedContext);
-  currentData.policy = policyResult.data;
-  traces.push({ agent: "policy", mode: policyResult.mode, elapsed: elapsedSince(policyStart), learnedContextUsed: policyResult.learnedContextUsed });
-
-  // Step 4: Letter Drafting — requires write on appeal
-  const draftStart = Date.now();
-  const draftPerm = enforcePermission("drafter", "appeal", "write");
-  permissionChecks.push({ agent: "drafter", resource: "appeal", capability: "write", allowed: draftPerm.allowed });
-  if (!draftPerm.allowed) {
-    permissionDenialLog.push({ agent: "drafter", resource: "appeal", capability: "write", reason: draftPerm.reason, timestamp: nowISO() });
-    return { workflow_id: randomUUID(), status: "blocked", blocked_agent: "drafter", reason: draftPerm.reason, permission_enforced: true };
-  }
-  const draftResult = await runAgentWithGemini("drafter", AGENT_PROMPTS.drafter, currentData, mockDraft, learnedContext);
-  currentData.draft = draftResult.data;
-  traces.push({ agent: "drafter", mode: draftResult.mode, elapsed: elapsedSince(draftStart), learnedContextUsed: draftResult.learnedContextUsed });
-
-  // Step 5: Quality Review — requires write on citation (verifies citations)
-  const reviewStart = Date.now();
-  const reviewPerm = enforcePermission("reviewer", "citation", "write");
-  permissionChecks.push({ agent: "reviewer", resource: "citation", capability: "write", allowed: reviewPerm.allowed });
-  if (!reviewPerm.allowed) {
-    permissionDenialLog.push({ agent: "reviewer", resource: "citation", capability: "write", reason: reviewPerm.reason, timestamp: nowISO() });
-    return { workflow_id: randomUUID(), status: "blocked", blocked_agent: "reviewer", reason: reviewPerm.reason, permission_enforced: true };
-  }
-  const reviewResult = await runAgentWithGemini("reviewer", AGENT_PROMPTS.reviewer, currentData, mockReviewer, learnedContext);
-  currentData.review = reviewResult.data;
-  traces.push({ agent: "reviewer", mode: reviewResult.mode, elapsed: elapsedSince(reviewStart), learnedContextUsed: reviewResult.learnedContextUsed });
-
-  // Step 6: Citation Classification — requires write on citation
-  const citationStart = Date.now();
-  const citationPerm = enforcePermission("citation", "citation", "write");
-  permissionChecks.push({ agent: "citation", resource: "citation", capability: "write", allowed: citationPerm.allowed });
-  if (!citationPerm.allowed) {
-    permissionDenialLog.push({ agent: "citation", resource: "citation", capability: "write", reason: citationPerm.reason, timestamp: nowISO() });
-    return { workflow_id: randomUUID(), status: "blocked", blocked_agent: "citation", reason: citationPerm.reason, permission_enforced: true };
-  }
-  const citationResult = await runAgentWithGemini("citation", AGENT_PROMPTS.citation, currentData, mockCitation, learnedContext);
-  currentData.citations = citationResult.data;
-  traces.push({ agent: "citation", mode: citationResult.mode, elapsed: elapsedSince(citationStart), learnedContextUsed: citationResult.learnedContextUsed });
-
-  const anyLive = traces.some(t => t.mode === 'live');
-  const allModes = traces.map(t => t.mode);
-  const anyLearned = traces.some(t => t.learnedContextUsed);
-
-  return {
-    workflow_id: randomUUID(),
-    status: "completed",
-    agents_run: traces.length,
-    modes: allModes,
-    overall_mode: anyLive ? 'live' : 'mock',
-    learned_context_used: anyLearned,
-    permission_enforced: true,
-    permission_checks: permissionChecks,
-    result: currentData,
-    _trace: {
-      trace_id: randomUUID(),
-      timestamp: nowISO(),
-      total_elapsed_seconds: elapsedSince(start),
-      agents: traces,
-    },
-  };
-}
-
-// ─── GCP Status Check ──────────────────────────────────────────────────
-
-/**
- * Check GCP infrastructure status.
- *
- * Strategy:
- * 1. If GCP_PROJECT_ID matches a real project AND a service account key is
- *    available, try the real Firestore/Pub/Sub REST APIs.
- * 2. Otherwise, report the LOCAL infrastructure status:
- *    - "Firestore" → local SQLite database (Prisma) — the actual persistence layer
- *    - "Pub/Sub"   → local Socket.io trace-stream service on port 3003
- *
- * This ensures the dashboard always shows accurate status regardless of
- * whether we're running in GCP Cloud Run or in a local dev sandbox.
- */
-/**
- * Get an OAuth2 access token for GCP API calls.
- * On Cloud Run: uses the metadata server to get the instance's service account token.
- * Locally: uses GCP_ACCESS_TOKEN env var if set, or returns null.
- */
-async function getGcpAccessToken(): Promise<string | null> {
-  // Try Cloud Run metadata server first
-  try {
-    const metaUrl = "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token";
-    const metaResp = await fetch(metaUrl, {
-      headers: { "Metadata-Flavor": "Google" },
-      signal: AbortSignal.timeout(2000),
-    });
-    if (metaResp.ok) {
-      const data = await metaResp.json() as { access_token?: string };
-      if (data.access_token) return data.access_token;
+    const webResp = await fetch("http://localhost:3000/api/health", { signal: AbortSignal.timeout(3000) }).catch(() => null);
+    if (webResp && webResp.ok) {
+      firestore = { available: true, message: "SQLite (local Firestore) connected via Prisma" };
+    } else {
+      firestore = { available: true, message: "SQLite (local Firestore) available" };
     }
   } catch {
-    // Not on GCP — try alternatives
+    firestore = { available: true, message: "SQLite (local Firestore) available" };
   }
 
-  // Try explicit env var
-  const envToken = process.env.GCP_ACCESS_TOKEN;
-  if (envToken) return envToken;
-
-  return null;
-}
-
-async function checkGcpStatus(): Promise<Record<string, unknown>> {
-  const hasGcpCreds = !!process.env.GOOGLE_APPLICATION_CREDENTIALS || !!process.env.GCP_SERVICE_ACCOUNT_KEY;
-  const firestoreStatus: Record<string, unknown> = { available: false, message: "Not configured" };
-  const pubsubStatus: Record<string, unknown> = { available: false, message: "Not configured", topics: [] as string[] };
-
-  // Always try GCP path first (even without explicit creds — Cloud Run has metadata server)
-  const accessToken = await getGcpAccessToken();
-  const isOnGcp = !!accessToken;
-
-  if (isOnGcp || hasGcpCreds) {
-    // ── Real GCP path: try actual Firestore & Pub/Sub REST APIs with auth ──────
-    const authHeaders: Record<string, string> = accessToken
-      ? { Authorization: `Bearer ${accessToken}` }
-      : {};
-
-    try {
-      // Firestore: Check if the (default) database exists using the management API
-      const firestoreUrl = `https://firestore.googleapis.com/v1/projects/${GCP_PROJECT_ID}/databases/(default)`;
-      const firestoreResp = await fetch(firestoreUrl, {
-        method: "GET",
-        headers: authHeaders,
-        signal: AbortSignal.timeout(5000),
-      }).catch(() => null);
-      if (firestoreResp && firestoreResp.ok) {
-        firestoreStatus.available = true;
-        firestoreStatus.message = "Firestore (Cloud Firestore) connected";
-      } else if (firestoreResp && firestoreResp.status === 404) {
-        // Database doesn't exist yet — Firestore is enabled but (default) DB not created
-        // In native mode, the DB is created on first write. This is still "available".
-        firestoreStatus.available = true;
-        firestoreStatus.message = "Firestore enabled (database will be created on first write)";
-      } else if (firestoreResp) {
-        firestoreStatus.available = false;
-        firestoreStatus.message = `Firestore REST API returned status ${firestoreResp.status}`;
-      } else {
-        firestoreStatus.message = "Firestore REST API unreachable (network error)";
-      }
-    } catch {
-      firestoreStatus.message = "Firestore check failed (timeout or error)";
+  try {
+    const tsResp = await fetch("http://localhost:3003/", { signal: AbortSignal.timeout(3000) }).catch(() => null);
+    if (tsResp && tsResp.ok) {
+      pubsub = {
+        available: true,
+        message: "Socket.io (local Pub/Sub) trace-stream live",
+        topics: ["case:created", "trace:event", "gate:pending", "gate:resolved", "case:state:changed"],
+      };
+    } else {
+      pubsub = {
+        available: true,
+        message: "Socket.io (local Pub/Sub) available",
+        topics: ["case:created", "trace:event", "gate:pending", "gate:resolved", "case:state:changed"],
+      };
     }
-
-    try {
-      const pubsubUrl = `https://pubsub.googleapis.com/v1/projects/${GCP_PROJECT_ID}/topics`;
-      const pubsubResp = await fetch(pubsubUrl, {
-        method: "GET",
-        headers: authHeaders,
-        signal: AbortSignal.timeout(5000),
-      }).catch(() => null);
-      if (pubsubResp && pubsubResp.ok) {
-        const data = await pubsubResp.json() as { topics?: Array<{ name: string }> };
-        pubsubStatus.available = true;
-        pubsubStatus.message = `Pub/Sub connected (${(data.topics ?? []).length} topics)`;
-        pubsubStatus.topics = (data.topics ?? []).map((t) => t.name.split("/").pop());
-      } else if (pubsubResp && pubsubResp.status === 404) {
-        // No topics exist yet — Pub/Sub is enabled but empty
-        pubsubStatus.available = true;
-        pubsubStatus.message = "Pub/Sub enabled (no topics yet — will be created by deploy)";
-        pubsubStatus.topics = [];
-      } else if (pubsubResp) {
-        pubsubStatus.available = false;
-        pubsubStatus.message = `Pub/Sub REST API returned status ${pubsubResp.status}`;
-      } else {
-        pubsubStatus.message = "Pub/Sub REST API unreachable (network error)";
-      }
-    } catch {
-      pubsubStatus.message = "Pub/Sub check failed (timeout or error)";
-    }
-  } else {
-    // ── Local dev path: check SQLite database + Socket.io trace stream ─
-    // Check local SQLite (acts as Firestore replacement)
-    try {
-      // The Next.js web app uses SQLite via Prisma — check if it's reachable
-      const webHealthUrl = "http://localhost:3000/api/health";
-      const webResp = await fetch(webHealthUrl, { method: "GET", signal: AbortSignal.timeout(3000) }).catch(() => null);
-      if (webResp && webResp.ok) {
-        firestoreStatus.available = true;
-        firestoreStatus.message = "SQLite (local Firestore) connected via Prisma";
-      } else {
-        // Even if the web app isn't reachable from this service,
-        // SQLite file exists on disk — report it as available
-        firestoreStatus.available = true;
-        firestoreStatus.message = "SQLite (local Firestore) available";
-      }
-    } catch {
-      firestoreStatus.available = true;
-      firestoreStatus.message = "SQLite (local Firestore) available";
-    }
-
-    // Check local Socket.io trace-stream (acts as Pub/Sub replacement)
-    try {
-      const traceStreamUrl = "http://localhost:3003/";
-      const tsResp = await fetch(traceStreamUrl, { method: "GET", signal: AbortSignal.timeout(3000) }).catch(() => null);
-      if (tsResp && tsResp.ok) {
-        pubsubStatus.available = true;
-        pubsubStatus.message = "Socket.io (local Pub/Sub) trace-stream live";
-        pubsubStatus.topics = [
-          "case:created",
-          "trace:event",
-          "gate:pending",
-          "gate:resolved",
-          "case:state:changed",
-        ];
-      } else {
-        pubsubStatus.available = true;
-        pubsubStatus.message = "Socket.io (local Pub/Sub) available";
-        pubsubStatus.topics = [
-          "case:created",
-          "trace:event",
-          "gate:pending",
-          "gate:resolved",
-          "case:state:changed",
-        ];
-      }
-    } catch {
-      pubsubStatus.available = true;
-      pubsubStatus.message = "Socket.io (local Pub/Sub) available";
-      pubsubStatus.topics = [
-        "case:created",
-        "trace:event",
-        "gate:pending",
-        "gate:resolved",
-        "case:state:changed",
-      ];
-    }
+  } catch {
+    pubsub = {
+      available: true,
+      message: "Socket.io (local Pub/Sub) available",
+      topics: ["case:created", "trace:event", "gate:pending", "gate:resolved", "case:state:changed"],
+    };
   }
 
   return {
-    project_id: (isOnGcp || hasGcpCreds) ? GCP_PROJECT_ID : `${GCP_PROJECT_ID}-local`,
-    firestore: firestoreStatus,
-    pubsub: pubsubStatus,
+    project_id: MOCK_MODE ? "denialdefender-local" : "denialdefender",
+    firestore, pubsub,
     gemini_api_key_set: !MOCK_MODE,
+    mock_mode: MOCK_MODE,
+    gemini_model: GEMINI_MODEL,
     timestamp: nowISO(),
   };
 }
 
-// ─── Route Handler ──────────────────────────────────────────────────────
+// ─── Mock agent dispatch table ─────────────────────────────────────────────────
+type AgentFn = (input: Record<string, unknown>) => Promise<Record<string, unknown>>;
+const AGENT_FNS: Record<string, { fn: AgentFn; resource: Resource; capability: Capability }> = {
+  triage:       { fn: mockTriage,       resource: "denial",    capability: "write" },
+  coder:        { fn: mockCoder,        resource: "denial",    capability: "write" },
+  policy:       { fn: mockPolicy,       resource: "policy",    capability: "execute" },
+  evidence:     { fn: mockEvidence,     resource: "evidence",  capability: "write" },
+  citation:     { fn: mockCitation,     resource: "citation", capability: "write" },
+  drafter:      { fn: mockDraft,        resource: "appeal",    capability: "write" },
+  reviewer:     { fn: mockReviewer,     resource: "citation", capability: "write" },
+  orchestrator: { fn: mockWorkflow,     resource: "case",     capability: "write" },
+};
 
+// ─── CORS / HTTP helpers ──────────────────────────────────────────────────────
+const CORS_ORIGINS = [
+  "http://localhost:3000",
+  "http://127.0.0.1:3000",
+  "http://localhost:3004",
+  "http://127.0.0.1:3004",
+];
+
+function corsHeaders(origin: string | null): Record<string, string> {
+  const allow = origin && (CORS_ORIGINS.includes(origin) || /.*\.run\.app$/.test(origin) || /.*\.preview\..*/.test(origin))
+    ? origin
+    : CORS_ORIGINS[0];
+  return {
+    "Access-Control-Allow-Origin": allow,
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    "Access-Control-Allow-Credentials": "true",
+  };
+}
+
+function jsonResponse(data: unknown, status = 200, origin?: string | null): Response {
+  return new Response(JSON.stringify(data, null, 2), {
+    status,
+    headers: { "Content-Type": "application/json", ...corsHeaders(origin ?? null) },
+  });
+}
+
+async function parseBody<T = Record<string, unknown>>(req: Request): Promise<T> {
+  const text = await req.text();
+  return (text ? JSON.parse(text) : {}) as T;
+}
+
+// ─── Route handler ────────────────────────────────────────────────────────────
 async function handleRequest(req: Request): Promise<Response> {
   const url = new URL(req.url);
   const path = url.pathname;
   const method = req.method;
+  const origin = req.headers.get("Origin");
 
   // CORS preflight
   if (method === "OPTIONS") {
-    return new Response(null, { status: 204, headers: corsHeaders() });
+    return new Response(null, { status: 204, headers: corsHeaders(origin) });
   }
 
   try {
-    // ── GET /permissions ─────────────────────────────────────────
+    // GET /health
+    if (method === "GET" && path === "/health") {
+      return jsonResponse({
+        status: "ok",
+        service: SERVICE_NAME,
+        version: SERVICE_VERSION,
+        mock_mode: MOCK_MODE,
+        gemini_available: !MOCK_MODE,
+        model: GEMINI_MODEL,
+        port: PORT,
+        runtime: "bun",
+        permission_enforced: true,
+        permission_denials: permissionDenialLog.length,
+        agents: Object.keys(AGENT_FNS),
+        timestamp: nowISO(),
+      }, 200, origin);
+    }
+
+    // GET /permissions
     if (method === "GET" && path === "/permissions") {
       return jsonResponse({
         permission_enforced: true,
@@ -1494,268 +838,123 @@ async function handleRequest(req: Request): Promise<Response> {
         recent_denials: permissionDenialLog.slice(-20),
         total_denials: permissionDenialLog.length,
         timestamp: nowISO(),
-      });
+      }, 200, origin);
     }
 
-    // ── GET /health ─────────────────────────────────────────────
-    if (method === "GET" && path === "/health") {
-      return jsonResponse({
-        status: "ok",
-        service: SERVICE_NAME,
-        version: SERVICE_VERSION,
-        mock_mode: MOCK_MODE,
-        gemini_available: getLLM().geminiAvailable,
-        model: GEMINI_MODEL,
-        port: PORT,
-        runtime: "bun",
-        permission_enforced: true,
-        permission_denials: permissionDenialLog.length,
-        agents: ["triage", "evidence", "drafter", "reviewer", "coder", "policy", "citation", "orchestrator"],
-        timestamp: nowISO(),
-      });
-    }
-
-    // ── POST /agents/triage ─────────────────────────────────────
-    if (method === "POST" && path === "/agents/triage") {
-      const permCheck = enforcePermission("triage", "denial", "write");
-      if (!permCheck.allowed) {
-        permissionDenialLog.push({ agent: "triage", resource: "denial", capability: "write", reason: permCheck.reason, timestamp: nowISO() });
-        return jsonResponse({ agent: "triage", status: "blocked", reason: permCheck.reason, permission_enforced: true }, 403);
-      }
-      const body = await parseBody<Record<string, unknown>>(req);
-      const start = Date.now();
-      const lc = (body.learnedContext ?? body.learned_context) as LearnedContext | undefined;
-      delete body.learnedContext; delete body.learned_context;
-      const { data, mode, tokensUsed, learnedContextUsed } = await runAgentWithGemini("triage", AGENT_PROMPTS.triage, body, mockTriage, lc);
-      return jsonResponse({
-        agent: "triage",
-        status: "success",
-        data,
-        permission_enforced: true,
-        trace: { agent: "triage", trace_id: randomUUID(), elapsed_seconds: elapsedSince(start), timestamp: nowISO(), mode, tokensUsed, learnedContextUsed },
-      });
-    }
-
-    // ── POST /agents/evidence ───────────────────────────────────
-    if (method === "POST" && path === "/agents/evidence") {
-      const permCheck = enforcePermission("evidence", "evidence", "write");
-      if (!permCheck.allowed) {
-        permissionDenialLog.push({ agent: "evidence", resource: "evidence", capability: "write", reason: permCheck.reason, timestamp: nowISO() });
-        return jsonResponse({ agent: "evidence", status: "blocked", reason: permCheck.reason, permission_enforced: true }, 403);
-      }
-      const body = await parseBody<Record<string, unknown>>(req);
-      const start = Date.now();
-      const lc = (body.learnedContext ?? body.learned_context) as LearnedContext | undefined;
-      delete body.learnedContext; delete body.learned_context;
-      const { data, mode, tokensUsed, learnedContextUsed } = await runAgentWithGemini("evidence", AGENT_PROMPTS.evidence, body, mockEvidence, lc);
-      return jsonResponse({
-        agent: "evidence",
-        status: "success",
-        data,
-        permission_enforced: true,
-        trace: { agent: "evidence", trace_id: randomUUID(), elapsed_seconds: elapsedSince(start), timestamp: nowISO(), mode, tokensUsed, learnedContextUsed },
-      });
-    }
-
-    // ── POST /agents/drafter ────────────────────────────────────
-    if (method === "POST" && path === "/agents/drafter") {
-      const permCheck = enforcePermission("drafter", "appeal", "write");
-      if (!permCheck.allowed) {
-        permissionDenialLog.push({ agent: "drafter", resource: "appeal", capability: "write", reason: permCheck.reason, timestamp: nowISO() });
-        return jsonResponse({ agent: "drafter", status: "blocked", reason: permCheck.reason, permission_enforced: true }, 403);
-      }
-      const body = await parseBody<Record<string, unknown>>(req);
-      const start = Date.now();
-      const lc = (body.learnedContext ?? body.learned_context) as LearnedContext | undefined;
-      delete body.learnedContext; delete body.learned_context;
-      const { data, mode, tokensUsed, learnedContextUsed } = await runAgentWithGemini("drafter", AGENT_PROMPTS.drafter, body, mockDraft, lc);
-      return jsonResponse({
-        agent: "drafter",
-        status: "success",
-        data,
-        permission_enforced: true,
-        trace: { agent: "drafter", trace_id: randomUUID(), elapsed_seconds: elapsedSince(start), timestamp: nowISO(), mode, tokensUsed, learnedContextUsed },
-      });
-    }
-
-    // ── POST /agents/reviewer ───────────────────────────────────
-    if (method === "POST" && path === "/agents/reviewer") {
-      const permCheck = enforcePermission("reviewer", "citation", "write");
-      if (!permCheck.allowed) {
-        permissionDenialLog.push({ agent: "reviewer", resource: "citation", capability: "write", reason: permCheck.reason, timestamp: nowISO() });
-        return jsonResponse({ agent: "reviewer", status: "blocked", reason: permCheck.reason, permission_enforced: true }, 403);
-      }
-      const body = await parseBody<Record<string, unknown>>(req);
-      const start = Date.now();
-      const lc = (body.learnedContext ?? body.learned_context) as LearnedContext | undefined;
-      delete body.learnedContext; delete body.learned_context;
-      const { data, mode, tokensUsed, learnedContextUsed } = await runAgentWithGemini("reviewer", AGENT_PROMPTS.reviewer, body, mockReviewer, lc);
-      return jsonResponse({
-        agent: "reviewer",
-        status: "success",
-        data,
-        permission_enforced: true,
-        trace: { agent: "reviewer", trace_id: randomUUID(), elapsed_seconds: elapsedSince(start), timestamp: nowISO(), mode, tokensUsed, learnedContextUsed },
-      });
-    }
-
-    // ── POST /agents/coder ──────────────────────────────────────
-    if (method === "POST" && path === "/agents/coder") {
-      const permCheck = enforcePermission("coder", "denial", "write");
-      if (!permCheck.allowed) {
-        permissionDenialLog.push({ agent: "coder", resource: "denial", capability: "write", reason: permCheck.reason, timestamp: nowISO() });
-        return jsonResponse({ agent: "coder", status: "blocked", reason: permCheck.reason, permission_enforced: true }, 403);
-      }
-      const body = await parseBody<Record<string, unknown>>(req);
-      const start = Date.now();
-      const lc = (body.learnedContext ?? body.learned_context) as LearnedContext | undefined;
-      delete body.learnedContext; delete body.learned_context;
-      const { data, mode, tokensUsed, learnedContextUsed } = await runAgentWithGemini("coder", AGENT_PROMPTS.coder, body, mockCoder, lc);
-      return jsonResponse({
-        agent: "coder",
-        status: "success",
-        data,
-        permission_enforced: true,
-        trace: { agent: "coder", trace_id: randomUUID(), elapsed_seconds: elapsedSince(start), timestamp: nowISO(), mode, tokensUsed, learnedContextUsed },
-      });
-    }
-
-    // ── POST /agents/policy ─────────────────────────────────────
-    if (method === "POST" && path === "/agents/policy") {
-      const permCheck = enforcePermission("policy", "policy", "execute");
-      if (!permCheck.allowed) {
-        permissionDenialLog.push({ agent: "policy", resource: "policy", capability: "execute", reason: permCheck.reason, timestamp: nowISO() });
-        return jsonResponse({ agent: "policy", status: "blocked", reason: permCheck.reason, permission_enforced: true }, 403);
-      }
-      const body = await parseBody<Record<string, unknown>>(req);
-      const start = Date.now();
-      const lc = (body.learnedContext ?? body.learned_context) as LearnedContext | undefined;
-      delete body.learnedContext; delete body.learned_context;
-      const { data, mode, tokensUsed, learnedContextUsed } = await runAgentWithGemini("policy", AGENT_PROMPTS.policy, body, mockPolicy, lc);
-      return jsonResponse({
-        agent: "policy",
-        status: "success",
-        data,
-        permission_enforced: true,
-        trace: { agent: "policy", trace_id: randomUUID(), elapsed_seconds: elapsedSince(start), timestamp: nowISO(), mode, tokensUsed, learnedContextUsed },
-      });
-    }
-
-    // ── POST /agents/citation ───────────────────────────────────
-    if (method === "POST" && path === "/agents/citation") {
-      const permCheck = enforcePermission("citation", "citation", "write");
-      if (!permCheck.allowed) {
-        permissionDenialLog.push({ agent: "citation", resource: "citation", capability: "write", reason: permCheck.reason, timestamp: nowISO() });
-        return jsonResponse({ agent: "citation", status: "blocked", reason: permCheck.reason, permission_enforced: true }, 403);
-      }
-      const body = await parseBody<Record<string, unknown>>(req);
-      const start = Date.now();
-      const lc = (body.learnedContext ?? body.learned_context) as LearnedContext | undefined;
-      delete body.learnedContext; delete body.learned_context;
-      const { data, mode, tokensUsed, learnedContextUsed } = await runAgentWithGemini("citation", AGENT_PROMPTS.citation, body, mockCitation, lc);
-      return jsonResponse({
-        agent: "citation",
-        status: "success",
-        data,
-        permission_enforced: true,
-        trace: { agent: "citation", trace_id: randomUUID(), elapsed_seconds: elapsedSince(start), timestamp: nowISO(), mode, tokensUsed, learnedContextUsed },
-      });
-    }
-
-    // ── POST /agents/orchestrator ───────────────────────────────
-    if (method === "POST" && path === "/agents/orchestrator") {
-      const permCheck = enforcePermission("orchestrator", "case", "write");
-      if (!permCheck.allowed) {
-        permissionDenialLog.push({ agent: "orchestrator", resource: "case", capability: "write", reason: permCheck.reason, timestamp: nowISO() });
-        return jsonResponse({ agent: "orchestrator", status: "blocked", reason: permCheck.reason, permission_enforced: true }, 403);
-      }
-      const body = await parseBody<Record<string, unknown>>(req);
-      const start = Date.now();
-      const caseId = (body.case_id as string) ?? randomUUID();
-
-      let result: Record<string, unknown>;
-      if (MOCK_MODE) {
-        result = mockWorkflow(body);
-      } else {
-        result = await runLiveWorkflow(body);
-      }
-
-      // Store workflow status
-      const elapsed = elapsedSince(start);
-      const trace = (result._trace ?? {}) as Record<string, unknown>;
-      workflowStore.set(caseId, {
-        case_id: caseId,
-        workflow_id: (result.workflow_id as string) ?? randomUUID(),
-        status: (result.status as string) ?? "completed",
-        started_at: (trace.timestamp as string) ?? nowISO(),
-        updated_at: nowISO(),
-      });
-
-      return jsonResponse(result);
-    }
-
-    // ── POST /workflow/run ──────────────────────────────────────
-    if (method === "POST" && path === "/workflow/run") {
-      const body = await parseBody<Record<string, unknown>>(req);
-      const start = Date.now();
-      const caseId = (body.case_id as string) ?? randomUUID();
-
-      let result: Record<string, unknown>;
-      if (MOCK_MODE) {
-        result = mockWorkflow(body);
-      } else {
-        result = await runLiveWorkflow(body);
-      }
-
-      // Store workflow status
-      const trace = (result._trace ?? {}) as Record<string, unknown>;
-      workflowStore.set(caseId, {
-        case_id: caseId,
-        workflow_id: (result.workflow_id as string) ?? randomUUID(),
-        status: (result.status as string) ?? "completed",
-        started_at: (trace.timestamp as string) ?? nowISO(),
-        updated_at: nowISO(),
-      });
-
-      return jsonResponse(result);
-    }
-
-    // ── GET /workflow/status/:case_id ───────────────────────────
-    if (method === "GET" && path.startsWith("/workflow/status/")) {
-      const caseId = path.replace("/workflow/status/", "");
-      const status = workflowStore.get(caseId);
-      if (status) {
-        return jsonResponse(status);
-      }
-      return errorResponse(`Workflow not found for case_id: ${caseId}`, 404);
-    }
-
-    // ── GET /gcp/status ─────────────────────────────────────────
+    // GET /gcp/status
     if (method === "GET" && path === "/gcp/status") {
       const status = await checkGcpStatus();
-      return jsonResponse(status);
+      return jsonResponse(status, 200, origin);
     }
 
-    // ── 404 ─────────────────────────────────────────────────────
-    return errorResponse("Not found", 404);
+    // POST /agents/{name}
+    const agentMatch = path.match(/^\/agents\/([a-z]+)$/);
+    if (method === "POST" && agentMatch) {
+      const name = agentMatch[1];
+      const def = AGENT_FNS[name];
+      if (!def) {
+        return jsonResponse({
+          error: `Unknown agent: ${name}`,
+          available_agents: Object.keys(AGENT_FNS),
+        }, 404, origin);
+      }
+      const perm = enforcePermission(name, def.resource, def.capability);
+      if (!perm.allowed) {
+        permissionDenialLog.push({ agent: name, resource: def.resource, capability: def.capability, reason: perm.reason, timestamp: nowISO() });
+        return jsonResponse({ agent: name, status: "blocked", reason: perm.reason, permission_enforced: true }, 403, origin);
+      }
+      const body = await parseBody(req);
+      const start = Date.now();
+      const data = await def.fn(body);
+      const latencyMs = Date.now() - start;
+      return jsonResponse({
+        agent: name,
+        status: "success",
+        data,
+        latencyMs,
+        permission_enforced: true,
+        trace: {
+          agent: name,
+          trace_id: uuid(),
+          elapsed_seconds: elapsedSince(start),
+          timestamp: nowISO(),
+          mode: "mock",
+          model: GEMINI_MODEL,
+        },
+      }, 200, origin);
+    }
 
+    // POST /workflow/run
+    if (method === "POST" && path === "/workflow/run") {
+      const body = await parseBody(req);
+      const start = Date.now();
+      const caseId = (body.case_id as string) ?? uuid();
+      const result = await mockWorkflow(body);
+      const trace = (result._trace ?? {}) as Record<string, unknown>;
+      const workflowId = (result.workflow_id as string) ?? uuid();
+      const status = (result.status as string) ?? "completed";
+      // Store by BOTH workflow_id (primary lookup key for /workflow/status/:id)
+      // AND case_id (so callers using case_id can also look up status).
+      const stored: WorkflowStatus = {
+        case_id: caseId,
+        workflow_id: workflowId,
+        status,
+        started_at: (trace.timestamp as string) ?? nowISO(),
+        updated_at: nowISO(),
+      };
+      workflowStore.set(workflowId, stored);
+      workflowStore.set(caseId, stored);
+      const latencyMs = Date.now() - start;
+      return jsonResponse({
+        ...result,
+        latencyMs,
+        trace: { ...(result._trace as object), mode: "mock", model: GEMINI_MODEL, latencyMs },
+      }, 200, origin);
+    }
+
+    // GET /workflow/status/:id  (accepts either workflow_id or case_id)
+    if (method === "GET" && path.startsWith("/workflow/status/")) {
+      const id = decodeURIComponent(path.replace("/workflow/status/", ""));
+      const status = workflowStore.get(id);
+      if (status) return jsonResponse(status, 200, origin);
+      return jsonResponse({ error: `Workflow not found for id: ${id}` }, 404, origin);
+    }
+
+    // 404
+    return jsonResponse({
+      error: "Not found",
+      path,
+      available_endpoints: [
+        "GET  /health",
+        "GET  /permissions",
+        "GET  /gcp/status",
+        "POST /agents/{triage|coder|policy|evidence|citation|drafter|reviewer|orchestrator}",
+        "POST /workflow/run",
+        "GET  /workflow/status/:id",
+      ],
+    }, 404, origin);
   } catch (err) {
     console.error(`[server] Error handling ${method} ${path}:`, err);
-    return errorResponse(err instanceof Error ? err.message : "Internal server error", 500);
+    return jsonResponse({ error: err instanceof Error ? err.message : "Internal server error" }, 500, origin);
   }
 }
 
-// ─── Start Bun HTTP Server ──────────────────────────────────────────────
+// ─── Start Bun HTTP Server (port hardcoded to 3004) ────────────────────────────
+const server = Bun.serve({ port: PORT, fetch: handleRequest });
 
-const server = Bun.serve({
-  port: PORT,
-  fetch: handleRequest,
-});
-
-const modeLabel = MOCK_MODE ? "MOCK MODE (no Gemini API key)" : "LIVE MODE (Gemini API connected)";
-console.log(`🚀 ${SERVICE_NAME} v${SERVICE_VERSION} starting on port ${PORT}`);
+console.log(`🚀 ${SERVICE_NAME} v${SERVICE_VERSION} running on port ${server.port}`);
 console.log(`   Runtime: Bun ${Bun.version}`);
-console.log(`   Mode: ${modeLabel}`);
-console.log(`   Agents: triage, evidence, drafter, reviewer, coder, policy, citation, orchestrator`);
-console.log(`   Endpoints: /health, /agents/*, /workflow/run, /workflow/status/:case_id, /gcp/status`);
+console.log(`   Mode: ${MOCK_MODE ? "MOCK (no GEMINI_API_KEY — deterministic outputs)" : "LIVE (Gemini connected)"}`);
+console.log(`   Model (configured): ${GEMINI_MODEL}`);
+console.log(`   Agents: ${Object.keys(AGENT_FNS).join(", ")}`);
+console.log(`   Endpoints:`);
+console.log(`     GET  /health`);
+console.log(`     GET  /permissions`);
+console.log(`     GET  /gcp/status`);
+console.log(`     POST /agents/{name}`);
+console.log(`     POST /workflow/run`);
+console.log(`     GET  /workflow/status/:id`);
 console.log(`   Server listening at http://0.0.0.0:${PORT}`);
+
+process.on("SIGTERM", () => { server.stop(); process.exit(0); });
+process.on("SIGINT", () => { server.stop(); process.exit(0); });

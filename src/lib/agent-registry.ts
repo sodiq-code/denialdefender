@@ -51,7 +51,7 @@ export interface AgentRegistration {
     latencyMs: number;
   };
   endpoint: string;       // e.g., "/agents/denial-triage"
-  model: string;          // e.g., "gemini-2.0-flash"
+  model: string;          // e.g., "gemini-3.6-flash"
 }
 
 export interface RegistrySummary {
@@ -129,7 +129,7 @@ const AGENT_CATALOG: AgentRegistration[] = [
     permissions: ['read:cases', 'write:cases', 'read:denials', 'read:appeals', 'read:evidence', 'write:traces', 'read:hitl_gates'],
     healthStatus: 'healthy',
     endpoint: '/agents/patient-advocate',
-    model: 'gemini-2.0-flash',
+    model: 'gemini-3.6-flash',
   },
   {
     name: 'denial-triage',
@@ -166,7 +166,7 @@ const AGENT_CATALOG: AgentRegistration[] = [
     permissions: ['read:cases', 'write:cases', 'read:denials', 'write:denials', 'read:appeals', 'read:evidence', 'write:traces', 'read:hitl_gates', 'write:hitl_gates'],
     healthStatus: 'healthy',
     endpoint: '/agents/denial-triage',
-    model: 'gemini-2.0-flash',
+    model: 'gemini-3.6-flash',
   },
   {
     name: 'policy-research',
@@ -201,7 +201,7 @@ const AGENT_CATALOG: AgentRegistration[] = [
     permissions: ['read:cases', 'read:denials', 'read:execute:policies', 'read:evidence', 'write:evidence', 'read:citations', 'write:citations', 'write:traces'],
     healthStatus: 'healthy',
     endpoint: '/agents/policy-research',
-    model: 'gemini-2.0-flash',
+    model: 'gemini-3.6-flash',
   },
   {
     name: 'evidence-assembly',
@@ -236,7 +236,7 @@ const AGENT_CATALOG: AgentRegistration[] = [
     permissions: ['read:cases', 'read:denials', 'read:evidence', 'write:evidence', 'read:citations', 'write:citations', 'write:traces'],
     healthStatus: 'healthy',
     endpoint: '/agents/evidence-assembly',
-    model: 'gemini-2.0-flash',
+    model: 'gemini-3.6-flash',
   },
   {
     name: 'letter-drafting',
@@ -274,7 +274,7 @@ const AGENT_CATALOG: AgentRegistration[] = [
     permissions: ['read:cases', 'read:denials', 'read:appeals', 'write:appeals', 'read:evidence', 'read:citations', 'read:policies', 'write:traces'],
     healthStatus: 'healthy',
     endpoint: '/agents/letter-drafting',
-    model: 'gemini-2.5-flash',
+    model: 'gemini-3.6-flash',
   },
   {
     name: 'quality-review',
@@ -313,7 +313,7 @@ const AGENT_CATALOG: AgentRegistration[] = [
     permissions: ['read:cases', 'read:denials', 'read:appeals', 'read:evidence', 'read:citations', 'write:citations', 'read:outcomes', 'write:traces', 'read:hitl_gates', 'write:hitl_gates'],
     healthStatus: 'healthy',
     endpoint: '/agents/quality-review',
-    model: 'gemini-2.5-flash',
+    model: 'gemini-3.6-flash',
   },
   {
     name: 'outcome-learning',
@@ -349,7 +349,7 @@ const AGENT_CATALOG: AgentRegistration[] = [
     permissions: ['read:cases', 'read:outcomes', 'write:outcomes', 'read:policies', 'write:policies', 'write:traces'],
     healthStatus: 'healthy',
     endpoint: '/agents/outcome-learning',
-    model: 'gemini-2.0-flash',
+    model: 'gemini-3.6-flash',
   },
   {
     name: 'deadline-tracker',
@@ -388,7 +388,7 @@ const AGENT_CATALOG: AgentRegistration[] = [
     permissions: ['read:cases', 'read:deadlines', 'write:deadlines', 'execute:deadlines', 'write:traces', 'read:hitl_gates'],
     healthStatus: 'healthy',
     endpoint: '/agents/deadline-tracker',
-    model: 'gemini-2.0-flash',
+    model: 'gemini-3.6-flash',
   },
 ];
 

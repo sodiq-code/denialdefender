@@ -1,8 +1,9 @@
 {
-  "name": "agent-fleet",
+  "name": "denialdefender-agent-fleet",
   "version": "1.0.0",
-  "description": "DenialDefender 8-Agent Fleet Service (TypeScript/Bun wrapper around Python agents)",
+  "description": "DenialDefender 8-agent fleet service (TypeScript/Bun, mock mode in sandbox)",
   "scripts": {
-    "dev": "bun --hot index.ts"
+    "dev": "bun --hot index.ts",
+    "start": "bun index.ts"
   }
 }

@@ -67,6 +67,7 @@ export abstract class BaseAgent<TInput, TOutput> {
     } catch (error: unknown) {
       const latencyMs = Date.now() - startMs;
       const msg = error instanceof Error ? error.message : String(error);
+      console.error(`[base-agent] ${this.name}.execute() threw: ${msg}`, error instanceof Error ? error.stack?.split('\n').slice(0, 4).join(' | ') : '');
 
       // Try mock fallback
       try {
@@ -83,7 +84,9 @@ export abstract class BaseAgent<TInput, TOutput> {
             latencyMs: Date.now() - startMs,
           },
         };
-      } catch {
+      } catch (mockErr: unknown) {
+        const mockMsg = mockErr instanceof Error ? mockErr.message : String(mockErr);
+        console.error(`[base-agent] ${this.name}.mockExecute() ALSO threw: ${mockMsg}`, mockErr instanceof Error ? mockErr.stack?.split('\n').slice(0, 4).join(' | ') : '');
         return {
           agent: this.name,
           status: 'error',

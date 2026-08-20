@@ -5,8 +5,7 @@
     "": {
       "name": "denialdefender-trace-stream",
       "dependencies": {
-        "cors": "^2.8.5",
-        "socket.io": "^4.8.1",
+        "socket.io": "^4.8.2",
       },
     },
   },

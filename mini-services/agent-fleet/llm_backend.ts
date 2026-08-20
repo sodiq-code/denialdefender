@@ -11,7 +11,7 @@
 // ─── Configuration from Environment ─────────────────────────────────────
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY ?? "";
-const GEMINI_MODEL = process.env.GEMINI_MODEL ?? "gemini-3.5-flash";
+const GEMINI_MODEL = process.env.GEMINI_MODEL ?? "gemini-3.6-flash";
 const GEMINI_CHECK_TIMEOUT = parseInt(process.env.GEMINI_CHECK_TIMEOUT ?? "5", 10) * 1000;
 const LLM_GENERATION_TIMEOUT = parseInt(process.env.LLM_GENERATION_TIMEOUT ?? "60", 10) * 1000;
 

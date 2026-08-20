@@ -367,6 +367,40 @@ export class DenialTriageAgent extends BaseAgent<DenialTriageInput, TriageResult
       keyFactors: strategyInfo.keyFactors,
     };
 
+    // ── Live Gemini enrichment: ask the fleet's triage agent for a real classification ──
+    const fleetUrl = process.env.AGENT_FLEET_URL;
+    if (fleetUrl && fleetUrl.length > 0) {
+      try {
+        const fleetRes = await fetch(`${fleetUrl}/agents/triage`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            case_id: 'triage-' + Date.now(),
+            denial: {
+              denial_code: denialJson.reasonCode,
+              denial_reason: denialText.slice(0, 500),
+              carrier_name: payer,
+              cpt_code: cptCodes[0] || '',
+              icd10_code: icdCodes[0] || '',
+            },
+          }),
+          signal: AbortSignal.timeout(30000),
+        });
+        if (fleetRes.ok) {
+          const fdata = (await fleetRes.json()).data || {};
+          // Merge live Gemini classification into the local one (keep code extraction).
+          if (fdata.estimated_success_rate != null) classification.estimatedSuccessRate = fdata.estimated_success_rate;
+          if (Array.isArray(fdata.factors) && fdata.factors.length > 0) classification.keyFactors = fdata.factors;
+          if (fdata.classification) classification.isAppealable = String(fdata.classification).toUpperCase().includes('APPEALABLE');
+          if (fdata.reasoning) (classification as { liveReasoning?: string }).liveReasoning = String(fdata.reasoning);
+          // Update confidence to reflect the live assessment.
+          if (fdata.confidence != null) denialJson.confidence = Math.round(Number(fdata.confidence) * 100) / 100;
+        }
+      } catch {
+        // Fleet unreachable — keep the deterministic classification.
+      }
+    }
+
     // Step 10: Build human confirm prompt
     const humanConfirmPrompt = buildHumanConfirmPrompt(denialJson, classification);
 

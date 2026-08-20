@@ -1,63 +1,83 @@
 #!/usr/bin/env bash
+# ══════════════════════════════════════════════════════════════════════════════
 # DenialDefender GCP Infrastructure Bootstrap
-# Day 1 — Provision: Firestore + Cloud SQL pgvector + Pub/Sub + Service Accounts + APIs
-# Region: europe-west1, Firestore: eur3 (multi-region)
+# ══════════════════════════════════════════════════════════════════════════════
+# Day 1 — Provision: Firestore + Pub/Sub + Service Accounts + APIs
+# Region: europe-west1, Firestore: eur3 (EU multi-region)
+#
+# Project:    denialdefender (number 315133452553)
+# Provider:   GEMINI_PROVIDER=vertex_ai
+# Framework:  ADK_FRAMEWORK=google-adk
+# Model:      gemini-3.6-flash (see DEPLOY.md "Model selection")
 #
 # Prerequisites:
 #   1. gcloud CLI authenticated
-#   2. Service account key file at $GOOGLE_APPLICATION_CREDENTIALS
-#   3. Project ID set (project-8a09278a-5593-4289-b2e)
+#   2. Billing enabled on the project
 #
-# Usage: bash infra/gcp/bootstrap.sh
+# Usage:
+#   bash infra/gcp/bootstrap.sh
+#   bash infra/gcp/bootstrap.sh --skip-armor
+# ══════════════════════════════════════════════════════════════════════════════
 
 set -euo pipefail
 
 # ── Configuration ──────────────────────────────────────────────────────────────
-PROJECT_ID="${GCP_PROJECT_ID:-project-8a09278a-5593-4289-b2e}"
+PROJECT_ID="${GCP_PROJECT_ID:-denialdefender}"
 REGION="${GCP_REGION:-europe-west1}"
 FIRESTORE_LOCATION="${FIRESTORE_LOCATION:-eur3}"
-SA_EMAIL="denialdefender@project-8a09278a-5593-4289-b2e.iam.gserviceaccount.com"
+SA_EMAIL="dd-runtime@${PROJECT_ID}.iam.gserviceaccount.com"
+SKIP_ARMOR=false
 
-# Colors for output
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    --skip-armor) SKIP_ARMOR=true; shift ;;
+    --project)    PROJECT_ID="$2"; shift 2 ;;
+    --region)     REGION="$2"; shift 2 ;;
+    *) echo "Unknown arg: $1"; exit 1 ;;
+  esac
+done
+
+# Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
-
 log()  { echo -e "${GREEN}[✓]${NC} $1"; }
 warn() { echo -e "${YELLOW}[!]${NC} $1"; }
 err()  { echo -e "${RED}[✗]${NC} $1"; exit 1; }
 
-# ── Step 1: Enable Required APIs ───────────────────────────────────────────────
+# ── Banner ────────────────────────────────────────────────────────────────────
 echo ""
 echo "═══════════════════════════════════════════════════════════════"
 echo "  DenialDefender GCP Bootstrap — Day 1 Infrastructure"
-echo "  Project: ${PROJECT_ID}  Region: ${REGION}"
+echo "  Project:    ${PROJECT_ID} (315133452553)"
+echo "  Region:     ${REGION}"
+echo "  Firestore:  ${FIRESTORE_LOCATION}"
+echo "  Provider:   GEMINI_PROVIDER=vertex_ai, ADK_FRAMEWORK=google-adk"
+echo "  Model:      gemini-3.6-flash"
 echo "═══════════════════════════════════════════════════════════════"
 echo ""
 
+# ── Step 1: Enable Required APIs ──────────────────────────────────────────────
 echo "── Step 1: Enabling Required APIs ──────────────────────────────"
-
 APIS=(
   "cloudbuild.googleapis.com"
   "run.googleapis.com"
   "firestore.googleapis.com"
-  "sqladmin.googleapis.com"
   "pubsub.googleapis.com"
   "secretmanager.googleapis.com"
   "aiplatform.googleapis.com"
+  "generativelanguage.googleapis.com"
+  "modelarmor.googleapis.com"
   "cloudtrace.googleapis.com"
   "clouderrorreporting.googleapis.com"
-  "cloudprofiler.googleapis.com"
   "iamcredentials.googleapis.com"
   "serviceusage.googleapis.com"
   "cloudresourcemanager.googleapis.com"
   "compute.googleapis.com"
-  "identitytoolkit.googleapis.com"
   "artifactregistry.googleapis.com"
   "sourcerepo.googleapis.com"
 )
-
 for api in "${APIS[@]}"; do
   echo "  Enabling ${api}..."
   gcloud services enable "${api}" --project="${PROJECT_ID}" --quiet 2>/dev/null || warn "Failed to enable ${api} (may already be enabled)"
@@ -66,100 +86,52 @@ log "All APIs enabled"
 
 # ── Step 2: Create Firestore Database ─────────────────────────────────────────
 echo ""
-echo "── Step 2: Creating Firestore Database ────────────────────────"
-echo "  Location: ${FIRESTORE_LOCATION} (multi-region for europe-west1)"
-
+echo "── Step 2: Creating Firestore Database ───────────────────────────"
+echo "  Location: ${FIRESTORE_LOCATION} (EU multi-region for europe-west1)"
 gcloud firestore databases create \
   --location="${FIRESTORE_LOCATION}" \
   --type=firestore-native \
   --project="${PROJECT_ID}" 2>/dev/null || warn "Firestore may already exist"
-
 log "Firestore database ready at ${FIRESTORE_LOCATION}"
 
-# ── Step 3: Create Cloud SQL pgvector Instance ────────────────────────────────
+# ── Step 3: Create Pub/Sub Topics ─────────────────────────────────────────────
 echo ""
-echo "── Step 3: Creating Cloud SQL (PostgreSQL + pgvector) ──────────"
-echo "  Instance: denialdefender-pg  Region: ${REGION}"
-
-gcloud sql instances create denialdefender-pg \
-  --database-version=POSTGRES_16 \
-  --tier=db-f1-micro \
-  --edition=ENTERPRISE \
-  --region="${REGION}" \
-  --storage-type=SSD \
-  --storage-size=10GB \
-  --project="${PROJECT_ID}" \
-  --database-flags=max_connections=200 2>/dev/null || warn "Cloud SQL instance may already exist (requires billing)"
-
-# Create the evidence database
-gcloud sql databases create evidence \
-  --instance=denialdefender-pg \
-  --project="${PROJECT_ID}" 2>/dev/null || warn "Database may already exist"
-
-log "Cloud SQL PostgreSQL instance ready with pgvector support"
-
-# ── Step 4: Apply pgvector Schema ─────────────────────────────────────────────
-echo ""
-echo "── Step 4: Applying pgvector Schema ───────────────────────────"
-
-# The pgvector extension and schema will be applied via cloud-sql-schema.sql
-warn "Run the schema in cloud-sql-schema.sql against the Cloud SQL instance"
-
-# ── Step 5: Create Pub/Sub Topics ─────────────────────────────────────────────
-echo ""
-echo "── Step 5: Creating Pub/Sub Topics ────────────────────────────"
-
+echo "── Step 3: Creating Pub/Sub Topics ──────────────────────────────"
 TOPICS=("decision_trace" "agent_tasks" "case_events" "gate_events")
-
 for topic in "${TOPICS[@]}"; do
   echo "  Creating topic: ${topic}"
   gcloud pubsub topics create "${topic}" --project="${PROJECT_ID}" 2>/dev/null || warn "Topic ${topic} may already exist"
 done
 log "Pub/Sub topics created"
 
-# ── Step 6: Create Service Accounts ───────────────────────────────────────────
+# ── Step 4: Create Service Account ────────────────────────────────────────────
 echo ""
-echo "── Step 6: Creating Service Accounts ──────────────────────────"
+echo "── Step 4: Creating Runtime Service Account ────────────────────"
+gcloud iam service-accounts create dd-runtime \
+  --display-name="DenialDefender Runtime SA" \
+  --project="${PROJECT_ID}" 2>/dev/null || warn "SA dd-runtime may already exist"
+log "Service account: ${SA_EMAIL}"
 
-SAS=(
-  "dd-api-sa:API Gateway service account"
-  "dd-agents-sa:Agent workflow service account"
-  "dd-ingest-sa:Evidence ingest service account"
-  "dd-phi-guard-sa:PHI Guard service account"
-  "dd-eval-sa:Evaluation harness service account"
-)
-
-for sa_def in "${SAS[@]}"; do
-  IFS=':' read -r sa_name sa_desc <<< "${sa_def}"
-  sa_full="${sa_name}@${PROJECT_ID}.iam.gserviceaccount.com"
-  echo "  Creating: ${sa_name}"
-  gcloud iam service-accounts create "${sa_name}" \
-    --display-name="${sa_desc}" \
-    --project="${PROJECT_ID}" 2>/dev/null || warn "SA ${sa_name} may already exist"
-done
-log "Service accounts created"
-
-# ── Step 7: Assign IAM Roles ──────────────────────────────────────────────────
+# ── Step 5: Assign IAM Roles ───────────────────────────────────────────────────
 echo ""
-echo "── Step 7: Assigning IAM Roles ────────────────────────────────"
-
-# Main service account roles
+echo "── Step 5: Assigning IAM Roles ─────────────────────────────────"
 ROLES=(
   "roles/run.admin"
   "roles/iam.serviceAccountUser"
   "roles/datastore.owner"
-  "roles/cloudsql.admin"
   "roles/pubsub.admin"
+  "roles/secretmanager.secretAccessor"
   "roles/secretmanager.admin"
   "roles/aiplatform.user"
   "roles/serviceusage.serviceUsageConsumer"
-  "roles/resourcemanager.projectIamAdmin"
   "roles/cloudtrace.agent"
   "roles/errorreporting.writer"
+  "roles/logging.logWriter"
+  "roles/monitoring.metricWriter"
+  "roles/modelarmor.user"
 )
-
 for role in "${ROLES[@]}"; do
-  echo "  Binding ${role} to ${SA_EMAIL}"
+  echo "  Binding ${role}..."
   gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
     --member="serviceAccount:${SA_EMAIL}" \
     --role="${role}" \
@@ -167,77 +139,38 @@ for role in "${ROLES[@]}"; do
 done
 log "IAM roles assigned"
 
-# ── Step 8: Create Secrets ────────────────────────────────────────────────────
+# ── Step 6: Create Secrets (placeholder values) ───────────────────────────────
 echo ""
-echo "── Step 8: Creating Secrets ───────────────────────────────────"
-
-SECRETS=("gemini-api-key" "npi-registry-key" "phi-guard-config")
-
+echo "── Step 6: Creating Secrets ────────────────────────────────────"
+SECRETS=("gemini-api-key" "phi-guard-config")
 for secret in "${SECRETS[@]}"; do
   echo "  Creating secret: ${secret}"
   echo "placeholder" | gcloud secrets create "${secret}" \
     --data-file=- \
     --project="${PROJECT_ID}" 2>/dev/null || warn "Secret ${secret} may already exist"
 done
-log "Secrets created (populate with real values via gcloud secrets versions add)"
+log "Secrets created — populate with real values via: gcloud secrets versions add"
 
-# ── Step 9: Create Artifact Registry Repository ──────────────────────────────
+# ── Step 7: Create Artifact Registry Repository ──────────────────────────────
 echo ""
-echo "── Step 9: Creating Artifact Registry Repository ────────────"
-
-gcloud artifacts repositories create denialdefender-artifacts \
+echo "── Step 7: Creating Artifact Registry Repository ──────────────"
+gcloud artifacts repositories create "${AR_REPO:-denialdefender}" \
   --repository-format=docker \
   --location="${REGION}" \
   --project="${PROJECT_ID}" \
   --description="DenialDefender container images" 2>/dev/null || warn "Artifact registry may already exist"
+log "Artifact Registry: ${REGION}-docker.pkg.dev/${PROJECT_ID}/denialdefender"
 
-log "Artifact Registry repository created at ${REGION}-docker.pkg.dev/${PROJECT_ID}/denialdefender-artifacts"
-
-# ── Step 10: Grant Cloud Build Permissions ────────────────────────────────────
+# ── Step 8: Model Armor setup (optional) ──────────────────────────────────────
 echo ""
-echo "── Step 10: Granting Cloud Build IAM Permissions ────────────"
-
-# Cloud Build service account
-CLOUD_BUILD_SA="${PROJECT_ID}@cloudbuild.gserviceaccount.com"
-
-# Grant Cloud Run admin to Cloud Build SA
-gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
-  --member="serviceAccount:${CLOUD_BUILD_SA}" \
-  --role="roles/run.admin" \
-  --quiet 2>/dev/null || warn "Role may already be bound"
-
-# Grant IAM service account user to Cloud Build SA
-gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
-  --member="serviceAccount:${CLOUD_BUILD_SA}" \
-  --role="roles/iam.serviceAccountUser" \
-  --quiet 2>/dev/null || warn "Role may already be bound"
-
-# Grant Artifact Registry writer to Cloud Build SA
-gcloud artifacts repositories add-iam-policy-binding denialdefender-artifacts \
-  --location="${REGION}" \
-  --member="serviceAccount:${CLOUD_BUILD_SA}" \
-  --role="roles/artifactregistry.writer" \
-  --project="${PROJECT_ID}" 2>/dev/null || warn "Repository IAM may already be set"
-
-log "Cloud Build service account permissions granted"
-
-# ── Step 11: Create Cloud Build Trigger (GitHub) ──────────────────────────────
-echo ""
-echo "── Step 11: Creating Cloud Build Trigger ────────────────────"
-echo "  NOTE: GitHub connection must be created manually in Cloud Console first"
-echo "  → Cloud Build > Repositories > Connect Repository"
-
-warn "Run the following command AFTER connecting your GitHub repo:"
-echo ""
-echo "  gcloud builds triggers create github \\"
-echo "    --repo-name=denialdefender \\"
-echo "    --repo-owner=sodiq-code \\"
-echo "    --branch-pattern='^main$' \\"
-echo "    --build-config=cloudbuild.yaml \\"
-echo "    --project=${PROJECT_ID}"
-echo ""
-
-log "Cloud Build trigger setup instructions provided"
+echo "── Step 8: Model Armor ─────────────────────────────────────────"
+if [[ "${SKIP_ARMOR}" == true ]]; then
+  warn "Skipping Model Armor (--skip-armor)"
+else
+  echo "  See infra/gcp/model-armor-setup.sh for full Model Armor configuration."
+  echo "  Running quick policy create..."
+  bash "$(dirname "${BASH_SOURCE[0]}")/model-armor-setup.sh" --project "${PROJECT_ID}" --region "${REGION}" 2>/dev/null || warn "Model Armor setup did not complete — run model-armor-setup.sh manually"
+fi
 
 # ── Summary ───────────────────────────────────────────────────────────────────
 echo ""
@@ -245,17 +178,15 @@ echo "════════════════════════�
 echo "  ✅  DenialDefender GCP Bootstrap Complete"
 echo "═══════════════════════════════════════════════════════════════"
 echo ""
-echo "  Project:    ${PROJECT_ID}"
+echo "  Project:    ${PROJECT_ID} (315133452553)"
 echo "  Region:     ${REGION}"
 echo "  Firestore:  ${FIRESTORE_LOCATION}"
-echo "  Cloud SQL:  denialdefender-pg (PostgreSQL 16 + pgvector)"
 echo "  Pub/Sub:    decision_trace, agent_tasks, case_events, gate_events"
+echo "  SA:         ${SA_EMAIL}"
 echo ""
 echo "  Next steps:"
-echo "  1. Apply cloud-sql-schema.sql to the Cloud SQL instance"
-echo "  2. Populate secrets with real values"
-echo "  3. Connect GitHub repo in Cloud Build console"
-echo "  4. Create Cloud Build trigger (see Step 11 command)"
-echo "  5. Set GitHub Actions secrets: GCP_SA_KEY, GCP_PROJECT_ID"
-echo "  6. Run verify_day1_gate.py to confirm the round-trip"
+echo "  1. Populate gemini-api-key secret with your Gemini API key"
+echo "  2. Run: bash infra/gcp/setup-ci.sh   (one-time CI/CD setup)"
+echo "  3. Deploy: bash infra/gcp/cloudrun/deploy.sh"
+echo "  4. Verify: bash infra/seed/verify_day1_gate.py --api-url <web-url>"
 echo ""

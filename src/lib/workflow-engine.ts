@@ -27,6 +27,9 @@ import type {
   DenialInput,
 } from "./agent-fleet";
 
+// Re-export WorkflowRequest so callers can import it from this module.
+export type { WorkflowRequest };
+
 // ─── Configuration ──────────────────────────────────────────────────────
 
 const MAX_REVISION_LOOPS = 3;

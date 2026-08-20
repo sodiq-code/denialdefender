@@ -4,6 +4,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { resumeAfterGate1 } from '@/lib/full-pipeline';
+import { ensureSeeded } from '@/lib/auto-seed';
 
 export async function POST(request: NextRequest) {
   try {
@@ -23,6 +24,11 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
+
+    // Ensure the evidence corpus is seeded (idempotent) — on Cloud Run a cold
+    // instance may serve the resume request without the seeded DB, which would
+    // make policy/evidence/letter agents throw and produce an empty letter.
+    await ensureSeeded();
 
     const result = await resumeAfterGate1(
       caseId,

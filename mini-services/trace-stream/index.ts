@@ -1,315 +1,284 @@
-import { createServer } from "http";
+/**
+ * DenialDefender Trace Stream — Socket.io Server (port 3003 fixed)
+ *
+ * A standalone Bun mini-service that:
+ *  - Serves a health check on GET /
+ *  - Accepts Socket.io client connections (path /socket.io/)
+ *  - Lets clients `subscribe:case` with a caseId to join room `case:<id>`
+ *  - Re-broadcasts trace events to the case room:
+ *      case:created, trace:event, gate:pending, gate:resolved, case:state:changed
+ *  - Exposes an internal POST /emit (no auth) used by the Next.js backend
+ *    to push events: body { event, caseId, payload }
+ *  - CORS: localhost:3000, 127.0.0.1:3000, *.run.app origins, sandbox preview origins
+ *
+ * Frontend connects via the Caddy gateway: io("/?XTransformPort=3003")
+ * Next.js backend calls directly: http://localhost:3003/emit
+ */
+
+import { createServer, IncomingMessage, ServerResponse } from "node:http";
 import { Server, Socket } from "socket.io";
 
-const PORT = parseInt(process.env.PORT || "3003", 10);
+// ─── Configuration ────────────────────────────────────────────────────────────
+// Port is HARDCODED to 3003 — never read from env (per task spec).
+const PORT = 3003;
+const SERVICE_NAME = "trace-stream";
+const SERVICE_VERSION = "1.0.0";
 
-// ─── HTTP Server ───────────────────────────────────────────────
-const httpServer = createServer((req, res) => {
-  // Health check endpoint
+// ─── Allowed CORS Origins ─────────────────────────────────────────────────────
+// Sandbox dev origins
+const DEV_ORIGINS = [
+  "http://localhost:3000",
+  "http://127.0.0.1:3000",
+];
+
+// Sandbox preview origins (the preview panel hosts). Allow any host with these
+// patterns — the sandbox may rotate hostnames.
+const PREVIEW_REGEXES: RegExp[] = [
+  /^https?:\/\/.*\.preview\..*$/,        // generic preview panel
+  /^https?:\/\/.*\.preview\.zai\..*$/,   // z-ai preview
+  /^https?:\/\/.*-preview\..*$/,         // hyphenated preview
+  /^https?:\/\/preview\..*$/,            // preview subdomain
+];
+
+// Cloud Run production origins
+const PROD_REGEXES: RegExp[] = [
+  /^https:\/\/denialdefender-web.*\.run\.app$/,  // any *.run.app Cloud Run URL
+  /^https?:\/\/.*\.run\.app$/,                   // broader *.run.app (per task spec)
+];
+
+function originAllowed(origin: string | undefined): boolean {
+  if (!origin) return true; // allow same-origin / no-origin requests (curl, etc.)
+  if (DEV_ORIGINS.includes(origin)) return true;
+  for (const r of PREVIEW_REGEXES) {
+    if (r.test(origin)) return true;
+  }
+  for (const r of PROD_REGEXES) {
+    if (r.test(origin)) return true;
+  }
+  return false;
+}
+
+// ─── HTTP Server (health check + internal /emit) ──────────────────────────────
+const httpServer = createServer(async (req: IncomingMessage, res: ServerResponse) => {
+  // CORS preflight
+  if (req.method === "OPTIONS") {
+    res.writeHead(204, corsHeaders(req.headers.origin));
+    res.end();
+    return;
+  }
+
+  // GET / — health check
   if (req.method === "GET" && req.url === "/") {
-    res.writeHead(200, { "Content-Type": "application/json" });
-    res.end(
-      JSON.stringify({
-        status: "ok",
-        service: "denialdefender-trace-stream",
-        version: "1.0.0",
-        connectedClients: io.engine.clientsCount,
-        uptime: process.uptime(),
-        timestamp: new Date().toISOString(),
-      })
-    );
+    res.writeHead(200, { "Content-Type": "application/json", ...corsHeaders(req.headers.origin) });
+    res.end(JSON.stringify({
+      status: "ok",
+      service: SERVICE_NAME,
+      version: SERVICE_VERSION,
+      port: PORT,
+      connectedClients: io.engine.clientsCount,
+      uptimeSeconds: Math.round(process.uptime()),
+      timestamp: new Date().toISOString(),
+    }));
+    return;
+  }
+
+  // POST /emit — internal broadcast endpoint (no auth, internal-only by convention)
+  // Body: { event: string, caseId: string, payload: unknown }
+  // Server emits the event to room `case:<caseId>` with the payload.
+  if (req.method === "POST" && req.url === "/emit") {
+    const chunks: Buffer[] = [];
+    for await (const chunk of req) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    const raw = Buffer.concat(chunks).toString("utf8");
+    let body: { event?: string; caseId?: string; payload?: unknown };
+    try {
+      body = JSON.parse(raw);
+    } catch {
+      res.writeHead(400, { "Content-Type": "application/json", ...corsHeaders(req.headers.origin) });
+      res.end(JSON.stringify({ error: "Invalid JSON body" }));
+      return;
+    }
+    const event = (body.event ?? "").toString();
+    const caseId = (body.caseId ?? "").toString();
+    const payload = body.payload ?? {};
+
+    if (!event || !caseId) {
+      res.writeHead(400, { "Content-Type": "application/json", ...corsHeaders(req.headers.origin) });
+      res.end(JSON.stringify({ error: "Missing required fields: event, caseId" }));
+      return;
+    }
+
+    const room = `case:${caseId}`;
+    const enriched = { ...(typeof payload === "object" && payload ? payload : {}), broadcast_at: new Date().toISOString() };
+    io.to(room).emit(event, enriched);
+
+    // For gate:* and case:state:changed events also broadcast a global feed
+    // so dashboards can subscribe to all activity.
+    if (event === "gate:pending" || event === "gate:resolved" || event === "case:state:changed") {
+      io.emit(`${event}:global`, enriched);
+    }
+    if (event === "case:created") {
+      io.emit(event, enriched);
+    }
+
+    console.log(`[EMIT] room=${room} event=${event}`);
+    res.writeHead(200, { "Content-Type": "application/json", ...corsHeaders(req.headers.origin) });
+    res.end(JSON.stringify({ ok: true, room, event, broadcast_at: enriched.broadcast_at }));
     return;
   }
 
   // 404 for everything else
-  res.writeHead(404);
-  res.end("Not Found");
+  res.writeHead(404, { "Content-Type": "application/json", ...corsHeaders(req.headers.origin) });
+  res.end(JSON.stringify({ error: "Not Found", path: req.url }));
 });
 
-// ─── Socket.io Server ─────────────────────────────────────────
+function corsHeaders(origin: string | undefined): Record<string, string> {
+  return {
+    "Access-Control-Allow-Origin": origin && originAllowed(origin) ? origin : DEV_ORIGINS[0],
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    "Access-Control-Allow-Credentials": "true",
+  };
+}
+
+// ─── Socket.io Server ─────────────────────────────────────────────────────────
 const io = new Server(httpServer, {
   cors: {
-    origin: [
-      "http://localhost:3000",
-      "http://127.0.0.1:3000",
-      // Production Cloud Run URLs
-      "https://denialdefender-web-7ffj23k2va-ew.a.run.app",
-      "https://denialdefender-web-315133452553.europe-west1.run.app",
-      // Allow sandbox preview origins
-      /^https?:\/\/.*\.preview\..*$/,
-      // Allow any Cloud Run URL
-      /^https:\/\/denialdefender-web.*\.run\.app$/,
-    ],
+    origin: (origin, cb) => {
+      if (originAllowed(origin)) {
+        cb(null, true);
+      } else {
+        // In development, be permissive — log and still allow (sandbox previews vary)
+        console.warn(`[CORS] Rejecting origin: ${origin ?? "(none)"}`);
+        cb(null, false);
+      }
+    },
     methods: ["GET", "POST"],
     credentials: true,
   },
-  // Transport settings for reliability
   transports: ["websocket", "polling"],
   pingInterval: 25000,
   pingTimeout: 20000,
 });
 
-// ─── Types ────────────────────────────────────────────────────
-interface CaseCreatedPayload {
-  case_id: string;
-  patient_id: string;
-  claim_id: string;
-  created_at: string;
-  initial_state: string;
+// ─── Client Tracking ──────────────────────────────────────────────────────────
+interface ClientState {
+  id: string;
+  subscribedCases: Set<string>;
+  connectedAt: string;
 }
+const connectedClients = new Map<string, ClientState>();
 
-interface TraceEventPayload {
-  case_id: string;
-  trace_id: string;
-  step: number;
-  rule_id: string;
-  rule_name: string;
-  decision: "approve" | "deny" | "escalate" | "review" | "info";
-  confidence: number;
-  reason: string;
-  timestamp: string;
-  metadata?: Record<string, unknown>;
-}
-
-interface GatePendingPayload {
-  case_id: string;
-  gate_id: string;
-  gate_type: string;
-  description: string;
-  assigned_to?: string;
-  priority: "low" | "medium" | "high" | "critical";
-  created_at: string;
-}
-
-interface GateResolvedPayload {
-  case_id: string;
-  gate_id: string;
-  resolved_by: string;
-  resolution: "approved" | "denied" | "escalated" | "deferred";
-  notes?: string;
-  resolved_at: string;
-}
-
-interface CaseStateChangedPayload {
-  case_id: string;
-  from_state: string;
-  to_state: string;
-  transition_reason: string;
-  timestamp: string;
-}
-
-interface SubscribePayload {
-  case_id: string;
-}
-
-// ─── Client Tracking ──────────────────────────────────────────
-const connectedClients = new Map<
-  string,
-  {
-    id: string;
-    subscribedCases: Set<string>;
-    connectedAt: string;
-  }
->();
-
-// ─── Connection Handler ───────────────────────────────────────
+// ─── Connection Handler ───────────────────────────────────────────────────────
 io.on("connection", (socket: Socket) => {
   const clientId = socket.id;
-
-  // Register client
   connectedClients.set(clientId, {
     id: clientId,
     subscribedCases: new Set(),
     connectedAt: new Date().toISOString(),
   });
+  console.log(`[CONNECT] ${clientId} (total: ${connectedClients.size})`);
 
-  console.log(
-    `[CONNECT] Client ${clientId} connected. Total: ${connectedClients.size}`
-  );
-
-  // ── Subscribe to a case room ──────────────────────────────
-  socket.on("subscribe:case", (payload: SubscribePayload) => {
-    const { case_id } = payload;
-    if (!case_id) {
+  // subscribe:case — client joins the case room
+  socket.on("subscribe:case", (payload: { case_id?: string; caseId?: string }) => {
+    const caseId = payload?.case_id ?? payload?.caseId;
+    if (!caseId) {
       socket.emit("error", { message: "case_id is required for subscription" });
       return;
     }
-
-    const room = `case:${case_id}`;
+    const room = `case:${caseId}`;
     socket.join(room);
-
-    const client = connectedClients.get(clientId);
-    if (client) {
-      client.subscribedCases.add(case_id);
-    }
-
-    console.log(
-      `[SUBSCRIBE] Client ${clientId} subscribed to case ${case_id} (room: ${room})`
-    );
-
-    // Confirm subscription to the client
-    socket.emit("subscribed", {
-      case_id,
-      room,
-      timestamp: new Date().toISOString(),
-    });
+    const c = connectedClients.get(clientId);
+    if (c) c.subscribedCases.add(caseId);
+    console.log(`[SUBSCRIBE] ${clientId} → ${room}`);
+    socket.emit("subscribed", { case_id: caseId, room, timestamp: new Date().toISOString() });
   });
 
-  // ── Unsubscribe from a case room ─────────────────────────
-  socket.on("unsubscribe:case", (payload: SubscribePayload) => {
-    const { case_id } = payload;
-    if (!case_id) return;
-
-    const room = `case:${case_id}`;
+  // unsubscribe:case
+  socket.on("unsubscribe:case", (payload: { case_id?: string; caseId?: string }) => {
+    const caseId = payload?.case_id ?? payload?.caseId;
+    if (!caseId) return;
+    const room = `case:${caseId}`;
     socket.leave(room);
+    const c = connectedClients.get(clientId);
+    if (c) c.subscribedCases.delete(caseId);
+    console.log(`[UNSUBSCRIBE] ${clientId} ← ${room}`);
+    socket.emit("unsubscribed", { case_id: caseId, room, timestamp: new Date().toISOString() });
+  });
 
-    const client = connectedClients.get(clientId);
-    if (client) {
-      client.subscribedCases.delete(case_id);
+  // ── Re-broadcast events from clients (so any client can publish) ────────────
+  // Note: in production these come from the Next.js backend via POST /emit,
+  // but we also support clients emitting directly for testing/dev.
+
+  socket.on("case:created", (payload: Record<string, unknown> & { case_id?: string }) => {
+    const enriched = { ...payload, broadcast_at: new Date().toISOString() };
+    io.emit("case:created", enriched);
+    if (payload?.case_id) {
+      io.to(`case:${payload.case_id}`).emit("case:created", enriched);
     }
-
-    console.log(
-      `[UNSUBSCRIBE] Client ${clientId} unsubscribed from case ${case_id}`
-    );
-
-    socket.emit("unsubscribed", {
-      case_id,
-      room,
-      timestamp: new Date().toISOString(),
-    });
   });
 
-  // ── Event: case:created ───────────────────────────────────
-  // Broadcast globally — any connected client may want to know
-  socket.on("case:created", (payload: CaseCreatedPayload) => {
-    console.log(
-      `[CASE:CREATED] case_id=${payload.case_id} patient_id=${payload.patient_id}`
-    );
-
-    // Broadcast to all connected clients
-    io.emit("case:created", {
-      ...payload,
-      broadcast_at: new Date().toISOString(),
-    });
-
-    // Also emit to the specific case room if someone already subscribed
-    const room = `case:${payload.case_id}`;
-    io.to(room).emit("case:created", {
-      ...payload,
-      broadcast_at: new Date().toISOString(),
-    });
+  socket.on("trace:event", (payload: Record<string, unknown> & { case_id?: string }) => {
+    const room = payload?.case_id ? `case:${payload.case_id}` : null;
+    const enriched = { ...payload, broadcast_at: new Date().toISOString() };
+    if (room) {
+      io.to(room).emit("trace:event", enriched);
+    } else {
+      io.emit("trace:event", enriched);
+    }
   });
 
-  // ── Event: trace:event ────────────────────────────────────
-  // Broadcast to the case room only
-  socket.on("trace:event", (payload: TraceEventPayload) => {
-    console.log(
-      `[TRACE:EVENT] case_id=${payload.case_id} step=${payload.step} rule=${payload.rule_name} decision=${payload.decision}`
-    );
-
-    const room = `case:${payload.case_id}`;
-    io.to(room).emit("trace:event", {
-      ...payload,
-      broadcast_at: new Date().toISOString(),
-    });
+  socket.on("gate:pending", (payload: Record<string, unknown> & { case_id?: string }) => {
+    const enriched = { ...payload, broadcast_at: new Date().toISOString() };
+    if (payload?.case_id) {
+      io.to(`case:${payload.case_id}`).emit("gate:pending", enriched);
+    }
+    io.emit("gate:pending:global", enriched);
   });
 
-  // ── Event: gate:pending ───────────────────────────────────
-  // HITL gate needs attention — broadcast to case room + global
-  socket.on("gate:pending", (payload: GatePendingPayload) => {
-    console.log(
-      `[GATE:PENDING] case_id=${payload.case_id} gate_id=${payload.gate_id} type=${payload.gate_type} priority=${payload.priority}`
-    );
-
-    const room = `case:${payload.case_id}`;
-    const enrichedPayload = {
-      ...payload,
-      broadcast_at: new Date().toISOString(),
-    };
-
-    // Broadcast to case room
-    io.to(room).emit("gate:pending", enrichedPayload);
-
-    // Also broadcast globally for dashboards that track all pending gates
-    io.emit("gate:pending:global", enrichedPayload);
+  socket.on("gate:resolved", (payload: Record<string, unknown> & { case_id?: string }) => {
+    const enriched = { ...payload, broadcast_at: new Date().toISOString() };
+    if (payload?.case_id) {
+      io.to(`case:${payload.case_id}`).emit("gate:resolved", enriched);
+    }
+    io.emit("gate:resolved:global", enriched);
   });
 
-  // ── Event: gate:resolved ──────────────────────────────────
-  socket.on("gate:resolved", (payload: GateResolvedPayload) => {
-    console.log(
-      `[GATE:RESOLVED] case_id=${payload.case_id} gate_id=${payload.gate_id} resolution=${payload.resolution}`
-    );
-
-    const room = `case:${payload.case_id}`;
-    const enrichedPayload = {
-      ...payload,
-      broadcast_at: new Date().toISOString(),
-    };
-
-    // Broadcast to case room
-    io.to(room).emit("gate:resolved", enrichedPayload);
-
-    // Global notification
-    io.emit("gate:resolved:global", enrichedPayload);
+  socket.on("case:state:changed", (payload: Record<string, unknown> & { case_id?: string }) => {
+    const enriched = { ...payload, broadcast_at: new Date().toISOString() };
+    if (payload?.case_id) {
+      io.to(`case:${payload.case_id}`).emit("case:state:changed", enriched);
+    }
+    io.emit("case:state:changed:global", enriched);
   });
 
-  // ── Event: case:state:changed ─────────────────────────────
-  socket.on("case:state:changed", (payload: CaseStateChangedPayload) => {
-    console.log(
-      `[CASE:STATE:CHANGED] case_id=${payload.case_id} ${payload.from_state} → ${payload.to_state}`
-    );
-
-    const room = `case:${payload.case_id}`;
-    const enrichedPayload = {
-      ...payload,
-      broadcast_at: new Date().toISOString(),
-    };
-
-    // Broadcast to case room
-    io.to(room).emit("case:state:changed", enrichedPayload);
-
-    // Global for dashboard tracking
-    io.emit("case:state:changed:global", enrichedPayload);
-  });
-
-  // ── Ping / keepalive ─────────────────────────────────────
+  // ping / pong keepalive
   socket.on("ping", () => {
     socket.emit("pong", { timestamp: new Date().toISOString() });
   });
 
-  // ── Disconnect ────────────────────────────────────────────
-  socket.on("disconnect", (reason) => {
-    const client = connectedClients.get(clientId);
-    const caseCount = client?.subscribedCases.size ?? 0;
+  socket.on("disconnect", (reason: string) => {
+    const c = connectedClients.get(clientId);
+    const n = c?.subscribedCases.size ?? 0;
     connectedClients.delete(clientId);
-
-    console.log(
-      `[DISCONNECT] Client ${clientId} disconnected (reason: ${reason}). Was subscribed to ${caseCount} cases. Total: ${connectedClients.size}`
-    );
+    console.log(`[DISCONNECT] ${clientId} (reason: ${reason}; was in ${n} case rooms; total: ${connectedClients.size})`);
   });
 });
 
-// ─── Start Server ─────────────────────────────────────────────
+// ─── Start Server (port hardcoded to 3003) ────────────────────────────────────
 httpServer.listen(PORT, () => {
-  console.log(
-    `🚀 DenialDefender Trace Stream server running on port ${PORT}`
-  );
-  console.log(`   Health check: http://localhost:${PORT}/`);
-  console.log(`   Socket.io path: /socket.io/`);
-  console.log(`   CORS: localhost:3000`);
+  console.log(`🚀 DenialDefender trace-stream v${SERVICE_VERSION} running on port ${PORT}`);
+  console.log(`   Health:     GET  http://localhost:${PORT}/`);
+  console.log(`   Emit (int): POST http://localhost:${PORT}/emit  { event, caseId, payload }`);
+  console.log(`   Socket.io:  path /socket.io/  (gateway: io("/?XTransformPort=3003"))`);
+  console.log(`   CORS:       ${DEV_ORIGINS.join(", ")}, *.run.app, preview.*`);
 });
 
-// ─── Graceful Shutdown ────────────────────────────────────────
-process.on("SIGTERM", () => {
-  console.log("[SHUTDOWN] SIGTERM received, closing server...");
+// ─── Graceful Shutdown ────────────────────────────────────────────────────────
+function shutdown(signal: string) {
+  console.log(`[SHUTDOWN] ${signal} received — closing trace-stream`);
   io.close();
   httpServer.close();
   process.exit(0);
-});
-
-process.on("SIGINT", () => {
-  console.log("[SHUTDOWN] SIGINT received, closing server...");
-  io.close();
-  httpServer.close();
-  process.exit(0);
-});
+}
+process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on("SIGINT", () => shutdown("SIGINT"));

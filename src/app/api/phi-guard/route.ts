@@ -9,7 +9,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import {
   runPhiGuard,
   getAllPhiGuardAudit,
-  classifyContent,
 } from '@/lib/phi-guard';
 
 export async function POST(req: NextRequest) {

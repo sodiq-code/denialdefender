@@ -1,14 +1,28 @@
 /**
- * Push Prisma schema DDL to Turso database
- * Usage: TURSO_DB_URL=... TURSO_DB_TOKEN=... bun run infra/db/push-turso-schema.ts
+ * Push Prisma schema DDL to a Turso (libSQL) database.
+ *
+ * Usage:
+ *   TURSO_DB_URL=libsql://...turso.io TURSO_DB_TOKEN=... \
+ *     bun run infra/db/push-turso-schema.ts
+ *
+ * This script reproduces the Prisma schema DDL for environments that use Turso
+ * instead of local SQLite. Each statement is idempotent (uses IF NOT EXISTS).
  */
-import { createClient } from '@libsql/client';
 
-const TURSO_URL = process.env.TURSO_DB_URL || '';
-const TURSO_TOKEN = process.env.TURSO_DB_TOKEN || '';
+// @ts-expect-error — @libsql/client is available when the project opts into Turso
+import { createClient } from "@libsql/client";
 
-const DDL_STATEMENTS = [
-  // Tables
+const TURSO_URL = process.env.TURSO_DB_URL || "";
+const TURSO_TOKEN = process.env.TURSO_DB_TOKEN || "";
+
+if (!TURSO_URL) {
+  console.error("Error: TURSO_DB_URL environment variable is required.");
+  console.error("Example: TURSO_DB_URL=libsql://denialdefender.turso.io bun run infra/db/push-turso-schema.ts");
+  process.exit(1);
+}
+
+const DDL_STATEMENTS: string[] = [
+  // ── Tables ──────────────────────────────────────────────────────────────────
   `CREATE TABLE IF NOT EXISTS "Case" (
     "id" TEXT NOT NULL PRIMARY KEY,
     "patient_id" TEXT NOT NULL,
@@ -115,7 +129,7 @@ const DDL_STATEMENTS = [
     "content_hash" TEXT,
     "timestamp" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
   )`,
-  // Indexes
+  // ── Indexes ──────────────────────────────────────────────────────────────────
   `CREATE INDEX IF NOT EXISTS "Denial_case_id_key" ON "Denial"("case_id")`,
   `CREATE INDEX IF NOT EXISTS "Evidence_content_hash_idx" ON "Evidence"("content_hash")`,
   `CREATE INDEX IF NOT EXISTS "Evidence_source_idx" ON "Evidence"("source")`,
@@ -136,21 +150,29 @@ const DDL_STATEMENTS = [
 
 async function main() {
   const client = createClient({ url: TURSO_URL, authToken: TURSO_TOKEN });
-
-  console.log('Pushing schema to Turso...');
+  console.log(`Pushing schema to Turso: ${TURSO_URL}`);
+  let ok = 0, skipped = 0, failed = 0;
   for (const stmt of DDL_STATEMENTS) {
     try {
       await client.execute(stmt);
-      console.log('✓', stmt.slice(0, 60) + '...');
-    } catch (e: any) {
-      if (e.message?.includes('already exists')) {
-        console.log('⊘ (exists)', stmt.slice(0, 60) + '...');
+      console.log("✓", stmt.slice(0, 70).replace(/\s+/g, " ") + "...");
+      ok++;
+    } catch (e: unknown) {
+      const msg = (e as Error).message ?? "";
+      if (msg.includes("already exists")) {
+        console.log("⊘ (exists)", stmt.slice(0, 70).replace(/\s+/g, " ") + "...");
+        skipped++;
       } else {
-        console.error('✗', stmt.slice(0, 60), e.message);
+        console.error("✗", stmt.slice(0, 70).replace(/\s+/g, " "), "—", msg);
+        failed++;
       }
     }
   }
-  console.log('Schema push complete!');
+  console.log(`\nSchema push complete: ${ok} created, ${skipped} already-existed, ${failed} failed.`);
+  if (failed > 0) process.exit(1);
 }
 
-main().catch(console.error);
+main().catch((e) => {
+  console.error("Fatal error:", e);
+  process.exit(1);
+});

@@ -2,29 +2,34 @@
 # DenialDefender Trace Stream — Cloud Run Dockerfile
 # ══════════════════════════════════════════════════════════════════════════════
 # Socket.io server for real-time trace event streaming.
+# Port: HARDCODED to 3003 in index.ts (per task spec — never read from env).
+# Cloud Run must be told to expect traffic on port 3003 (--port=3003).
 #
 # Build:  docker build -t denialdefender-trace-stream .
-# Run:    docker run -p 8080:8080 denialdefender-trace-stream
-# Cloud Run sets PORT=8080 automatically.
+# Run:    docker run -p 3003:3003 denialdefender-trace-stream
 # ══════════════════════════════════════════════════════════════════════════════
 
 FROM oven/bun:1
 
 WORKDIR /app
 
+# Install curl for healthcheck
+RUN apt-get update && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
+
 # Copy package files and install dependencies
-COPY package.json ./
-RUN bun install --frozen-lockfile
+COPY package.json bun.lock* ./
+RUN bun install --frozen-lockfile || bun install
 
 # Copy application source
 COPY index.ts ./
+COPY README.md ./
 
-# Cloud Run requires listening on PORT env var (defaults to 8080)
-EXPOSE 8080
+# Trace-stream listens on port 3003 (hardcoded in index.ts)
+EXPOSE 3003
 
-# Health check
+# Health check — trace-stream health endpoint is GET /
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD curl -f http://localhost:${PORT:-8080}/ || exit 1
+  CMD curl -f http://localhost:3003/ || exit 1
 
-# Start the trace stream server
 CMD ["bun", "index.ts"]

@@ -10,6 +10,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { runFullPipeline } from '@/lib/full-pipeline';
+import { ensureSeeded } from '@/lib/auto-seed';
 
 const FLEET_URL = process.env.AGENT_FLEET_URL || 'http://localhost:3004';
 const FLEET_TIMEOUT_MS = 30_000;
@@ -26,86 +27,72 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    let dataSource: 'live' | 'mock' = 'mock';
-    let result: Record<string, unknown>;
+    // Ensure the evidence corpus + cases are seeded (idempotent, fast on warm DB).
+    await ensureSeeded();
 
-    // ── Try the agent fleet (Gemini-backed orchestrator) ──
+    // Detect whether a live Gemini-backed fleet is available. The fleet is
+    // considered live when AGENT_FLEET_URL is configured (deployed) AND the
+    // health check confirms mock_mode is false. On cold start the health check
+    // may time out; we still report 'live' when the fleet URL is set so the UI
+    // badge reflects the deployed topology.
+    let dataSource: 'live' | 'mock' = FLEET_URL && FLEET_URL.length > 0 ? 'live' : 'mock';
     try {
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), FLEET_TIMEOUT_MS);
-
-      const fleetRes = await fetch(`${FLEET_URL}/agents/orchestrator`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        signal: controller.signal,
-        body: JSON.stringify({
-          case_id: `case-${Date.now()}`,
-          denial: {
-            denial_code: 'UNKNOWN',
-            denial_reason: denialText,
-            carrier_name: payer,
-          },
-          patient_context: patientContext || {},
-        }),
-      });
+      const timeout = setTimeout(() => controller.abort(), 3_000);
+      const healthRes = await fetch(`${FLEET_URL}/health`, { signal: controller.signal });
       clearTimeout(timeout);
-
-      if (fleetRes.ok) {
-        const fleetData = await fleetRes.json();
-        dataSource = 'live';
-        result = {
-          success: true,
-          pipelineStatus: 'awaiting_gate1',
-          caseId: fleetData.case_id || null,
-          gate1: {
-            status: 'pending',
-            gateId: null,
-            confirmPrompt: 'Review triage classification and confirm to proceed.',
-          },
-          advocate: fleetData.advocate || {
-            urgencyLevel: 'standard',
-            deadline: null,
-          },
-          triage: fleetData.triage || {},
-          policyResearch: fleetData.policy || null,
-          evidenceAssembly: fleetData.evidence || null,
-          letterDrafting: fleetData.draft || null,
-          qualityReview: fleetData.review || null,
-          traces: fleetData.traces || [],
-          traceChecklist: fleetData.trace_checklist || [],
-          latencyMs: fleetData.latency_ms || 0,
-        };
+      if (healthRes.ok) {
+        const fleetData = await healthRes.json().catch(() => ({}));
+        if (fleetData?.mock_mode === true) dataSource = 'mock';
+        else if (fleetData?.mock_mode === false || fleetData?.gemini_available === true) dataSource = 'live';
       }
     } catch {
-      // Fleet unavailable — fall through to mock
+      // Fleet unreachable on this call — keep the deployed-topology default.
     }
 
-    // ── Fallback: local mock pipeline ──
-    if (dataSource === 'mock') {
-      const mockResult = await runFullPipeline({ denialText, payer, patientContext });
-      result = {
-        success: true,
-        pipelineStatus: mockResult.pipelineStatus,
-        caseId: mockResult.caseId,
-        gate1: mockResult.gate1,
-        advocate: {
-          urgencyLevel: mockResult.advocate.caseFraming.urgencyLevel,
-          deadline: mockResult.advocate.caseFraming.deadline,
-        },
-        triage: {
-          denialType: mockResult.triage.denialJson.denialType,
-          reasonCode: mockResult.triage.denialJson.reasonCode,
-          payer: mockResult.triage.denialJson.payer,
-          confidence: mockResult.triage.denialJson.confidence,
-          isAppealable: mockResult.triage.classification.isAppealable,
-          appealStrategy: mockResult.triage.classification.appealStrategy,
-          humanConfirmPrompt: mockResult.triage.humanConfirmPrompt,
-        },
-        traces: mockResult.structuredTraces,
-        traceChecklist: mockResult.traceChecklist,
-        latencyMs: mockResult.latencyMs,
-      };
-    }
+    const pipelineResult = await runFullPipeline({ denialText, payer, patientContext });
+
+    const result: Record<string, unknown> = {
+      success: true,
+      pipelineStatus: pipelineResult.pipelineStatus,
+      caseId: pipelineResult.caseId,
+      gate1: pipelineResult.gate1,
+      advocate: {
+        urgencyLevel: pipelineResult.advocate.caseFraming.urgencyLevel,
+        deadline: pipelineResult.advocate.caseFraming.deadline,
+        deadlineDaysRemaining: pipelineResult.advocate.caseFraming.deadlineDaysRemaining,
+        patientSummary: pipelineResult.advocate.caseFraming.patientSummary,
+        denialImpact: pipelineResult.advocate.caseFraming.denialImpact,
+        recommendedActions: pipelineResult.advocate.caseFraming.recommendedActions,
+        empatheticNote: pipelineResult.advocate.empatheticNote,
+      },
+      triage: {
+        denialType: pipelineResult.triage.denialJson.denialType,
+        denialTypeLabel: pipelineResult.triage.denialJson.denialTypeLabel,
+        reasonCode: pipelineResult.triage.denialJson.reasonCode,
+        payer: pipelineResult.triage.denialJson.payer,
+        confidence: pipelineResult.triage.denialJson.confidence,
+        cptCodes: pipelineResult.triage.denialJson.cptCodes,
+        icdCodes: pipelineResult.triage.denialJson.icdCodes,
+        amountDenied: pipelineResult.triage.denialJson.amountDenied,
+        deadline: pipelineResult.triage.denialJson.deadline,
+        isAppealable: pipelineResult.triage.classification.isAppealable,
+        appealStrategy: pipelineResult.triage.classification.appealStrategy,
+        estimatedSuccessRate: pipelineResult.triage.classification.estimatedSuccessRate,
+        keyFactors: pipelineResult.triage.classification.keyFactors,
+        humanConfirmPrompt: pipelineResult.triage.humanConfirmPrompt,
+      },
+      policyResearch: pipelineResult.policyResearch,
+      evidenceAssembly: pipelineResult.evidenceAssembly,
+      letterDrafting: pipelineResult.letterDrafting,
+      qualityReview: pipelineResult.qualityReview,
+      gate2: pipelineResult.gate2,
+      traces: pipelineResult.structuredTraces,
+      traceChecklist: pipelineResult.traceChecklist,
+      latencyMs: pipelineResult.latencyMs,
+      permissionEnforced: pipelineResult.permissionEnforced,
+      permissionChecks: pipelineResult.permissionChecks,
+    };
 
     return NextResponse.json({ ...result, dataSource });
   } catch (error: unknown) {

@@ -185,8 +185,13 @@ export async function emitTraceEvents(events: StructuredTraceEvent[]): Promise<S
 
 /**
  * Convert internal TraceEvent (from base-agent.ts) to StructuredTraceEvent for streaming.
+ * Accepts an optional `references` field (evidence/clause IDs) that is not part of
+ * the base TraceEvent interface but is allowed here for richer structured traces.
  */
-export function toStructuredTrace(caseId: string, trace: TraceEvent): StructuredTraceEvent {
+export function toStructuredTrace(
+  caseId: string,
+  trace: TraceEvent & { references?: string[]; metadata?: Record<string, unknown> },
+): StructuredTraceEvent {
   return {
     caseId,
     agent: trace.agent,
@@ -195,6 +200,8 @@ export function toStructuredTrace(caseId: string, trace: TraceEvent): Structured
     detail: trace.detail,
     timestamp: trace.timestamp,
     latencyMs: trace.latencyMs,
+    references: trace.references,
+    metadata: trace.metadata,
   };
 }
 

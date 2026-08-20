@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
     }
 
     let dataSource: 'live' | 'mock' = 'mock';
-    let result: Record<string, unknown>;
+    let result: Record<string, unknown> = {};
 
     // ── Try the agent fleet (Gemini-backed) ──
     try {

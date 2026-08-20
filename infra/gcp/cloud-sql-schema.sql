@@ -1,6 +1,8 @@
+-- ══════════════════════════════════════════════════════════════════════════════
 -- DenialDefender Cloud SQL pgvector Schema
 -- PostgreSQL 16 + pgvector extension
 -- Applied to: denialdefender-pg / evidence database
+-- ══════════════════════════════════════════════════════════════════════════════
 
 -- Enable pgvector extension
 CREATE EXTENSION IF NOT EXISTS vector;
@@ -25,11 +27,10 @@ CREATE TABLE IF NOT EXISTS evidence (
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Index for vector similarity search (HNSW for fast approximate nearest neighbor)
+-- HNSW index for fast approximate nearest-neighbor search
 CREATE INDEX IF NOT EXISTS idx_evidence_embedding ON evidence
     USING hnsw (embedding vector_cosine_ops);
 
--- Index for provenance lookups
 CREATE INDEX IF NOT EXISTS idx_evidence_source ON evidence (source, status);
 CREATE INDEX IF NOT EXISTS idx_evidence_hash ON evidence (content_hash);
 
@@ -71,7 +72,7 @@ FROM evidence e
 LEFT JOIN citation c ON c.evidence_id = e.id;
 
 -- ═══════════════════════════════════════════════════════════════
--- Helper: Similarity search function
+-- Helper: Similarity search function (cosine)
 -- ═══════════════════════════════════════════════════════════════
 CREATE OR REPLACE FUNCTION search_evidence(
     query_embedding vector(768),
@@ -111,7 +112,6 @@ $$;
 -- rules_version = '2';
 -- service cloud.firestore {
 --   match /databases/{database}/documents {
---     // Deny all client reads/writes — only service accounts can access
 --     match /{document=**} {
 --       allow read, write: if false;
 --     }

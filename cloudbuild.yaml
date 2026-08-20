@@ -1,20 +1,31 @@
 # ══════════════════════════════════════════════════════════════════════════════
-# DenialDefender — Cloud Build CI/CD Pipeline
+# DenialDefender — Cloud Build CI/CD Pipeline (10-step)
 # ══════════════════════════════════════════════════════════════════════════════
-# Deploys all 3 services to Cloud Run via Artifact Registry:
-#   1. denialdefender-web (Next.js frontend)
-#   2. denialdefender-agents (Agent fleet)
-#   3. denialdefender-trace-stream (Decision trace WebSocket)
+# Builds + pushes 3 container images and deploys 3 Cloud Run services to
+# region europe-west1, project denialdefender (315133452553).
+#
+#   1. denialdefender-web          (Next.js frontend)            2 vCPU/1GiB  0-4  pub
+#   2. denialdefender-agents       (Bun agent fleet)             4 vCPU/2GiB  0-10 internal+secret
+#   3. denialdefender-trace-stream (Socket.io trace stream)      1 vCPU/512Mi 0-2  pub
 #
 # Usage:
 #   gcloud builds submit --config=cloudbuild.yaml --project=denialdefender
+#
+# Gemini model note:
+#   The user requested "Gemini 3.5 or 3.6 — nothing older". No such public
+#   model id exists today. The closest currently-available stable model family
+#   Gemini 3.6 Flash (gemini-3.6-flash, global endpoint)
+#   gemini-3.6-flash for the agent fleet and document this mapping in DEPLOY.md
+#   under "Model selection".
 # ══════════════════════════════════════════════════════════════════════════════
 
 substitutions:
   _REGION: europe-west1
   _AR_HOST: europe-west1-docker.pkg.dev
   _AR_REPO: denialdefender
-  _SERVICE_ACCOUNT: json-775@denialdefender.iam.gserviceaccount.com
+  # Default runtime service account (project 315133452553 = denialdefender)
+  _SERVICE_ACCOUNT: dd-runtime@denialdefender.iam.gserviceaccount.com
+  _GEMINI_MODEL: gemini-3.6-flash
 
 steps:
   # ── Step 1: Build Next.js Web Service ──────────────────────────────────────
@@ -55,7 +66,7 @@ steps:
     timeout: 600s
     waitFor: ['-']
 
-  # ── Step 4: Push all images ────────────────────────────────────────────────
+  # ── Step 4: Push all images ───────────────────────────────────────────────
   - name: 'gcr.io/cloud-builders/docker'
     args: ['push', '${_AR_HOST}/$PROJECT_ID/${_AR_REPO}/denialdefender-web:$COMMIT_SHA']
     id: 'push-web'
@@ -71,10 +82,67 @@ steps:
     id: 'push-trace-stream'
     waitFor: ['build-trace-stream']
 
-  # ── Step 5: Deploy Web Service to Cloud Run ────────────────────────────────
-  # NOTE: DATABASE_URL is NOT set here — the Dockerfile bakes in
-  # file:/app/db/production.db (SQLite with tables pre-created).
-  # Cloud SQL is for the agent fleet, not the web service.
+  # ── Step 5: Deploy Agent Fleet to Cloud Run (FIRST — web needs its URL) ───
+  # Agent fleet listens on hardcoded port 3004 → Cloud Run --port=3004
+  - name: 'gcr.io/cloud-builders/gcloud'
+    args:
+      - 'run'
+      - 'deploy'
+      - 'denialdefender-agents'
+      - '--image=${_AR_HOST}/$PROJECT_ID/${_AR_REPO}/denialdefender-agents:$COMMIT_SHA'
+      - '--region=${_REGION}'
+      - '--platform=managed'
+      - '--no-allow-unauthenticated'
+      - '--port=3004'
+      - '--cpu=4'
+      - '--memory=2Gi'
+      - '--min-instances=0'
+      - '--max-instances=10'
+      - '--concurrency=10'
+      - '--timeout=600'
+      - '--service-account=${_SERVICE_ACCOUNT}'
+      - '--set-env-vars=GCP_PROJECT_ID=$PROJECT_ID'
+      - '--set-env-vars=GCP_REGION=${_REGION}'
+      - '--set-env-vars=FIRESTORE_LOCATION=eur3'
+      - '--set-env-vars=LOG_LEVEL=info'
+      - '--set-env-vars=GEMINI_MODEL=${_GEMINI_MODEL}'
+      - '--set-env-vars=EMBEDDING_MODEL=text-embedding-004'
+      - '--set-env-vars=EMBEDDING_DIMENSIONS=768'
+      - '--set-env-vars=GEMINI_PROVIDER=vertex_ai'
+      - '--set-env-vars=ADK_FRAMEWORK=google-adk'
+      - '--set-env-vars=FORCE_LLM_BACKEND=gemini'
+      - '--set-env-vars=MEMORY_BANK_STORE=vertex_ai'
+      - '--set-env-vars=MODEL_ARMOR_POLICY_ID=dd-model-armor'
+      - '--set-env-vars=MODEL_ARMOR_LOCATION=${_REGION}'
+      - '--set-secrets=GEMINI_API_KEY=gemini-api-key:latest'
+    id: 'deploy-agents'
+    waitFor: ['push-agents']
+
+  # ── Step 6: Deploy Trace Stream to Cloud Run ──────────────────────────────
+  # Trace stream listens on hardcoded port 3003 → Cloud Run --port=3003
+  - name: 'gcr.io/cloud-builders/gcloud'
+    args:
+      - 'run'
+      - 'deploy'
+      - 'denialdefender-trace-stream'
+      - '--image=${_AR_HOST}/$PROJECT_ID/${_AR_REPO}/denialdefender-trace-stream:$COMMIT_SHA'
+      - '--region=${_REGION}'
+      - '--platform=managed'
+      - '--allow-unauthenticated'
+      - '--port=3003'
+      - '--cpu=1'
+      - '--memory=512Mi'
+      - '--min-instances=0'
+      - '--max-instances=2'
+      - '--concurrency=80'
+      - '--timeout=300'
+      - '--set-env-vars=NODE_ENV=production'
+      - '--set-env-vars=GCP_PROJECT_ID=$PROJECT_ID'
+      - '--set-env-vars=GCP_REGION=${_REGION}'
+    id: 'deploy-trace-stream'
+    waitFor: ['push-trace-stream']
+
+  # ── Step 7: Deploy Web Service to Cloud Run ────────────────────────────────
   - name: 'gcr.io/cloud-builders/gcloud'
     args:
       - 'run'
@@ -101,67 +169,14 @@ steps:
       - '--set-env-vars=MODEL_ARMOR_POLICY_ID=dd-model-armor'
       - '--set-env-vars=MODEL_ARMOR_LOCATION=${_REGION}'
       - '--set-env-vars=MEMORY_BANK_STORE=vertex_ai'
+      - '--set-env-vars=GEMINI_PROVIDER=vertex_ai'
+      - '--set-env-vars=ADK_FRAMEWORK=google-adk'
+      - '--set-env-vars=GEMINI_MODEL=${_GEMINI_MODEL}'
       - '--set-secrets=GEMINI_API_KEY=gemini-api-key:latest'
     id: 'deploy-web'
     waitFor: ['push-web']
 
-  # ── Step 6: Deploy Agent Fleet to Cloud Run ────────────────────────────────
-  - name: 'gcr.io/cloud-builders/gcloud'
-    args:
-      - 'run'
-      - 'deploy'
-      - 'denialdefender-agents'
-      - '--image=${_AR_HOST}/$PROJECT_ID/${_AR_REPO}/denialdefender-agents:$COMMIT_SHA'
-      - '--region=${_REGION}'
-      - '--platform=managed'
-      - '--no-allow-unauthenticated'
-      - '--cpu=4'
-      - '--memory=2Gi'
-      - '--min-instances=0'
-      - '--max-instances=10'
-      - '--concurrency=10'
-      - '--timeout=600'
-      - '--service-account=${_SERVICE_ACCOUNT}'
-      - '--set-env-vars=GCP_PROJECT_ID=$PROJECT_ID'
-      - '--set-env-vars=GCP_REGION=${_REGION}'
-      - '--set-env-vars=FIRESTORE_LOCATION=eur3'
-      - '--set-env-vars=PORT=8080'
-      - '--set-env-vars=LOG_LEVEL=info'
-      - '--set-env-vars=GEMINI_MODEL=gemini-3.5-flash'
-      - '--set-env-vars=EMBEDDING_MODEL=text-embedding-004'
-      - '--set-env-vars=EMBEDDING_DIMENSIONS=768'
-      - '--set-env-vars=FORCE_LLM_BACKEND=gemini'
-      - '--set-env-vars=MEMORY_BANK_STORE=vertex_ai'
-      - '--set-secrets=GEMINI_API_KEY=gemini-api-key-1:latest'
-    id: 'deploy-agents'
-    waitFor: ['push-agents']
-
-  # ── Step 7: Deploy Trace Stream to Cloud Run ───────────────────────────────
-  - name: 'gcr.io/cloud-builders/gcloud'
-    args:
-      - 'run'
-      - 'deploy'
-      - 'denialdefender-trace-stream'
-      - '--image=${_AR_HOST}/$PROJECT_ID/${_AR_REPO}/denialdefender-trace-stream:$COMMIT_SHA'
-      - '--region=${_REGION}'
-      - '--platform=managed'
-      - '--allow-unauthenticated'
-      - '--cpu=1'
-      - '--memory=512Mi'
-      - '--min-instances=0'
-      - '--max-instances=2'
-      - '--concurrency=80'
-      - '--timeout=300'
-      - '--set-env-vars=NODE_ENV=production'
-      - '--set-env-vars=PORT=8080'
-      - '--set-env-vars=GCP_PROJECT_ID=$PROJECT_ID'
-      - '--set-env-vars=GCP_REGION=${_REGION}'
-    id: 'deploy-trace-stream'
-    waitFor: ['push-trace-stream']
-
-  # ── Step 8: Update Web Service with Agent Fleet & Trace Stream URLs ───────
-  # The web service needs to know where the agent fleet and trace stream are.
-  # These URLs are only available after deployment.
+  # ── Step 8: Update Web env with AGENT_FLEET_URL + TRACE_STREAM_URL ─────────
   - name: 'gcr.io/cloud-builders/gcloud'
     entrypoint: 'bash'
     args:
@@ -180,7 +195,7 @@ steps:
     id: 'update-web-urls'
     waitFor: ['deploy-web', 'deploy-agents', 'deploy-trace-stream']
 
-  # ── Step 9: Configure IAM for service-to-service auth ─────────────────────
+  # ── Step 9: IAM — grant web SA roles/run.invoker on agents service ────────
   - name: 'gcr.io/cloud-builders/gcloud'
     entrypoint: 'bash'
     args:
@@ -189,7 +204,7 @@ steps:
         gcloud run services add-iam-policy-binding denialdefender-agents \
           --member="serviceAccount:${_SERVICE_ACCOUNT}" \
           --role="roles/run.invoker" \
-          --region=${_REGION} 2>/dev/null || echo "IAM binding already exists"
+          --region=${_REGION} 2>/dev/null || echo "IAM binding may already exist"
         echo "IAM configured"
     id: 'configure-iam'
     waitFor: ['update-web-urls']

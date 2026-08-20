@@ -9,97 +9,83 @@
 ```mermaid
 graph TB
     subgraph Users
-        USER["👤 Case Worker<br/>(Hospital Staff)"]
-        REVIEWER_HUMAN["👤 Human Reviewer<br/>(HITL Gate Approver)"]
+        USER["Case Worker<br/>(Hospital Staff)"]
+        REVIEWER_HUMAN["Human Reviewer<br/>(HITL Gate Approver)"]
     end
 
     subgraph "Google Cloud Run — europe-west1"
-        WEB["🌐 Cloud Run<br/><b>denialdefender-web</b><br/>Next.js 16 + API<br/>Port 3000<br/>2 vCPU / 1 GiB"]
-        AGENTS["🤖 Cloud Run<br/><b>denialdefender-agents</b><br/>Python ADK Fleet<br/>Port 3004<br/>4 vCPU / 2 GiB"]
+        WEB["Cloud Run<br/><b>denialdefender-web</b><br/>Next.js 16 + API<br/>Port 8080<br/>2 vCPU / 1 GiB"]
+        AGENTS["Cloud Run<br/><b>denialdefender-agents</b><br/>Bun agent fleet (8 agents)<br/>Port 8080<br/>4 vCPU / 2 GiB"]
+        TRACE["Cloud Run<br/><b>denialdefender-trace-stream</b><br/>Socket.io<br/>Port 8080<br/>1 vCPU / 512 MiB"]
     end
 
-    subgraph "Agent Fleet (Google ADK)"
-        ORCH["🎯 Orchestrator<br/>Task Routing<br/>HITL Gate Mgmt"]
-        RESEARCHER["🔍 Researcher Agent<br/>Evidence Retrieval<br/>Citation Verification"]
-        DRAFTER["✍️ Drafter Agent<br/>Appeal Letter Gen<br/>Provenance Cards"]
-        REVIEWER_AGENT["📋 Reviewer Agent<br/>Quality Scoring<br/>Compliance Checks"]
-        PHI_GUARD["🛡️ PHI Guard Agent<br/>PII/PHI Detection<br/>SHA-256 Hashing"]
+    subgraph "Agent Fleet (google-adk)"
+        ORCH["Orchestrator<br/>Task Routing<br/>HITL Gate Mgmt"]
+        TRIAGE["Triage Agent<br/>Denial classification"]
+        CODER["Coder Agent<br/>CPT/ICD-10 validation"]
+        POLICY["Policy Agent<br/>Payer policy research"]
+        EVIDENCE["Evidence Agent<br/>Evidence assembly"]
+        CITATION["Citation Agent<br/>Citation verification"]
+        DRAFTER["Drafter Agent<br/>Appeal letter generation"]
+        REVIEWER_AGENT["Reviewer Agent<br/>Quality scoring"]
     end
 
     subgraph "Google Cloud — Data Layer"
-        FIRESTORE["📦 Firestore<br/><b>eur3</b> Multi-Region<br/>Cases · Denials<br/>Traces · HITL Gates"]
-        PUBSUB["📨 Pub/Sub<br/>decision_trace<br/>agent_tasks<br/>case_events<br/>gate_events"]
-        CLOUDSQL["🗄️ Cloud SQL<br/><b>denialdefender-pg</b><br/>PostgreSQL 16<br/>+ pgvector Extension"]
-        SECRET["🔑 Secret Manager<br/>gemini-api-key<br/>phi-guard-config<br/>cloud-sql-conn-string"]
+        FIRESTORE["Firestore<br/><b>eur3</b> Multi-Region<br/>Cases · Denials<br/>Traces · HITL Gates"]
+        PUBSUB["Pub/Sub<br/>decision_trace<br/>agent_tasks<br/>case_events<br/>gate_events"]
+        SECRET["Secret Manager<br/>gemini-api-key<br/>phi-guard-config"]
     end
 
     subgraph "Google Cloud — AI/ML"
-        GEMINI["💎 Gemini 3.5 Flash<br/>(Gemini API Free Tier)<br/>Multimodal + 1M Context<br/>Text Generation + Reasoning"]
-        EMBED["📐 text-embedding-004<br/>768 Dimensions<br/>Cosine Similarity"]
-    end
-
-    subgraph "Real-Time Streaming"
-        WS["⚡ WebSocket<br/>Decision Trace<br/>Live Feed<br/>Port 3003"]
+        GEMINI["Gemini 3.6 Flash<br/>(Vertex AI provider)<br/>google-adk framework<br/>Text generation + reasoning"]
+        EMBED["text-embedding-004<br/>768 Dimensions<br/>Cosine similarity"]
+        ARMOR["Model Armor<br/>dd-model-armor policy<br/>Prompt injection +<br/>Jailbreak detection"]
     end
 
     %% User interactions
     USER -->|"Create Case<br/>View Dashboard"| WEB
     REVIEWER_HUMAN -->|"Approve/Reject<br/>HITL Gate"| WEB
 
-    %% Web → Data
-    WEB -->|"Read/Write<br/>Case Data"| FIRESTORE
-    WEB -->|"Publish<br/>agent_tasks"| PUBSUB
-    WEB -->|"Subscribe<br/>decision_trace"| WS
+    %% Web → Data + WS
+    WEB -->|"Read/Write Case Data"| FIRESTORE
+    WEB -->|"Publish agent_tasks"| PUBSUB
+    WEB -->|"Subscribe trace events"| TRACE
+    WEB -->|"POST /agents/*"| AGENTS
 
     %% Pub/Sub → Agents
     PUBSUB -->|"Push<br/>Subscription"| AGENTS
 
     %% Agent Fleet internal
     AGENTS --- ORCH
-    ORCH -->|"Route Task"| RESEARCHER
+    ORCH -->|"Route Task"| TRIAGE
+    ORCH -->|"Route Task"| CODER
+    ORCH -->|"Route Task"| POLICY
+    ORCH -->|"Route Task"| EVIDENCE
+    ORCH -->|"Route Task"| CITATION
     ORCH -->|"Route Task"| DRAFTER
     ORCH -->|"Route Task"| REVIEWER_AGENT
-    ORCH -->|"Route Task"| PHI_GUARD
-
-    %% Agents → Data
-    RESEARCHER -->|"Similarity Search<br/>vector(768)"| CLOUDSQL
-    DRAFTER -->|"Read Evidence<br/>Citations"| CLOUDSQL
-    REVIEWER_AGENT -->|"Write<br/>Quality Score"| FIRESTORE
-    PHI_GUARD -->|"Hash PHI<br/>Before Storage"| FIRESTORE
 
     %% Agents → AI
-    RESEARCHER -->|"Embed Query"| EMBED
+    TRIAGE -->|"Classify"| GEMINI
     DRAFTER -->|"Generate<br/>Appeal Text"| GEMINI
     REVIEWER_AGENT -->|"Score<br/>Compliance"| GEMINI
-    PHI_GUARD -->|"Detect PHI<br/>in Text"| GEMINI
+    EVIDENCE -->|"Embed Query"| EMBED
+
+    %% Safety shield
+    GEMINI -.->|"Filtered by"| ARMOR
+    EMBED -.->|"Filtered by"| ARMOR
 
     %% Agents → Pub/Sub (trace events)
     AGENTS -->|"Publish<br/>decision_trace"| PUBSUB
     AGENTS -->|"Publish<br/>gate_events"| PUBSUB
 
     %% Streaming
-    PUBSUB -->|"Trace Events"| WS
-    WS -->|"SSE/WebSocket"| WEB
+    PUBSUB -->|"Trace Events"| TRACE
+    TRACE -->|"WebSocket push"| WEB
 
     %% Secrets
     SECRET -.->|"API Key"| GEMINI
-    SECRET -.->|"Config"| PHI_GUARD
-    SECRET -.->|"Conn String"| CLOUDSQL
-
-    %% Styling
-    classDef user fill:#e8f5e9,stroke:#2e7d32,color:#1b5e20
-    classDef cloudrun fill:#fff3e0,stroke:#ef6c00,color:#e65100
-    classDef agent fill:#fce4ec,stroke:#c62828,color:#b71c1c
-    classDef data fill:#e3f2fd,stroke:#1565c0,color:#0d47a1
-    classDef ai fill:#f3e5f5,stroke:#7b1fa2,color:#4a148c
-    classDef stream fill:#e0f7fa,stroke:#00838f,color:#006064
-
-    class USER,REVIEWER_HUMAN user
-    class WEB,AGENTS cloudrun
-    class ORCH,RESEARCHER,DRAFTER,REVIEWER_AGENT,PHI_GUARD agent
-    class FIRESTORE,PUBSUB,CLOUDSQL,SECRET data
-    class GEMINI,EMBED ai
-    class WS stream
+    SECRET -.->|"Config"| ARMOR
 ```
 
 ## Component Details
@@ -108,37 +94,41 @@ graph TB
 
 | Service | Image | Access | CPU / Memory | Concurrency | Scale |
 |---------|-------|--------|--------------|-------------|-------|
-| `denialdefender-web` | `gcr.io/.../denialdefender-web:latest` | Public (unauthenticated) | 2 vCPU / 1 GiB | 80 | 0–4 |
-| `denialdefender-agents` | `gcr.io/.../denialdefender-agents:latest` | Internal only | 4 vCPU / 2 GiB | 10 | 0–10 |
+| `denialdefender-web` | `europe-west1-docker.pkg.dev/.../denialdefender-web:latest` | Public (unauthenticated) | 2 vCPU / 1 GiB | 80 | 0–4 |
+| `denialdefender-agents` | `europe-west1-docker.pkg.dev/.../denialdefender-agents:latest` | Internal only | 4 vCPU / 2 GiB | 10 | 0–10 |
+| `denialdefender-trace-stream` | `europe-west1-docker.pkg.dev/.../trace-stream:latest` | Public (unauthenticated) | 1 vCPU / 512 MiB | 80 | 0–2 |
 
-### Agent Fleet (Google ADK)
+### Agent Fleet (Google ADK — `ADK_FRAMEWORK=google-adk`)
 
-| Agent | Role | Gemini Model | HITL Gate |
-|-------|------|--------------|-----------|
-| **Orchestrator** | Routes tasks, manages workflow state | gemini-3.5-flash | N/A |
-| **Researcher** | Evidence retrieval, citation verification | gemini-3.5-flash + text-embedding-004 | Before evidence use |
-| **Drafter** | Appeal letter generation with provenance cards | gemini-3.5-flash | Before letter finalization |
-| **Reviewer** | Quality scoring, compliance checks | gemini-3.5-flash | Before case submission |
-| **PHI Guard** | PII/PHI detection and SHA-256 hashing | gemini-3.5-flash + Presidio | Before any data storage |
+| Agent | Role | Primary Resource | HITL Gate |
+|-------|------|------------------|-----------|
+| **Orchestrator** | Routes tasks, manages workflow state | case (write) | N/A |
+| **Triage** | Denial classification + strategy | denial (write) | Gate 1 (if NOT_APPEALABLE) |
+| **Coder** | CPT/ICD-10 validation | denial (write) | — |
+| **Policy** | Payer policy research + contradictions | policy (execute) | — |
+| **Evidence** | Evidence assembly + retrieval | evidence (write) | — |
+| **Citation** | Citation verification + provenance | citation (write) | — |
+| **Drafter** | Appeal letter generation | appeal (write) | Gate 2 (before submission) |
+| **Reviewer** | Quality scoring + compliance | citation (write) | — |
 
 ### Data Stores
 
 | Store | Type | Location | Purpose |
 |-------|------|----------|---------|
 | **Firestore** | Document DB | eur3 (multi-region) | Cases, denials, decision traces, HITL gates |
-| **Cloud SQL** | PostgreSQL 16 + pgvector | europe-west1 | Evidence embeddings (768-dim), similarity search |
-| **Secret Manager** | Encrypted store | global | API keys, connection strings, PHI guard config |
+| **Secret Manager** | Encrypted store | global | API keys, configs |
+| **Prisma SQLite (sandbox)** | Relational | local file | Local-dev replacement for Firestore |
 
 ### Pub/Sub Topics
 
 | Topic | Publisher | Subscriber | Purpose |
 |-------|-----------|------------|---------|
 | `agent_tasks` | Web Service | Agent Fleet (push) | Dispatch agent work |
-| `decision_trace` | Agent Fleet | WebSocket Service | Stream trace events to UI |
+| `decision_trace` | Agent Fleet | Trace Stream | Stream trace events to UI |
 | `case_events` | Web Service | Agent Fleet | Case lifecycle events |
 | `gate_events` | Agent Fleet | Web Service | HITL gate state changes |
 
-### HITL Gates (Human-in-the-Loop)
+## HITL Gates (Human-in-the-Loop)
 
 ```mermaid
 stateDiagram-v2
@@ -154,15 +144,25 @@ stateDiagram-v2
     note right of Rejected: Needs revision
 ```
 
-### PHI Guard Pipeline
+### Gate 1 — Triage Escalation
+When the Triage agent classifies a denial as `NOT_APPEALABLE`, the workflow
+pauses and a Gate 1 HITL review is created. A human reviewer decides whether
+to override the triage classification and proceed with the appeal.
+
+### Gate 2 — Letter Approval
+Before the appeal letter is submitted to the payer, a Gate 2 HITL review
+holds the letter for human approval. The reviewer can approve, reject
+(request revision), or escalate.
+
+## PHI Guard Pipeline
 
 ```mermaid
 flowchart LR
-    INPUT["Raw Text<br/>(contains PHI)"] --> DETECT["Presidio + Gemini<br/>PHI Detection"]
+    INPUT["Raw Text<br/>(contains PHI)"] --> DETECT["Pattern + Model<br/>PHI Detection"]
     DETECT --> HASH["SHA-256 Hashing<br/>of PII/PHI spans"]
     HASH --> REPLACE["Replace PHI<br/>with hash tokens"]
-    REPLACE --> STORE["Store Safe Text<br/>in Firestore/CloudSQL"]
-    STORE --> MAP["PHI→Hash Mapping<br/>(encrypted, in-memory only)"]
+    REPLACE --> STORE["Store Safe Text<br/>in Firestore/SQLite"]
+    STORE --> MAP["PHI → Hash mapping<br/>(encrypted, in-memory only)"]
 
     style INPUT fill:#ffcdd2,stroke:#c62828
     style DETECT fill:#fff9c4,stroke:#f9a825
@@ -172,16 +172,16 @@ flowchart LR
     style MAP fill:#e1f5fe,stroke:#0277bd
 ```
 
-### Decision Trace Streaming
+## Decision Trace Sequence
 
 ```mermaid
 sequenceDiagram
-    participant User as 👤 Case Worker
-    participant Web as 🌐 Cloud Run Web
-    participant PS as 📨 Pub/Sub
-    participant Agent as 🤖 Agent Fleet
-    participant WS as ⚡ WebSocket
-    participant FS as 📦 Firestore
+    participant User as Case Worker
+    participant Web as Cloud Run Web
+    participant PS as Pub/Sub
+    participant Agent as Agent Fleet
+    participant TS as Trace Stream
+    participant FS as Firestore
 
     User->>Web: Create Case
     Web->>FS: Write Case (PHI-hashed)
@@ -189,10 +189,10 @@ sequenceDiagram
     PS->>Agent: Push subscription
 
     loop Agent Processing
-        Agent->>Agent: Execute step (Research/Draft/Review)
+        Agent->>Agent: Execute step (Triage / Draft / Review)
         Agent->>PS: Publish decision_trace event
-        PS->>WS: Forward trace event
-        WS->>Web: WebSocket push
+        PS->>TS: Forward trace event
+        TS->>Web: WebSocket push
         Web->>User: Live trace feed update
     end
 
@@ -210,37 +210,44 @@ sequenceDiagram
 | Property | Value |
 |----------|-------|
 | **Project ID** | `denialdefender` |
+| **Project Number** | `315133452553` |
 | **Region** | `europe-west1` |
 | **Firestore Location** | `eur3` (multi-region) |
-| **Service Account** | `json-775@denialdefender.iam.gserviceaccount.com` |
-| **VPC Connector** | `dd-vpc-connector` (Cloud SQL access) |
+| **Runtime Service Account** | `dd-runtime@denialdefender.iam.gserviceaccount.com` |
+| **VPC Connector** | `dd-vpc-connector` |
+| **LLM Provider** | `GEMINI_PROVIDER=vertex_ai` |
+| **ADK Framework** | `ADK_FRAMEWORK=google-adk` |
+| **Gemini Model** | `gemini-3.6-flash` |
 
 ## Deployment Commands
 
 ```bash
-# Full deployment
+# Full deployment (all 3 services)
 bash infra/gcp/cloudrun/deploy.sh
 
-# Web service only
+# Individual service deployment
 bash infra/gcp/cloudrun/deploy.sh --web-only
-
-# Agent fleet only
 bash infra/gcp/cloudrun/deploy.sh --agents-only
+bash infra/gcp/cloudrun/deploy.sh --trace-only
 
-# Apply YAML service definitions
+# Apply Knative Service YAMLs
 gcloud run services replace infra/gcp/cloudrun/nextjs-service.yaml --region europe-west1
 gcloud run services replace infra/gcp/cloudrun/agent-fleet-service.yaml --region europe-west1
+
+# CI/CD (auto on push to main)
+# .github/workflows/deploy.yml
 ```
 
 ## Cost Estimate (Hackathon / Free Tier)
 
 | Resource | Tier | Monthly Cost |
 |----------|------|--------------|
-| Cloud Run (web) | 2 vCPU, 1GiB, 0-4 instances | ~$0 (free tier covers 2M requests) |
-| Cloud Run (agents) | 4 vCPU, 2GiB, 0-10 instances | ~$0 (scale-to-zero when idle) |
-| Firestore | eur3, <1GB reads/writes | ~$0 (free tier) |
-| Cloud SQL | db-f1-micro, 10GB SSD | ~$7-15/mo (smallest tier) |
-| Pub/Sub | 4 topics, low volume | ~$0 (free tier: 10GB/month) |
-| Gemini 3.5 Flash | Gemini API Free Tier | $0 (rate-limited) — $1.50/$9 per 1M tokens (paid) |
-| Secret Manager | 3 secrets | ~$0 (free tier: 6 versions) |
-| **Total** | | **~$7-15/mo** |
+| Cloud Run (web) | 2 vCPU, 1 GiB, 0-4 instances | ~$0 (free tier covers 2M requests) |
+| Cloud Run (agents) | 4 vCPU, 2 GiB, 0-10 instances | ~$0 (scale-to-zero when idle) |
+| Cloud Run (trace-stream) | 1 vCPU, 512 MiB, 0-2 instances | ~$0 (scale-to-zero when idle) |
+| Firestore | eur3, <1 GB reads/writes | ~$0 (free tier) |
+| Pub/Sub | 4 topics, low volume | ~$0 (free tier: 10 GB/month) |
+| Gemini 3.6 Flash | Vertex AI | ~$0 (free tier) — paid: per Vertex AI pricing per 1M tokens |
+| Secret Manager | 2 secrets | ~$0 (free tier: 6 versions) |
+| Model Armor | dd-model-armor policy | ~$0 (free tier: 1,000 requests/month) |
+| **Total** | | **~$0-15/mo** |

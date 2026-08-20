@@ -20,7 +20,11 @@ async function fetchLearnedContext(payer: string, denialCategory: string): Promi
     const strategySuccessRates: Record<string, number> = {};
     const payerBehaviorNotes: string[] = [];
 
-    const patterns = await memoryBank.getLearnedPatterns('strategy_weight', denialCategory, payer);
+    const patterns = await memoryBank.getLearnedPatterns({
+      patternType: 'strategy_weight',
+      denialCategory,
+      payer,
+    });
     for (const pattern of patterns.slice(0, 10)) {
       const data = pattern.data as Record<string, unknown>;
       if (data.strategy && data.successRate) {
@@ -84,7 +88,7 @@ export async function POST(request: NextRequest) {
     }
 
     let dataSource: 'live' | 'mock' = 'mock';
-    let result: Record<string, unknown>;
+    let result: Record<string, unknown> = {};
 
     // ── Fetch learned context from Memory Bank (closes learning loop) ──
     const learnedContext = await fetchLearnedContext(body.payer, 'medical_necessity');

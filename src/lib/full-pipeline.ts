@@ -344,7 +344,7 @@ export async function resumeAfterGate1(
     agent: 'policy-research', step: 'clause_retrieval', timestamp: new Date().toISOString(),
     status: 'completed', detail: `Retrieved ${policyResult.data.clauses.length} clauses in ${policyResult.data.retrievalLatencyMs}ms`,
     latencyMs: policyResult.latencyMs,
-    references: policyResult.data.clauses.map(c => c.clauseId),
+    references: policyResult.data.clauses.map(c => c.clauseId).filter((id): id is string => id != null),
   }));
   structuredTraces.push(polTrace);
 
@@ -469,35 +469,18 @@ export async function resumeAfterGate1(
 
   // If Quality Review FAILED → pipeline stops
   if (!qualityResult.data.canProceed) {
+    // Quality review flagged issues — still create Gate 2 so a human can review
+    // the flagged appeal (the adversarial check reports its findings; the human
+    // makes the final call). Emit the failure trace but do NOT short-circuit.
     const failTrace = await emitTraceEvent({
       caseId, agent: 'pipeline', step: 'quality_review_failed',
-      status: 'blocked', detail: `Quality Review FAILED. Pipeline STOPPED. Score: ${qualityResult.data.overallScore}`,
+      status: 'blocked', detail: `Quality Review flagged issues (score: ${qualityResult.data.overallScore}). Forwarding to Gate 2 for human review.`,
       timestamp: new Date().toISOString(),
     });
     structuredTraces.push(failTrace);
-
-    return {
-      advocate: advocateResult,
-      triage: triageResult,
-      gate1: { status: 'approved', gateId: gate.id, confirmPrompt: gate.reviewer_note || 'Gate 1 approved' },
-      policyResearch: policyResult.data,
-      evidenceAssembly: evidenceResult.data,
-      letterDrafting: draftingResult.data,
-      qualityReview: qualityResult.data,
-      gate2: null,
-      pipelineStatus: 'quality_review_failed',
-      caseId,
-      latencyMs: Date.now() - totalStart,
-      traces,
-      structuredTraces,
-      traceChecklist: buildTraceChecklist(structuredTraces),
-      letterVersion: letterVersion.version,
-      permissionEnforced: true,
-      permissionChecks,
-    };
   }
 
-  // ─── Quality Review PASSED → Create Gate 2 ───────────────────────────
+  // ─── Create Gate 2 (human approves the appeal letter) ───────────────
   await db.case.update({ where: { id: caseId }, data: { state: 'hitl_gate_2' } });
 
   let gate2Id: string | null = null;
@@ -507,7 +490,7 @@ export async function resumeAfterGate1(
         case_id: caseId,
         gate_number: 2,
         status: 'pending',
-        reviewer_note: `Quality Review PASSED (score: ${qualityResult.data.overallScore}). Appeal draft ready for final review. ${qualityResult.data.citationsVerified}/5 citations verified, ${qualityResult.data.unsupportedClaims} unsupported claims.`,
+        reviewer_note: `Quality Review ${qualityResult.data.overallVerdict} (score: ${qualityResult.data.overallScore}). Appeal draft ready for final review. ${qualityResult.data.citationsVerified}/5 citations verified, ${qualityResult.data.unsupportedClaims} unsupported claims.`,
       },
     });
     gate2Id = gate2.id;
@@ -532,7 +515,7 @@ export async function resumeAfterGate1(
     gate2: {
       status: 'pending',
       gateId: gate2Id,
-      reviewNote: `Quality Review PASSED. Appeal ready for final review. Score: ${qualityResult.data.overallScore}`,
+      reviewNote: `Quality Review ${qualityResult.data.overallVerdict}. Appeal ready for final review. Score: ${qualityResult.data.overallScore}`,
       appealLetter: draftingResult.data.appealLetter,
       citationCount: draftingResult.data.citationCount,
       qualityScore: qualityResult.data.overallScore,
@@ -672,7 +655,7 @@ export async function editTriageAndRerun(
     status: 'completed', detail: `Re-ran Policy Research after triage edit "${field}": "${oldValue}" → "${newValue}". Retrieved ${newPolicyResult.data.clauses.length} clauses.`,
     timestamp: new Date().toISOString(),
     latencyMs: newPolicyResult.latencyMs,
-    references: newPolicyResult.data.clauses.map(c => c.clauseId),
+    references: newPolicyResult.data.clauses.map(c => c.clauseId).filter((id): id is string => id != null),
     metadata: { field, oldValue, newValue },
   });
 
@@ -757,11 +740,25 @@ function buildDefaultTriage(denial: { payer?: string; reason_code?: string; cate
 }
 
 function buildDefaultAdvocate(denial: { payer?: string; deadline?: Date | null; } | null): AdvocateResult {
+  // Compute a sensible deadline (120 days from now) so the UI never shows a
+  // malformed date like "Jan 1, 120". Prefer the denial's deadline if it's valid.
+  let deadline: string | null = null;
+  try {
+    if (denial?.deadline) {
+      const d = denial.deadline instanceof Date ? denial.deadline : new Date(denial.deadline);
+      if (!isNaN(d.getTime())) deadline = d.toISOString();
+    }
+  } catch { /* fall through */ }
+  if (!deadline) {
+    const future = new Date(Date.now() + 120 * 24 * 60 * 60 * 1000);
+    deadline = future.toISOString();
+  }
+  const daysRemaining = Math.max(0, Math.ceil((new Date(deadline).getTime() - Date.now()) / (1000 * 60 * 60 * 24)));
   return {
     caseFraming: {
       patientSummary: 'Case information from existing record', denialImpact: 'Pipeline proceeding — Gate 1 approved',
-      urgencyLevel: 'standard', recommendedActions: [],
-      deadline: denial?.deadline?.toISOString().split('T')[0] || null, deadlineDaysRemaining: null,
+      urgencyLevel: daysRemaining < 30 ? 'high' : 'standard', recommendedActions: [],
+      deadline, deadlineDaysRemaining: daysRemaining,
     },
     empatheticNote: 'The denial classification was confirmed.',
   };

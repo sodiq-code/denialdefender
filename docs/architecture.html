@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8">
+<title>DenialDefender Architecture</title>
+<style>
+  :root{
+    --emerald:#047857; --teal:#0f766e; --amber:#b45309; --slate:#1e293b;
+    --bg:#0f1f1c; --card:#15302b; --line:#2d4a44; --txt:#e6f4f1; --muted:#7da89f;
+    --gcp:#047857; --live:#10b981;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);font-family:'Segoe UI',system-ui,-apple-system,sans-serif;color:var(--txt);padding:48px 56px;width:1280px}
+  h1{text-align:center;font-size:30px;font-weight:800;letter-spacing:-.5px;margin-bottom:6px}
+  .sub{text-align:center;color:var(--muted);font-size:14px;margin-bottom:36px}
+  .grid{display:grid;grid-template-columns:1fr 1.2fr 1fr;gap:22px;margin-bottom:22px}
+  .col{display:flex;flex-direction:column;gap:22px}
+  .tier-label{text-align:center;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:10px}
+  .box{background:var(--card);border:1.5px solid var(--line);border-radius:14px;padding:18px 20px;position:relative}
+  .box.glow{box-shadow:0 0 0 1px var(--emerald),0 8px 30px -8px rgba(4,120,87,.4)}
+  .box h3{font-size:15px;font-weight:700;margin-bottom:4px}
+  .box .role{font-size:11px;color:var(--muted);margin-bottom:8px}
+  .badge{display:inline-block;font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px;background:rgba(16,185,129,.15);color:#34d399;border:1px solid rgba(16,185,129,.3)}
+  .badge.amber{background:rgba(180,83,9,.15);color:#fbbf24;border-color:rgba(180,83,9,.3)}
+  .badge.gcp{background:rgba(4,120,87,.2);color:#6ee7b7;border-color:rgba(4,120,87,.4)}
+  .row{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+  .chip{font-size:10px;background:rgba(255,255,255,.06);padding:3px 9px;border-radius:6px;color:var(--muted);border:1px solid var(--line)}
+  .pipeline{display:grid;grid-template-columns:repeat(8,1fr);gap:6px;margin-top:10px}
+  .step{background:rgba(4,120,87,.12);border:1px solid rgba(4,120,87,.35);border-radius:8px;padding:8px 4px;text-align:center}
+  .step .n{font-size:9px;color:var(--muted)}
+  .step .lbl{font-size:9.5px;font-weight:600;color:#6ee7b7;margin-top:2px}
+  .step.gate{background:rgba(180,83,9,.18);border-color:rgba(180,83,9,.5)}
+  .urlbar{text-align:center;margin-top:10px;font-family:'SF Mono',Consolas,monospace;font-size:10px;color:#6ee7b7;background:rgba(4,120,87,.1);border:1px dashed rgba(4,120,87,.4);border-radius:8px;padding:6px}
+  .footer-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:22px;margin-top:22px}
+  .legend{display:flex;gap:18px;justify-content:center;margin-top:28px;font-size:11px;color:var(--muted)}
+  .legend .dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;vertical-align:middle}
+  .live-dot{background:#10b981;box-shadow:0 0 8px #10b981}
+  .gcp-dot{background:#6ee7b7}
+  .state-dot{background:#fbbf24}
+</style></head>
+<body>
+
+<h1>DenialDefender — System Architecture</h1>
+<p class="sub">8-agent ADK fleet · Gemini 3.6 via Vertex AI · 3 Cloud Run services (europe-west1) · human-governed appeal operations</p>
+
+<div class="grid">
+  <div class="col"><div class="tier-label">Client</div></div>
+  <div class="col"><div class="tier-label">Google Cloud Run (europe-west1)</div></div>
+  <div class="col"><div class="tier-label">Google Cloud Services</div></div>
+</div>
+
+<div class="grid">
+  <div class="col">
+    <div class="box glow">
+      <h3>🌐 Browser</h3>
+      <div class="role">Premium emerald/teal UI · 8 tabs</div>
+      <div class="row"><span class="chip">Next.js 16</span><span class="chip">React 19</span><span class="chip">Tailwind 4</span></div>
+      <div class="row"><span class="badge">Dashboard · New Appeal · Cases · Evidence · Trace · Governance · Learning · Ablation</span></div>
+    </div>
+    <div class="box">
+      <h3>🛡️ PHI Guard (front gate)</h3>
+      <div class="role">10-pattern classifier · runs BEFORE model</div>
+      <div class="row"><span class="badge amber">On BLOCK: modelInvocations = 0</span></div>
+    </div>
+  </div>
+
+  <div class="col">
+    <div class="box glow">
+      <h3>🟢 denialdefender-web</h3>
+      <div class="role">Cloud Run · Next.js 16 · 56 API routes · port 8080</div>
+      <div class="row"><span class="badge">2 vCPU / 1 GiB / 0-4</span><span class="badge gcp">*.run.app</span></div>
+      <div style="margin-top:10px">
+        <div style="font-size:11px;font-weight:700;color:#6ee7b7;margin-bottom:6px">8-STEP PIPELINE (ADK)</div>
+        <div class="pipeline">
+          <div class="step"><div class="n">1</div><div class="lbl">Intake</div></div>
+          <div class="step"><div class="n">2</div><div class="lbl">Triage</div></div>
+          <div class="step"><div class="n">3</div><div class="lbl">Ground</div></div>
+          <div class="step"><div class="n">4</div><div class="lbl">Assemble</div></div>
+          <div class="step"><div class="n">5</div><div class="lbl">Draft</div></div>
+          <div class="step"><div class="n">6</div><div class="lbl">Verify</div></div>
+          <div class="step gate"><div class="n">G1</div><div class="lbl">Gate 1</div></div>
+          <div class="step gate"><div class="n">G2</div><div class="lbl">Gate 2</div></div>
+        </div>
+      </div>
+      <div class="urlbar">https://denialdefender-web-7ffj23k2va-ew.a.run.app</div>
+    </div>
+    <div class="box">
+      <h3>⚡ denialdefender-agents</h3>
+      <div class="role">Cloud Run · Bun · 8 agents · mock_mode: false</div>
+      <div class="row"><span class="badge">4 vCPU / 2 GiB / 0-10</span><span class="badge gcp">Gemini 3.6 live</span></div>
+      <div class="urlbar">→ Vertex AI (global endpoint) · gemini-3.6-flash</div>
+    </div>
+    <div class="box">
+      <h3>📡 denialdefender-trace-stream</h3>
+      <div class="role">Cloud Run · Socket.io · real-time trace</div>
+      <div class="row"><span class="badge">1 vCPU / 512 MiB</span><span class="badge">port 3003</span></div>
+    </div>
+  </div>
+
+  <div class="col">
+    <div class="box glow">
+      <h3>✨ Vertex AI</h3>
+      <div class="role">Gemini 3.6 · global endpoint</div>
+      <div class="row"><span class="badge gcp">GEMINI_PROVIDER=vertex_ai</span></div>
+      <div class="row"><span class="chip">ADK_FRAMEWORK=google-adk</span><span class="chip">runtime SA + metadata token</span></div>
+    </div>
+    <div class="box">
+      <h3>🗄️ State</h3>
+      <div class="role">Where data lives</div>
+      <div class="row"><span class="chip">SQLite (baked in image)</span><span class="chip">Firestore (eur3)</span></div>
+      <div class="row"><span class="chip">Secret Manager</span><span class="chip">Pub/Sub (trace events)</span></div>
+    </div>
+    <div class="box">
+      <h3>📚 Evidence Corpus</h3>
+      <div class="role">31 files · 10 sources · SHA-256 hashed</div>
+      <div class="row"><span class="badge">200 records · gate PASSED</span></div>
+      <div class="row"><span class="chip">CMS · HHS · Noridian · X12 · AHA · KFF · GAO · OIG</span></div>
+    </div>
+  </div>
+</div>
+
+<div class="box" style="margin-top:22px">
+  <h3>🔄 End-to-End Data Flow</h3>
+  <div class="role" style="margin-bottom:10px">Triage → Ground → Assemble → Draft → Verify → Approve → Track → Learn</div>
+  <div style="font-size:12px;line-height:1.8;color:var(--muted)">
+    <b style="color:#6ee7b7">1.</b> Browser → <b style="color:var(--txt)">web</b> (POST /api/full-pipeline) — PHI Guard scans, then Patient Advocate + Denial Triage run → creates Case + Denial + traces + <b style="color:#fbbf24">Gate 1</b><br>
+    <b style="color:#6ee7b7">2.</b> Human approves Gate 1 → web runs Policy Research + Evidence Assembly + Letter Drafting (calls <b style="color:var(--txt)">agents</b> for live Gemini) → Quality Review (adversarial 7-check) → <b style="color:#fbbf24">Gate 2</b><br>
+    <b style="color:#6ee7b7">3.</b> <b style="color:var(--txt)">agents</b> → <b style="color:#6ee7b7">Vertex AI</b> (gemini-3.6-flash, global endpoint) via runtime SA metadata token → returns structured triage + appeal letter<br>
+    <b style="color:#6ee7b7">4.</b> Every step emits a DecisionTraceEvent → <b style="color:var(--txt)">trace-stream</b> (Socket.io) → browser live feed<br>
+    <b style="color:#6ee7b7">5.</b> Human approves Gate 2 → appeal submitted → Outcome Learning updates evidence weights (Firestore → SQLite fallback)
+  </div>
+</div>
+
+<div class="footer-grid">
+  <div class="box">
+    <h3>🔐 Governance (GEAP)</h3>
+    <div class="row"><span class="chip">PHI Guard</span><span class="chip">Model Armor</span><span class="chip">Agent Identity RBAC</span><span class="chip">Observability</span><span class="chip">Memory Bank</span></div>
+  </div>
+  <div class="box">
+    <h3>🚀 CI/CD</h3>
+    <div class="row"><span class="chip">Cloud Build (cloudbuild.yaml)</span><span class="chip">GitHub Actions</span><span class="chip">Artifact Registry</span></div>
+  </div>
+  <div class="box">
+    <h3>📈 Measured Proofs</h3>
+    <div class="row"><span class="badge">Top-3: 70%→88%</span><span class="badge">Citation: 75%→89%</span><span class="badge amber">Ablation 1/3/5/8-agent</span></div>
+  </div>
+</div>
+
+<div class="legend">
+  <span><span class="dot live-dot"></span> Live Gemini 3.6</span>
+  <span><span class="dot gcp-dot"></span> Google Cloud service</span>
+  <span><span class="dot state-dot"></span> Human-in-the-loop gate</span>
+</div>
+
+</body></html>

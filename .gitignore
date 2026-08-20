@@ -52,9 +52,23 @@ prompt
 server.log
 # Skills directory
 /skills/
-# Service account keys (NEVER commit these!)
-upload/*.json
-*sa-key*.json
-dd-deploy-sa-key.json
-key.json
-tool-results/
+
+# Mini-services runtime artifacts
+mini-services/.pids/
+mini-services/.logs/
+mini-services/*/node_modules/
+mini-services/agent-fleet/__pycache__/
+mini-services/agent-fleet/*.pyc
+# Secrets — never commit
+.env
+.env.*
+upload/
+scripts/deploy_*.py
+scripts/gcp_auth.py
+/tmp/gcp_token.json
+tool-results
+agent-ctx/
+worklog.md
+.github/
+**/node_modules/
+.github/

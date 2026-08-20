@@ -452,7 +452,7 @@ export async function resumeSixAgentPipeline(
   // ─── Step B: Evidence Assembly ────────────────────────────────────────
   const evidenceAllowed = await gatePermission('evidence-assembly', 'evidence', 'write');
   if (!evidenceAllowed) {
-    return { advocate: advocateResult, triage: triageResult, gate1: { status: 'approved', gateId: null, confirmPrompt: '' }, policyResearch: policyResult, evidenceAssembly: null, letterDrafting: null, qualityReview: null, pipelineStatus: 'quality_review_failed' as const, caseId, latencyMs: Date.now() - totalStart, traces, permissionEnforced: true, permissionChecks };
+    return { advocate: advocateResult, triage: triageResult, gate1: { status: 'approved', gateId: null, confirmPrompt: '' }, policyResearch: policyResult.data, evidenceAssembly: null, letterDrafting: null, qualityReview: null, pipelineStatus: 'quality_review_failed' as const, caseId, latencyMs: Date.now() - totalStart, traces, permissionEnforced: true, permissionChecks };
   }
   const evidenceInput: EvidenceAssemblyInput = {
     triageResult,
@@ -472,7 +472,7 @@ export async function resumeSixAgentPipeline(
   // ─── Step C: Letter Drafting ──────────────────────────────────────────
   const draftingAllowed = await gatePermission('letter-drafting', 'appeal', 'write');
   if (!draftingAllowed) {
-    return { advocate: advocateResult, triage: triageResult, gate1: { status: 'approved', gateId: null, confirmPrompt: '' }, policyResearch: policyResult, evidenceAssembly: evidenceResult, letterDrafting: null, qualityReview: null, pipelineStatus: 'quality_review_failed' as const, caseId, latencyMs: Date.now() - totalStart, traces, permissionEnforced: true, permissionChecks };
+    return { advocate: advocateResult, triage: triageResult, gate1: { status: 'approved', gateId: null, confirmPrompt: '' }, policyResearch: policyResult.data, evidenceAssembly: evidenceResult.data, letterDrafting: null, qualityReview: null, pipelineStatus: 'quality_review_failed' as const, caseId, latencyMs: Date.now() - totalStart, traces, permissionEnforced: true, permissionChecks };
   }
   try { await db.case.update({ where: { id: caseId }, data: { state: 'drafting_active' } }); } catch (err) { console.error('[six-agent-pipeline] db.case.update drafting_active failed:', err); }
 
@@ -496,7 +496,7 @@ export async function resumeSixAgentPipeline(
   // ─── Step D: Quality Review ───────────────────────────────────────────
   const qualityAllowed = await gatePermission('quality-review', 'citation', 'write');
   if (!qualityAllowed) {
-    return { advocate: advocateResult, triage: triageResult, gate1: { status: 'approved', gateId: null, confirmPrompt: '' }, policyResearch: policyResult, evidenceAssembly: evidenceResult, letterDrafting: draftingResult, qualityReview: null, pipelineStatus: 'quality_review_failed' as const, caseId, latencyMs: Date.now() - totalStart, traces, permissionEnforced: true, permissionChecks };
+    return { advocate: advocateResult, triage: triageResult, gate1: { status: 'approved', gateId: null, confirmPrompt: '' }, policyResearch: policyResult.data, evidenceAssembly: evidenceResult.data, letterDrafting: draftingResult.data, qualityReview: null, pipelineStatus: 'quality_review_failed' as const, caseId, latencyMs: Date.now() - totalStart, traces, permissionEnforced: true, permissionChecks };
   }
   try { await db.case.update({ where: { id: caseId }, data: { state: 'quality_review' } }); } catch (err) { console.error('[six-agent-pipeline] db.case.update quality_review failed:', err); }
 

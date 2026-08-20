@@ -1,11 +1,11 @@
 /**
  * GET /api/evidence/[id] — Get single evidence record with full content
  * POST /api/evidence/ingest — Run full ingest pipeline
- * Uses Turso directly for Cloud Run (persistent), Prisma for local dev
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { resolveCitation, ingestRawEvidence, getCorpusStats, ingestPayerPolicies } from '@/lib/evidence-ingest';
+import { db } from '@/lib/db';
 
 import { join } from 'path';
 const RAW_DIR = join(process.cwd(), 'data', 'corpus', 'raw');
@@ -33,60 +33,7 @@ export async function GET(request: NextRequest) {
     }
 
     // List evidence records with pagination and filtering
-    const { isTurso, getTursoClient } = await import('@/lib/db');
-
-    if (isTurso) {
-      const client = await getTursoClient();
-
-      // Build WHERE clause
-      const conditions: string[] = ['status = ?'];
-      const args: any[] = ['active'];
-      if (tier) { conditions.push('provenance_tier = ?'); args.push(tier); }
-      if (source) { conditions.push('source = ?'); args.push(source); }
-
-      const whereClause = conditions.join(' AND ');
-
-      // Count total
-      const countResult = await client.execute({
-        sql: `SELECT COUNT(*) as total FROM "Evidence" WHERE ${whereClause}`,
-        args,
-      });
-      const total = Number((countResult.rows[0] as any)?.total ?? 0);
-
-      // Fetch paginated records
-      const offset = (page - 1) * pageSize;
-      const recordsResult = await client.execute({
-        sql: `SELECT id, source, document_name, section, provenance_tier, content_hash,
-                     effective_date, retrieved_date, status, content
-              FROM "Evidence" WHERE ${whereClause}
-              ORDER BY provenance_tier ASC, source ASC
-              LIMIT ? OFFSET ?`,
-        args: [...args, pageSize, offset],
-      });
-
-      return NextResponse.json({
-        status: 'ok',
-        total,
-        page,
-        pageSize,
-        records: recordsResult.rows.map((r: any) => ({
-          id: r.id,
-          source: r.source,
-          document: r.document_name,
-          section: r.section,
-          provenance: r.provenance_tier,
-          contentHash: r.content_hash,
-          effectiveDate: r.effective_date,
-          retrievedDate: r.retrieved_date,
-          status: r.status,
-          contentPreview: (r.content || '').slice(0, 200),
-        })),
-      });
-    }
-
-    // Fallback: Prisma (local SQLite)
-    const { db } = await import('@/lib/db');
-    const where: any = { status: 'active' };
+    const where: Record<string, unknown> = { status: 'active' };
     if (tier) where.provenance_tier = tier;
     if (source) where.source = source;
 

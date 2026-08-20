@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { db } from '@/lib/db';
 
 /**
  * GET /api/cases/[id]/trace - Get all decision trace events for a case
- * Uses Turso directly for Cloud Run (persistent), Prisma for local dev
  */
 export async function GET(
   request: NextRequest,
@@ -10,31 +10,7 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const { isTurso, getTursoClient } = await import('@/lib/db');
 
-    if (isTurso) {
-      const client = await getTursoClient();
-
-      // Verify case exists
-      const caseCheck = await client.execute({
-        sql: `SELECT id FROM "Case" WHERE id = ?`,
-        args: [id],
-      });
-      if (caseCheck.rows.length === 0) {
-        return NextResponse.json({ error: 'Case not found' }, { status: 404 });
-      }
-
-      const result = await client.execute({
-        sql: `SELECT id, case_id, agent_name, step, status, details, "references", timestamp
-              FROM "DecisionTraceEvent" WHERE case_id = ? ORDER BY timestamp ASC`,
-        args: [id],
-      });
-
-      return NextResponse.json({ traces: result.rows });
-    }
-
-    // Fallback: Prisma (local SQLite)
-    const { db } = await import('@/lib/db');
     const caseExists = await db.case.findUnique({ where: { id } });
     if (!caseExists) {
       return NextResponse.json({ error: 'Case not found' }, { status: 404 });
@@ -54,7 +30,6 @@ export async function GET(
 
 /**
  * POST /api/cases/[id]/trace - Add a new decision trace event
- * Uses Turso directly for Cloud Run (persistent), Prisma for local dev
  */
 export async function POST(
   request: NextRequest,
@@ -72,42 +47,6 @@ export async function POST(
       return NextResponse.json({ error: 'step is required' }, { status: 400 });
     }
 
-    const { isTurso, getTursoClient } = await import('@/lib/db');
-
-    if (isTurso) {
-      const client = await getTursoClient();
-
-      // Verify case exists
-      const caseCheck = await client.execute({
-        sql: `SELECT id FROM "Case" WHERE id = ?`,
-        args: [id],
-      });
-      if (caseCheck.rows.length === 0) {
-        return NextResponse.json({ error: 'Case not found' }, { status: 404 });
-      }
-
-      const traceId = `trace_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
-      const now = new Date().toISOString();
-      const details = body.details ? JSON.stringify(body.details) : null;
-      const references = body.references ? JSON.stringify(body.references) : null;
-
-      await client.execute({
-        sql: `INSERT INTO "DecisionTraceEvent" (id, case_id, agent_name, step, status, details, "references", timestamp)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        args: [traceId, id, body.agent_name, body.step, body.status ?? 'started', details, references, now],
-      });
-
-      const result = await client.execute({
-        sql: `SELECT id, case_id, agent_name, step, status, details, "references", timestamp
-              FROM "DecisionTraceEvent" WHERE id = ?`,
-        args: [traceId],
-      });
-
-      return NextResponse.json({ trace: result.rows[0] }, { status: 201 });
-    }
-
-    // Fallback: Prisma (local SQLite)
-    const { db } = await import('@/lib/db');
     const caseExists = await db.case.findUnique({ where: { id } });
     if (!caseExists) {
       return NextResponse.json({ error: 'Case not found' }, { status: 404 });

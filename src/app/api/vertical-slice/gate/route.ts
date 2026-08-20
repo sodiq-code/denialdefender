@@ -34,7 +34,7 @@ export async function POST() {
         gatePassed: result.gatePassed,
         latencyMs: result.latencyMs,
       });
-    } catch (error: unknown) {
+    } catch {
       results.push({
         run: i + 1,
         sampleId: sample.id,

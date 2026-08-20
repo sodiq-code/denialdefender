@@ -9,13 +9,12 @@ import {
   executeFallbackPath,
   executeDemoSafePath,
   executeAutoSelect,
-  type ExecutionPath,
 } from '@/lib/execution-paths';
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const path: ExecutionPath = body.path || 'auto';
+    const path = (body.path as string) || 'auto';
     const denialText = body.denialText || '';
     const payer = body.payer || 'UnitedHealthcare';
     const denialCategory = body.denialCategory || 'medical_necessity';

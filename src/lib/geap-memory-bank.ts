@@ -199,7 +199,10 @@ export class GEAPMemoryBank {
     if (this.firestoreInstance) return this.firestoreInstance;
 
     try {
+      // @ts-expect-error — firebase-admin is only available in Cloud Run production.
+      // The sandbox does not install it; this dynamic import is guarded by try/catch.
       const { getFirestore } = await import('firebase-admin/firestore');
+      // @ts-expect-error — see above
       const admin = await import('firebase-admin');
 
       try {
@@ -817,6 +820,7 @@ export class GEAPMemoryBank {
   private async getVertexAIAuthToken(): Promise<string> {
     // Use the Google Cloud default credential to get an access token
     try {
+      // @ts-expect-error — google-auth-library is only available in Cloud Run production.
       const { GoogleAuth } = await import('google-auth-library');
       const auth = new GoogleAuth({
         scopes: ['https://www.googleapis.com/auth/cloud-platform'],

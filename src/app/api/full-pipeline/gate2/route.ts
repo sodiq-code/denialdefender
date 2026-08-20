@@ -11,38 +11,58 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { caseId, resolution, editedLetter, editReason, action } = body;
 
+    if (!caseId) {
+      return NextResponse.json({ error: 'caseId is required' }, { status: 400 });
+    }
+
+    // Gate 2 resolution first (if provided). This transitions the case from
+    // hitl_gate_2 → approved (or stays/rejected). If the caller also passes
+    // action='submit' we then immediately submit the approved appeal, so a
+    // single "Approve & Submit" click works end-to-end.
+    let gate2State: { newState: string; letterVersion: number; gate2Status: string } | null = null;
+    if (resolution) {
+      if (resolution !== 'approved' && resolution !== 'rejected') {
+        return NextResponse.json(
+          { error: 'resolution must be "approved" or "rejected"' },
+          { status: 400 },
+        );
+      }
+      const result = await resolveGate2(caseId, resolution, editedLetter, editReason);
+      gate2State = {
+        newState: result.newState,
+        letterVersion: result.letterVersion,
+        gate2Status: result.gate2Status,
+      };
+      // If the resolution was rejected, we cannot submit.
+      if (resolution !== 'approved' && action === 'submit') {
+        return NextResponse.json({
+          success: false,
+          ...gate2State,
+          error: 'Cannot submit a rejected appeal',
+        });
+      }
+    }
+
     // Submit action (after Gate 2 approval)
     if (action === 'submit') {
-      if (!caseId) {
-        return NextResponse.json({ error: 'caseId is required for submit action' }, { status: 400 });
-      }
-      const result = await submitAppeal(caseId);
-      return NextResponse.json({ success: result.success, newState: result.newState });
+      const submitResult = await submitAppeal(caseId);
+      return NextResponse.json({
+        success: submitResult.success,
+        newState: submitResult.newState,
+        letterVersion: gate2State?.letterVersion,
+        gate2Status: gate2State?.gate2Status ?? 'approved',
+        submitted: submitResult.success,
+      });
     }
 
-    // Gate 2 resolution
-    if (!caseId || !resolution) {
+    if (!gate2State) {
       return NextResponse.json(
-        { error: 'caseId and resolution (approved/rejected) are required' },
-        { status: 400 }
+        { error: 'resolution (approved/rejected) or action=submit is required' },
+        { status: 400 },
       );
     }
 
-    if (resolution !== 'approved' && resolution !== 'rejected') {
-      return NextResponse.json(
-        { error: 'resolution must be "approved" or "rejected"' },
-        { status: 400 }
-      );
-    }
-
-    const result = await resolveGate2(caseId, resolution, editedLetter, editReason);
-
-    return NextResponse.json({
-      success: result.success,
-      newState: result.newState,
-      letterVersion: result.letterVersion,
-      gate2Status: result.gate2Status,
-    });
+    return NextResponse.json({ success: true, ...gate2State });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json({ error: message }, { status: 500 });

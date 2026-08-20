@@ -99,7 +99,7 @@ export async function ingestOutcome(record: OutcomeRecord): Promise<IngestionRes
       data: {
         case_id: record.caseId,
         verdict: record.verdict === 'pending' ? 'pending' : record.verdict,
-        level: record.level,
+        level: record.level as any,
       },
     });
     outcomeId = outcome.id;

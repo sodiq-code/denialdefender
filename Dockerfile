@@ -1,17 +1,20 @@
 # ══════════════════════════════════════════════════════════════════════════════
 # DenialDefender — Next.js Production Dockerfile
 # ══════════════════════════════════════════════════════════════════════════════
-# Multi-stage build optimized for Cloud Run deployment.
-# Uses full Next.js build (non-standalone) for maximum compatibility.
+# Multi-stage build optimized for Cloud Run (europe-west1) deployment.
+# Uses the full Next.js build (non-standalone) for maximum compatibility.
 #
-# Build:  docker build -t denialdefender-web .
-# Run:    docker run -p 8080:8080 -e GCP_PROJECT_ID=denialdefender denialdefender-web
+# Build:   docker build -t denialdefender-web .
+# Run:     docker run -p 8080:8080 -e GCP_PROJECT_ID=denialdefender denialdefender-web
 #
 # Cloud Run injects PORT=8080 by default.
+# Project: denialdefender (315133452553)
+# Region:  europe-west1
+# Gemini:  gemini-2.5-flash (Vertex AI provider, google-adk framework)
 # ══════════════════════════════════════════════════════════════════════════════
 
 # ── Stage 1: Dependencies ─────────────────────────────────────────────────────
-FROM node:20-alpine AS deps
+FROM node:22-alpine AS deps
 RUN apk add --no-cache libc6-compat python3 make g++
 
 WORKDIR /app
@@ -23,11 +26,11 @@ COPY prisma ./prisma
 # Set DATABASE_URL for prisma generate (postinstall hook)
 ENV DATABASE_URL=file:./prisma/dev.db
 
-# Install all dependencies (using npm for better native module support)
+# Install all dependencies (npm for native module support)
 RUN npm install
 
 # ── Stage 2: Build ────────────────────────────────────────────────────────────
-FROM node:20-alpine AS builder
+FROM node:22-alpine AS builder
 RUN apk add --no-cache libc6-compat python3 make g++
 
 WORKDIR /app
@@ -43,18 +46,18 @@ RUN npx prisma generate
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
 
-# Create production database directory and file
-# This ensures tables exist at runtime for Cloud Run
+# Create production database directory + file with tables pre-created
+# (Cloud Run containers are read-only except /tmp; we bake the SQLite file in)
 RUN mkdir -p /app/db && \
     DATABASE_URL=file:/app/db/production.db npx prisma db push --accept-data-loss
 
-# Build Next.js (use the production DB URL)
+# Build Next.js using the production DB URL
 ENV DATABASE_URL=file:/app/db/production.db
 RUN npm run build
 
-# ── Stage 3: Production Runtime ──────────────────────────────────────────────
-FROM node:20-alpine AS runner
-RUN apk add --no-cache libc6-compat python3 make g++
+# ── Stage 3: Production Runtime ───────────────────────────────────────────────
+FROM node:22-alpine AS runner
+RUN apk add --no-cache libc6-compat python3 make g++ wget
 
 WORKDIR /app
 
@@ -79,14 +82,14 @@ COPY --from=builder --chown=nextjs:nodejs /app/next.config.ts ./next.config.ts
 # Copy node_modules (needed for non-standalone mode)
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules ./node_modules
 
-# Copy Prisma schema and generated client (needed at runtime for DB queries)
+# Copy Prisma schema and generated client
 COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma
+
+# Copy the evidence corpus + cases data (used by runtime auto-seed)
+COPY --from=builder --chown=nextjs:nodejs /app/data ./data
 
 # Copy database file (production.db with tables pre-created during build)
 COPY --from=builder --chown=nextjs:nodejs /app/db ./db
-
-# Ensure the database directory is writable (Cloud Run containers are read-only except /tmp)
-# The db.ts auto-initialization will create tables if they don't exist.
 
 USER nextjs
 
@@ -94,9 +97,11 @@ USER nextjs
 EXPOSE 8080
 
 # GCP environment variables (overridden at deploy time via Cloud Run env config)
-# GCP_PROJECT_ID is set by Cloud Run deploy --set-env-vars
 ENV GCP_REGION=europe-west1
 ENV FIRESTORE_LOCATION=eur3
+ENV GEMINI_PROVIDER=vertex_ai
+ENV ADK_FRAMEWORK=google-adk
+ENV GEMINI_MODEL=gemini-2.5-flash
 
 # Health check — Cloud Run uses this to determine container readiness
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \

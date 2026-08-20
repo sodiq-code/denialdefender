@@ -17,7 +17,7 @@ const FLEET_TIMEOUT_MS = 30_000;
 export async function GET() {
   try {
     let dataSource: 'live' | 'mock' = 'mock';
-    let result: Record<string, unknown>;
+    let result: Record<string, unknown> = {};
 
     // ── Try the agent fleet's citation agent ──
     try {
@@ -46,7 +46,7 @@ export async function GET() {
 
     // ── Fallback: local citation classifier ──
     if (dataSource === 'mock') {
-      result = runCitationClassifierDemo();
+      result = runCitationClassifierDemo() as unknown as Record<string, unknown>;
     }
 
     return NextResponse.json({
@@ -75,7 +75,7 @@ export async function POST(request: NextRequest) {
     }
 
     let dataSource: 'live' | 'mock' = 'mock';
-    let result: Record<string, unknown>;
+    let result: Record<string, unknown> = {};
 
     // ── Try the agent fleet's citation agent ──
     try {
@@ -105,7 +105,7 @@ export async function POST(request: NextRequest) {
     // ── Fallback: local citation classifier ──
     if (dataSource === 'mock') {
       const inputs: ClassifyCitationInput[] = body.citations;
-      result = classifyCitations(inputs);
+      result = classifyCitations(inputs) as unknown as Record<string, unknown>;
     }
 
     return NextResponse.json({ success: true, result, dataSource });

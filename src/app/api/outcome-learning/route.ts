@@ -71,7 +71,11 @@ async function getLearnedContext(payer: string, denialCategory: string): Promise
     const payerBehaviorNotes: string[] = [];
 
     // Extract strategy rates from learned patterns
-    const patterns = await memoryBank.getLearnedPatterns('strategy_weight', denialCategory, payer);
+    const patterns = await memoryBank.getLearnedPatterns({
+      patternType: 'strategy_weight',
+      denialCategory,
+      payer,
+    });
     for (const pattern of patterns.slice(0, 10)) {
       const data = pattern.data as Record<string, unknown>;
       if (data.strategy && data.successRate) {
@@ -106,7 +110,11 @@ async function getLearnedContext(payer: string, denialCategory: string): Promise
     }
 
     // Get evidence weight hints
-    const evidencePatterns = await memoryBank.getLearnedPatterns('citation_relevance', denialCategory, payer);
+    const evidencePatterns = await memoryBank.getLearnedPatterns({
+      patternType: 'citation_relevance',
+      denialCategory,
+      payer,
+    });
     const evidenceWeightHints: Record<string, number> = {};
     for (const ep of evidencePatterns.slice(0, 5)) {
       const data = ep.data as Record<string, unknown>;
@@ -191,7 +199,7 @@ export async function GET() {
         outcomeRecordsStored: outcomeCount,
         learnedPatternsStored: patternCount,
         memoryBank: mbStatus,
-        learningLoopActive: mbStatus.longTermMemory.store !== 'none',
+        learningLoopActive: mbStatus.longTermMemory.active,
         fleetConnected: FLEET_URL,
       },
       capabilities: {

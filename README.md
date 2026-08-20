@@ -12,6 +12,11 @@
 
 [**Live Demo →**](https://denialdefender-web-7ffj23k2va-ew.a.run.app)
 
+**Cloud Run services (europe-west1):**
+- **Web:** https://denialdefender-web-7ffj23k2va-ew.a.run.app
+- **Agents (Gemini 3.6):** https://denialdefender-agents-7ffj23k2va-ew.a.run.app
+- **Trace stream:** https://denialdefender-trace-stream-7ffj23k2va-ew.a.run.app
+
 </div>
 
 ---
@@ -77,6 +82,10 @@ Three measurable proofs justify the fleet architecture.
 
 ## Architecture
 
+<p align="center">
+  <img src="./docs/architecture.png" alt="DenialDefender System Architecture">
+</p>
+
 ```
                     DENIALDEFENDER
                          |
@@ -129,12 +138,26 @@ Removing Evidence breaks citation grounding; removing Agents breaks the workflow
 
 ## Getting Started
 
+### Prerequisites
+
+- [Bun](https://bun.sh) 1.1+ (or Node.js 20+)
+- [gcloud CLI](https://cloud.google.com/sdk/docs/install)
+- A Gemini API key from [AI Studio](https://aistudio.google.com/apikey) — `gemini-3.6-flash` is required
+
+### Deploy to Google Cloud (Cloud Run)
+
+The project runs on 3 Cloud Run services in `europe-west1`. Full instructions in [`DEPLOY.md`](./DEPLOY.md). The short version:
+
 ```bash
-bun install && bun run db:push && bun run dev   # localhost:3000
-bash mini-services/start-services.sh             # agent fleet + trace stream
+git clone https://github.com/sodiq-code/denialdefender.git
+cd denialdefender
+bun install && bun run db:push
+gcloud auth login && gcloud config set project denialdefender
+bash infra/gcp/bootstrap.sh
+bash infra/gcp/cloudrun/deploy.sh
 ```
 
-Set `GEMINI_API_KEY` for live agents. Without it, agents run in mock mode with deterministic responses. See [`DEPLOY.md`](./DEPLOY.md) for GCP deployment.
+**Live deployment:** https://denialdefender-web-7ffj23k2va-ew.a.run.app
 
 ---
 

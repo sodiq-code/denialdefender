@@ -7,7 +7,7 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // Collections: cases, denials, outcomes, decision_trace_events
+    // Collections: cases, denials, outcomes, decision_trace_events, hitl_gates
     // All access is via the api Cloud Run service using service-account credentials
     // Client-side reads/writes are explicitly denied
     
@@ -28,6 +28,11 @@ service cloud.firestore {
     }
     
     match /hitl_gates/{gateId} {
+      allow read, write: if false;
+    }
+    
+    // Catch-all: deny everything else
+    match /{document=**} {
       allow read, write: if false;
     }
   }

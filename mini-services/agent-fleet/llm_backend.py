@@ -37,7 +37,7 @@ class GeminiLLM:
     
     def __init__(self):
         self.gemini_api_key = os.environ.get("GEMINI_API_KEY", "")
-        self.gemini_model = os.environ.get("GEMINI_MODEL", "gemini-3.5-flash")
+        self.gemini_model = os.environ.get("GEMINI_MODEL", "gemini-3.6-flash")
         self.active_backend: LLMBackend = LLMBackend.GEMINI_DIRECT
         self.gemini_available: Optional[bool] = None
         self._check_gemini()

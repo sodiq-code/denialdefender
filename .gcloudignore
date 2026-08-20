@@ -23,6 +23,10 @@ db/*.db
 
 mini-services/agent-fleet/node_modules
 mini-services/trace-stream/node_modules
+mini-services/.pids
+mini-services/.logs
 mini-services/agent-fleet/__pycache__
 mini-services/agent-fleet/*.pyc
 examples/
+skills/
+tests/

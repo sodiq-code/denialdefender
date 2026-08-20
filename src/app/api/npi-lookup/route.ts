@@ -53,7 +53,7 @@ export async function GET() {
     const demo = await runNPIDemo();
 
     // Determine data source based on the validation result
-    const dataSource: 'live' | 'mock' = demo.validation.source;
+    const dataSource: string = demo.validation.source;
 
     return NextResponse.json({
       success: true,
@@ -75,8 +75,8 @@ export async function POST(request: NextRequest) {
 
     if (body.npi) {
       // Lookup by NPI number
-      let dataSource: 'live' | 'mock' = 'mock';
-      let result: Record<string, unknown>;
+      let dataSource: string = 'mock';
+      let result: Record<string, unknown> = {};
 
       // ── Try the agent fleet's coder agent (may have NPI validation) ──
       try {
@@ -116,7 +116,7 @@ export async function POST(request: NextRequest) {
       if (dataSource === 'mock') {
         const localResult = await lookupNPI(body.npi);
         dataSource = localResult.source;
-        result = localResult;
+        result = localResult as unknown as Record<string, unknown>;
       }
 
       return NextResponse.json({ success: true, result, dataSource });
@@ -125,7 +125,7 @@ export async function POST(request: NextRequest) {
     if (body.search) {
       // Search by name/taxonomy/state — use local lib which tries live then fallback
       const searchResult = await searchNPI(body.search);
-      const dataSource: 'live' | 'mock' = searchResult.source;
+      const dataSource: string = searchResult.source;
 
       return NextResponse.json({ success: true, result: searchResult, dataSource });
     }

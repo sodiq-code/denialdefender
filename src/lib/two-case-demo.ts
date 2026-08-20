@@ -634,7 +634,7 @@ export async function quickTwoCaseDemo(): Promise<TwoCaseDemoResult> {
     ingestionResult: {
       outcomeId: `out-quick-${Date.now()}`,
       weightUpdates: mockWeightUpdates,
-      memoryBankStatus: 'primary',
+      memoryBankStatus: 'sqlite_fallback',
       durationMs: 50,
     },
     durationMs: 100,
