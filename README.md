@@ -93,7 +93,7 @@ Removing Evidence breaks citation grounding; removing Agents breaks the workflow
 | 5-agent | 91% | Strong grounding |
 | 8-agent | 96% | Independently verifiable |
 
-**Deployment** -- 2 Cloud Run services + 1 local mini-service (`europe-west1`): `denialdefender-web` (Next.js 16, 55 API routes), `denialdefender-agents` (8 ADK agents), `trace-stream` (Socket.io). Cloud Build CI/CD, Firestore, Pub/Sub, Secret Manager.
+**Deployment** -- 2 Cloud Run services (`europe-west1`): `denialdefender-web` (Next.js 16, 55 API routes), `denialdefender-agents` (8 ADK agents), `trace-stream` (Socket.io). Cloud Build CI/CD, Firestore, Pub/Sub, Secret Manager.
 
 ---
 
