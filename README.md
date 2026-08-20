@@ -12,11 +12,6 @@
 
 [**Live Demo →**](https://denialdefender-web-7ffj23k2va-ew.a.run.app)
 
-**Cloud Run services (europe-west1):**
-- **Web:** https://denialdefender-web-7ffj23k2va-ew.a.run.app
-- **Agents (Gemini 3.6):** https://denialdefender-agents-7ffj23k2va-ew.a.run.app
-- **Trace stream:** https://denialdefender-trace-stream-7ffj23k2va-ew.a.run.app
-
 </div>
 
 ---
