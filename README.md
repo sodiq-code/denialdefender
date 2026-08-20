@@ -81,9 +81,6 @@ Three measurable proofs justify the fleet architecture.
   <img src="./docs/architecture.png" alt="DenialDefender System Architecture">
 </p>
 
-```
-               
-```
 
 Removing Evidence breaks citation grounding; removing Agents breaks the workflow; removing Governance breaks enterprise-readiness. The triad is the minimum architecture satisfying all three judging dimensions.
 
