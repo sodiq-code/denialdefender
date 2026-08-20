@@ -82,22 +82,7 @@ Three measurable proofs justify the fleet architecture.
 </p>
 
 ```
-                    DENIALDEFENDER
-                         |
-        +----------------+----------------+
-        |                |                |
-    EVIDENCE          AGENTS         GOVERNANCE
-  31 files          8 ADK agents    PHI Guard
-  10 sources        Bun + Gemini    Model Armor
-  SHA-256           Flash           Agent Identity
-  provenance-tied                    Decision Trace
-        +----------------+----------------+
-                         |
-              Gate 1 → Ground → Draft → Verify → Gate 2
-                         |
-              Human-Approved Appeal + Deadline
-                         |
-              Outcome Learning → updates retrieval
+               
 ```
 
 Removing Evidence breaks citation grounding; removing Agents breaks the workflow; removing Governance breaks enterprise-readiness. The triad is the minimum architecture satisfying all three judging dimensions.
